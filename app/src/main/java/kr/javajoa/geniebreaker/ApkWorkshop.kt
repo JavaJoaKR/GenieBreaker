@@ -36,7 +36,9 @@ internal class ApkWorkshop(private val context: Context) {
             require(!exists) { "이 패키지명의 앱이 이미 설치되어 있습니다. 다른 패키지명을 선택하세요." }
         }
         val paths = listOf(source.sourceDir) + (source.splitSourceDirs?.toList() ?: emptyList())
-        require(paths.sumOf { File(it).length() } <= 200L * 1024 * 1024) { "32비트 기기 보호를 위해 원본 합계 200MB 이하만 처리합니다." }
+        val sourceBytes = paths.sumOf { File(it).length() }
+        require(context.filesDir.usableSpace > sourceBytes * 3 + 16L * 1024 * 1024) { "APK 작업을 위한 저장 공간이 부족합니다." }
+        require(sourceBytes <= 200L * 1024 * 1024) { "32비트 기기 보호를 위해 원본 합계 200MB 이하만 처리합니다." }
         val id = UUID.randomUUID().toString()
         val work = File(context.cacheDir, "apk-work/$id").apply { mkdirs() }
         val output = File(context.filesDir, "edited/$id.apk").apply { parentFile?.mkdirs() }

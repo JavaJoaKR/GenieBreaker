@@ -26,9 +26,10 @@ class MainActivity : Activity() {
     private var appTabSelected = false
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var scanExpired = false
+    private var watchdogScheduled = false
     private val nameTick = Runnable { if (registered && !preview) renderDevices() }
     private val scanWatchdog = Runnable {
-        scanExpired = true; searching = false
+        watchdogScheduled = false; scanExpired = true; searching = false
         try { adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
         refresh()
     }
@@ -100,7 +101,7 @@ class MainActivity : Activity() {
                         renderDevices()
                     }
                     BluetoothAdapter.ACTION_DISCOVERY_STARTED -> { searching = true; refresh() }
-                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { searching = false; uiHandler.removeCallbacks(scanWatchdog); refresh() }
+                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { searching = false; watchdogScheduled = false; uiHandler.removeCallbacks(scanWatchdog); refresh() }
                     else -> refresh()
                 }
             } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("블루투스 상태 갱신", error) }
@@ -344,7 +345,7 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume(); if (::appsPage.isInitialized && appTabSelected) appsPage.resume() }
     override fun onDestroy() { if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); if (::appsPage.isInitialized) appsPage.close(); uiHandler.removeCallbacksAndMessages(null); super.onDestroy() }
     override fun onStop() {
-        uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog)
+        uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false
         if (registered) { unregisterReceiver(receiver); registered = false }
         try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
         super.onStop()
@@ -358,6 +359,9 @@ class MainActivity : Activity() {
         if (!access()) { badge.text = "권한 필요"; message("왼쪽의 ‘권한 허용’을 선택해 시작하세요."); return }
         try {
             searching = bt.isDiscovering && !scanExpired
+            if (searching && !watchdogScheduled) {
+                watchdogScheduled = true; uiHandler.postDelayed(scanWatchdog, 35_000)
+            } else if (!searching) { uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false }
             power.visibility = if (bt.isEnabled) View.GONE else View.VISIBLE
             badge.text = if (bt.isEnabled) "● 켜짐" else "꺼짐"
             scan.text = if (searching) "검색 중지" else if (searched) "다시 검색" else "기기 검색"
@@ -396,7 +400,7 @@ class MainActivity : Activity() {
             }
             found.clear(); searched = true; scanExpired = false; renderDevices()
             if (bt.startDiscovery()) {
-                uiHandler.removeCallbacks(scanWatchdog); uiHandler.postDelayed(scanWatchdog, 35_000)
+                uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = true; uiHandler.postDelayed(scanWatchdog, 35_000)
                 refresh()
             } else message("검색을 시작하지 못했습니다. 잠시 후 다시 시도하세요.")
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 검색", error) }
