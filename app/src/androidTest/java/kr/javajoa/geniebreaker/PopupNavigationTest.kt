@@ -38,9 +38,14 @@ class PopupNavigationTest {
                 }
             }
             assertTrue("Popup must render", waitFor("상위 테스트 메뉴"))
+            android.os.SystemClock.sleep(200)
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER)
             assertTrue("Child stays in the same popup", waitFor("하위 테스트 메뉴"))
+            instrumentation.uiAutomation.executeShellCommand("screencap -p /sdcard/Download/genie-popup-depth.png").let { fd ->
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { while (it.read() != -1) { } }
+            }
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            android.os.SystemClock.sleep(200)
             assertTrue("Back restores parent", waitFor("상위 테스트 메뉴"))
             assertEquals(0, childActions.get())
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)

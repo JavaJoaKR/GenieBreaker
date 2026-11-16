@@ -56,6 +56,8 @@ jobs:
             adb pull /sdcard/Download/genie-app-ui.png app-ui.png
             adb pull /sdcard/Download/genie-flutter-menu.png flutter-menu.png
             adb pull /sdcard/Download/genie-files-ui.png files-ui.png
+            adb pull /sdcard/Download/genie-popup-depth.png popup-depth.png
+            adb pull /sdcard/Download/genie-clone-options.png clone-options.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -65,4 +67,6 @@ jobs:
             app-ui.png
             flutter-menu.png
             files-ui.png
+            popup-depth.png
+            clone-options.png
             app/build/reports/androidTests/connected/debug/

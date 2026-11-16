@@ -26,7 +26,7 @@ class GenieUI extends StatelessWidget {
         foregroundColor: ink, minimumSize: const Size(92, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
     ),
-    shortcuts: const {SingleActivator(LogicalKeyboardKey.select): ActivateIntent()},
+    shortcuts: {...WidgetsApp.defaultShortcuts, const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent()},
     home: const GeniePage(),
   );
 }

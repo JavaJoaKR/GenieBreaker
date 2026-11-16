@@ -60,6 +60,14 @@ public class TvUiTest {
             instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             for (int attempt = 0; attempt < 30 && choice[0] < 0; attempt++) android.os.SystemClock.sleep(200);
             assertEquals("Flutter menu returns the remote-selected choice", 1, choice[0]);
+            android.os.SystemClock.sleep(300);
+            java.util.Map<String, Boolean> options = new java.util.HashMap<>();
+            for (String key : new String[]{"renameApp", "renameLaunchers", "renameResources", "isolateTasks", "extractLibraries"}) options.put(key, true);
+            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.cloneOptions(activity, "샘플 TV 앱", options, values -> kotlin.Unit.INSTANCE));
+            android.os.SystemClock.sleep(3000);
+            capture(instrumentation, "genie-clone-options.png");
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            android.os.SystemClock.sleep(300);
             instrumentation.runOnMainSync(activity::previewFilesTab);
             android.os.SystemClock.sleep(3500);
             capture(instrumentation, "genie-files-ui.png");
