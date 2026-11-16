@@ -43,7 +43,7 @@ class MainActivity : Activity() {
     private lateinit var scan: Button
     private lateinit var power: Button
     private lateinit var permission: Button
-    private lateinit var updateButton: Button
+    private var updateActionLabel = "업데이트 확인"
     private lateinit var updater: AppUpdater
     private lateinit var badge: TextView
     private lateinit var registeredList: LinearLayout
@@ -65,10 +65,10 @@ class MainActivity : Activity() {
     private var searched = false
     private var preview = false
     private val compact: Boolean get() = resources.configuration.screenWidthDp < 800
-    private val backgroundColor = Color.rgb(20, 23, 29)
-    private val surface = Color.rgb(29, 33, 41)
-    private val muted = Color.rgb(166, 175, 190)
-    private val accent = Color.rgb(151, 192, 255)
+    private val backgroundColor = Color.rgb(11, 18, 32)
+    private val surface = Color.rgb(17, 28, 46)
+    private val muted = Color.rgb(155, 171, 196)
+    private val accent = Color.rgb(122, 175, 255)
     private val white = Color.rgb(240, 243, 249)
 
     private val receiver = object : BroadcastReceiver() {
@@ -131,7 +131,7 @@ class MainActivity : Activity() {
             if (text.contains("실패") && !isFinishing && !isDestroyed) AlertDialog.Builder(this).setTitle("블루투스 요청 결과").setMessage(text).setPositiveButton("닫기", null).show()
         }
         buildScreen()
-        updater = AppUpdater(this) { text, enabled -> updateButton.text = text; updateButton.isEnabled = enabled }
+        updater = AppUpdater(this) { text, _ -> updateActionLabel = text }
         if (!preview) updater.checkForUpdate(automatic = true)
         scan.requestFocus()
         selectTab(savedInstanceState?.getBoolean("apps_tab") == true)
@@ -149,7 +149,7 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         val sidebar = column().apply { setPadding(0, dp(6), dp(24), 0) }
-        root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 142 else 190), -1))
+        root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 136 else 176), -1))
         val brand = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         brand.addView(ImageView(this).apply { setImageResource(R.drawable.icon) }, LinearLayout.LayoutParams(dp(34), dp(34)))
         brand.addView(label("GenieBreaker", if (compact) 13 else 17, white, true).apply { setPadding(dp(8), 0, 0, 0) })
@@ -162,11 +162,8 @@ class MainActivity : Activity() {
         permission = actionButton("권한 허용", false, ::requestAccess)
         power = actionButton("블루투스 켜기", false, ::enableBluetooth)
         sidebar.addView(permission); sidebar.addView(power)
-        updateButton = actionButton("업데이트 확인", false) { updater.click() }
-        sidebar.addView(updateButton)
-        sidebar.addView(actionButton("오류 기록", false) { showDiagnostics() })
-        sidebar.addView(label("GenieBreaker ${BuildConfig.VERSION_NAME}", 11).apply { setPadding(dp(4), dp(15), 0, 0) })
-        root.addView(View(this).apply { setBackgroundColor(0xff353a44.toInt()) }, LinearLayout.LayoutParams(dp(1), -1))
+        sidebar.addView(actionButton("설정", false) { showSettings() })
+        root.addView(View(this).apply { setBackgroundColor(0xff1d2e46.toInt()) }, LinearLayout.LayoutParams(dp(1), -1))
         val content = column().apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0) }
         bluetoothPage = content
         val pageHost = FrameLayout(this)
@@ -181,7 +178,7 @@ class MainActivity : Activity() {
         heading.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         badge = label("확인 중", 12, accent).apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(6), dp(12), dp(6))
-            background = rounded(0xff253346.toInt(), 20)
+            background = rounded(0xff1c385e.toInt(), 20)
         }
         heading.addView(badge)
         content.addView(heading)
@@ -198,8 +195,8 @@ class MainActivity : Activity() {
         val panels = LinearLayout(this).apply { orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
         if (compact) content.addView(ScrollView(this).apply { addView(panels) }, LinearLayout.LayoutParams(-1, 0, 1f))
         else content.addView(panels, LinearLayout.LayoutParams(-1, 0, 1f))
-        val left = devicePanel("등록된 기기")
-        val right = devicePanel("주변 기기")
+        val left = devicePanel("내 기기")
+        val right = devicePanel("새 기기")
         if (compact) {
             panels.addView(right.first, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
             panels.addView(left.first, LinearLayout.LayoutParams(-1, -2))
@@ -223,11 +220,11 @@ class MainActivity : Activity() {
         bluetoothPage.visibility = if (apps) View.GONE else View.VISIBLE
         appsPage.visibility = if (apps) View.VISIBLE else View.GONE
         bluetoothTab.isSelected = !apps; appsTab.isSelected = apps
-        for (tab in listOf(bluetoothTab, appsTab)) tab.background = rounded(if (tab.isSelected) 0xff253346.toInt() else 0xff222832.toInt(), 10, if (tab.hasFocus()) accent else Color.TRANSPARENT)
+        for (tab in listOf(bluetoothTab, appsTab)) tab.background = rounded(if (tab.isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10, if (tab.hasFocus()) accent else Color.TRANSPARENT)
         if (apps) appsPage.refresh()
     }
     private fun devicePanel(title: String): Triple<LinearLayout, LinearLayout, TextView> {
-        val panel = column().apply { background = rounded(surface, 16); setPadding(dp(18), dp(18), dp(18), dp(10)) }
+        val panel = column().apply { setPadding(dp(3), dp(8), dp(3), dp(4)) }
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         heading.addView(label(title, 17, white, true), LinearLayout.LayoutParams(0, -2, 1f))
         val count = label("0", 13, muted)
@@ -255,12 +252,13 @@ class MainActivity : Activity() {
         typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
     }
     private fun actionButton(text: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
-        this.text = text; textSize = 13f; isAllCaps = false; isFocusable = true
+        this.text = text; textSize = 14f; isAllCaps = false; isFocusable = true; stateListAnimator = null
+        if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false)
         minHeight = dp(if (compact) 36 else 46); minimumHeight = dp(if (compact) 36 else 46); setPadding(dp(12), dp(8), dp(12), dp(8))
         setTypeface(Typeface.DEFAULT, Typeface.BOLD)
         layoutParams = LinearLayout.LayoutParams(-1, dp(if (compact) 36 else 46)).apply { topMargin = dp(if (compact) 5 else 8) }
         fun restyle(focused: Boolean) {
-            background = rounded(if (primary) accent else if (isSelected) 0xff253346.toInt() else 0xff222832.toInt(), 10, if (focused) accent else Color.TRANSPARENT)
+            background = rounded(if (primary) accent else if (isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10, if (focused) accent else Color.TRANSPARENT)
             setTextColor(if (primary) backgroundColor else white)
             elevation = if (focused) dp(4).toFloat() else 0f
         }
@@ -270,22 +268,22 @@ class MainActivity : Activity() {
         private var lastBond = BluetoothDevice.BOND_NONE
         private var lastKind = "bluetooth"
         fun refreshName() { bind(names.get(address), lastBond, lastKind) }
-        val title = label("", 15, white, true)
-        val detail = label("", 11)
+        val title = label("", 17, white, true)
+        val detail = label("", 12)
         val symbol = SymbolView("bluetooth", accent)
         init {
             orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            isFocusable = true; isClickable = true; descendantFocusability = FOCUS_BLOCK_DESCENDANTS
-            minimumHeight = dp(78); setPadding(dp(12), dp(12), dp(12), dp(12))
+            isFocusable = true; isClickable = true; if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false); descendantFocusability = FOCUS_BLOCK_DESCENDANTS
+            minimumHeight = dp(88); setPadding(dp(12), dp(12), dp(12), dp(12))
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
             addView(symbol, LinearLayout.LayoutParams(dp(30), dp(34)).apply { rightMargin = dp(12) })
             val text = column()
             title.maxLines = 2; title.ellipsize = TextUtils.TruncateAt.END
             text.addView(title); text.addView(detail.apply { setPadding(0, dp(6), 0, 0); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
             addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-            background = rounded(0xff252b35.toInt(), 12)
+            background = rounded(0xff14233b.toInt(), 12)
             setOnFocusChangeListener { _, focused ->
-                background = rounded(if (focused) 0xff303e52.toInt() else 0xff252b35.toInt(), 12, if (focused) accent else Color.TRANSPARENT)
+                background = rounded(if (focused) 0xff203e66.toInt() else 0xff14233b.toInt(), 12, if (focused) accent else Color.TRANSPARENT)
             }
             setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) } }
         }
@@ -381,9 +379,9 @@ class MainActivity : Activity() {
                 else -> "기기를 페어링 모드로 두고\n위의 ‘기기 검색’을 선택하세요." }
             (nearbyEmpty.getChildAt(1) as TextView).text = when { searching -> "주변 기기를 찾고 있습니다"; searched -> "발견된 기기가 없습니다"; else -> "새 기기를 찾아보세요" }
             message(when { !bt.isEnabled -> "왼쪽에서 블루투스를 켜주세요."
-                searching -> "주변 기기를 찾고 있습니다. 이름은 잠시 후 표시될 수 있습니다."
-                searched -> "검색이 끝났습니다. 기기를 선택해 페어링하세요."
-                else -> "기기를 페어링 모드로 설정한 뒤 검색하세요." })
+                searching -> "새 기기를 찾고 있습니다"
+                searched -> "연결할 기기를 선택하세요"
+                else -> "연결할 기기를 선택하세요" })
             renderDevices()
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("블루투스 상태", error) }
     }
@@ -420,7 +418,7 @@ class MainActivity : Activity() {
         try {
             val title = names.get(device.address) ?: device.name ?: "이름 확인 중"
             val bonded = device.bondState == BluetoothDevice.BOND_BONDED
-            val actions = if (bonded) arrayOf("연결 시도", "연결 해제 시도", "등록 삭제", "기기 정보")
+            val actions = if (bonded) arrayOf("연결", "연결 해제", "기기 지우기", "상세 정보")
                 else arrayOf("페어링", "다른 페어링 방식", "기기 정보")
             AlertDialog.Builder(this).setTitle(title).setItems(actions) { _, index ->
                 try {
@@ -491,6 +489,11 @@ class MainActivity : Activity() {
         Diagnostics.record(this, operation, error)
         message("$operation 실패: ${error.javaClass.simpleName}. 오류 기록을 확인하세요.")
     }
+    private fun showSettings() {
+        AlertDialog.Builder(this).setTitle("GenieBreaker ${BuildConfig.VERSION_NAME}")
+            .setItems(arrayOf(updateActionLabel, "문제 기록")) { _, which -> if (which == 0) updater.click() else showDiagnostics() }
+            .setNegativeButton("닫기", null).show()
+    }
     private fun showDiagnostics() {
         val text = label(Diagnostics.read(this), 12).apply { setPadding(dp(16), dp(16), dp(16), dp(16)); setTextIsSelectable(true) }
         AlertDialog.Builder(this).setTitle("오류 기록")
@@ -541,7 +544,7 @@ class MainActivity : Activity() {
     /** Debug-only fixtures for instrumentation screenshots, never shown in release builds. */
     private fun showPreview() {
         badge.text = "● 켜짐"; permission.visibility = View.GONE; power.visibility = View.GONE
-        message("주변 기기를 찾고 있습니다. 이름은 잠시 후 표시될 수 있습니다.")
+        message("새 기기를 찾고 있습니다")
         scan.text = "검색 중지"; progress.visibility = View.VISIBLE
         registeredEmpty.visibility = View.GONE; nearbyEmpty.visibility = View.GONE
         registeredCount.text = "2"; nearbyCount.text = "3"
