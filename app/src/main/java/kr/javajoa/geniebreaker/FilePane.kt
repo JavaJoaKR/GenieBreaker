@@ -17,7 +17,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 
 /** Only app-owned files and document trees explicitly granted by the user are exposed. */
-internal class FilePane(private val activity: Activity) : FrameLayout(activity) {
+internal class FilePane(private val activity: Activity, private val sidebar: () -> Unit) : FrameLayout(activity) {
     private var engine: FlutterEngine? = null
     private var flutterView: FlutterView? = null
     private var channel: MethodChannel? = null
@@ -33,7 +33,7 @@ internal class FilePane(private val activity: Activity) : FrameLayout(activity) 
                     activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), 620)
                     result.success(null)
                 } catch (_: Exception) { result.error("picker", "이 기기에는 폴더 선택 화면이 없습니다. 앱 내부 파일은 계속 사용할 수 있습니다.", null) }
-                "close" -> { visibility = View.GONE; result.success(null) }
+                "close", "sidebar" -> { sidebar(); result.success(null) }
                 "ready", "list", "clean", "open" -> worker.execute {
                     try {
                         val answer = when (call.method) {
@@ -139,6 +139,7 @@ internal class FilePane(private val activity: Activity) : FrameLayout(activity) 
         }
         return true
     }
+    fun back() { channel?.invokeMethod("back", null) }
     fun resume() { engine?.lifecycleChannel?.appIsResumed() }
     fun pause() { engine?.lifecycleChannel?.appIsInactive(); engine?.lifecycleChannel?.appIsPaused() }
     fun close() { flutterView?.detachFromFlutterEngine(); engine?.destroy(); worker.shutdown() }

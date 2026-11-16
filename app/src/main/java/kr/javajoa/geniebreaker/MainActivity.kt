@@ -179,7 +179,7 @@ class MainActivity : Activity() {
         pageHost.addView(content, FrameLayout.LayoutParams(-1, -1))
         appsPage = AppManagementView(this).apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0); visibility = View.GONE }
         pageHost.addView(appsPage, FrameLayout.LayoutParams(-1, -1))
-        filesPage = FilePane(this).apply { setPadding(dp(24), 0, 0, 0); visibility = View.GONE }
+        filesPage = FilePane(this) { filesTab.requestFocus() }.apply { setPadding(dp(24), 0, 0, 0); visibility = View.GONE }
         pageHost.addView(filesPage, FrameLayout.LayoutParams(-1, -1))
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = column()
@@ -370,6 +370,8 @@ class MainActivity : Activity() {
         registered = true; refresh()
     }
     override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume(); if (::appsPage.isInitialized && appTabSelected) appsPage.resume(); if (::filesPage.isInitialized && filesSelected) filesPage.resume() }
+    @Deprecated("Android TV back key compatibility")
+    override fun onBackPressed() { if (filesSelected && filesPage.hasFocus()) filesPage.back() else super.onBackPressed() }
     override fun onPause() { if (::filesPage.isInitialized) filesPage.pause(); super.onPause() }
     override fun onDestroy() { if (::filesPage.isInitialized) filesPage.close(); if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); if (::appsPage.isInitialized) appsPage.close(); uiHandler.removeCallbacksAndMessages(null); super.onDestroy() }
     override fun onStop() {

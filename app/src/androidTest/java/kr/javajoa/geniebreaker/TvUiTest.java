@@ -63,6 +63,9 @@ public class TvUiTest {
             instrumentation.runOnMainSync(activity::previewFilesTab);
             android.os.SystemClock.sleep(3500);
             capture(instrumentation, "genie-files-ui.png");
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_LEFT);
+            android.os.SystemClock.sleep(500);
+            instrumentation.runOnMainSync(() -> assertTrue("Left key returns from Flutter files to native sidebar", activity.getCurrentFocus() instanceof android.widget.Button && ((android.widget.Button) activity.getCurrentFocus()).getText().toString().equals("파일탐색기")));
 
         } finally { instrumentation.runOnMainSync(activity::finish); }
     }

@@ -83,7 +83,8 @@ class _GeniePageState extends State<GeniePage> {
   @override
   void initState() {
     super.initState();
-    bridge.setMethodCallHandler((call) async { if (call.method == 'refresh') await load(location); });
+    bridge.setMethodCallHandler((call) async { if (call.method == 'refresh') await load(location);
+      if (call.method == 'back') back(); });
     load('');
   }
   Future<void> load(String path) async {
@@ -118,7 +119,7 @@ class _GeniePageState extends State<GeniePage> {
     if (accepted == true) await perform('clean', kind);
   }
   void back() {
-    if (parents.isNotEmpty) { load(parents.removeLast()); } else { perform('close'); }
+    if (parents.isNotEmpty) { load(parents.removeLast()); } else { perform(data?['files'] == true ? 'sidebar' : 'close'); }
   }
   @override
   Widget build(BuildContext context) {
@@ -134,7 +135,12 @@ class _GeniePageState extends State<GeniePage> {
     final entries = (data?['entries'] as List? ?? []).cast<Map>();
     final items = (data?['items'] as List? ?? []).cast<String>();
     return PopScope(canPop: !files || parents.isEmpty, onPopInvokedWithResult: (didPop, _) { if (!didPop) back(); },
-      child: Scaffold(body: SafeArea(child: Padding(
+      child: Focus(onKeyEvent: (_, event) {
+        if (files && event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          bridge.invokeMethod<void>('sidebar'); return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }, child: Scaffold(body: SafeArea(child: Padding(
         padding: EdgeInsets.all(files ? 8 : 36),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [Expanded(child: Text(data?['title'] as String? ?? '불러오는 중', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600))),
@@ -173,7 +179,7 @@ class _GeniePageState extends State<GeniePage> {
           ]))),
           const SizedBox(height: 12), const Text('방향키  이동     확인  선택     뒤로  돌아가기', style: TextStyle(color: muted, fontSize: 12)),
         ]),
-      ))),
+      )))),
     );
   }
 }
