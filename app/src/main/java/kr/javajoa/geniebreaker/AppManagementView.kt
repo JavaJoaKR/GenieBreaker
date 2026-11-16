@@ -158,7 +158,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                 ui { busy = false; grid.isEnabled = true; grid.invalidateViews(); install(record.id) }
             } catch (error: Throwable) {
                 Diagnostics.record(activity, "Dual app build", error)
-                ui { busy = false; grid.isEnabled = true; status.text = "듀얼앱을 만들지 못했습니다"; notice(error.message ?: "이 앱은 듀얼앱을 지원하지 않을 수 있습니다.") }
+                ui { busy = false; grid.isEnabled = true; status.text = "듀얼앱을 만들지 못했습니다"; notice("이 앱의 듀얼앱을 만들지 못했습니다. 설정의 문제 기록에서 원인을 확인할 수 있습니다.") }
             }
         }
     }
@@ -180,7 +180,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         try {
             val app = pm.getApplicationInfo(packageName, 0)
             if (app.flags and ApplicationInfo.FLAG_SYSTEM != 0) { notice("시스템 앱은 일반 권한으로 제거할 수 없습니다."); return }
-            AlertDialog.Builder(activity).setTitle("앱을 제거할까요?").setMessage("$packageName\n앱 데이터가 함께 삭제됩니다.")
+            AlertDialog.Builder(activity).setTitle("앱을 제거할까요?").setMessage("${app.loadLabel(pm)}\n이 앱의 데이터도 함께 삭제됩니다.")
                 .setPositiveButton("제거 요청") { _, _ -> try { activity.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))) } catch (error: Exception) { notice("제거 요청 실패: ${error.message}") } }
                 .setNegativeButton("취소", null).show()
         } catch (error: Exception) { notice("앱 정보를 읽지 못했습니다: ${error.message}") }

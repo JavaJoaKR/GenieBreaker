@@ -36,7 +36,7 @@ internal object SessionInstaller {
                         .putExtra("expected_package", expectedPackage)
                     val mutable = if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
                     val pending = PendingIntent.getBroadcast(app, id, callback, PendingIntent.FLAG_UPDATE_CURRENT or mutable)
-                    state(app).edit().putString("progress", "Android 설치 확인 대기 중: $expectedPackage").apply()
+                    state(app).edit().putString("progress", "설치 확인을 기다리고 있습니다").apply()
                     session.commit(pending.intentSender); committed = true
                 }
             } catch (error: Exception) {
@@ -72,11 +72,11 @@ class InstallResultReceiver : BroadcastReceiver() {
         val legacy = intent.getIntExtra("android.content.pm.extra.LEGACY_STATUS", 0)
         val explanation = when (status) {
             PackageInstaller.STATUS_SUCCESS -> "설치 완료"
-            PackageInstaller.STATUS_FAILURE_CONFLICT -> "설치 충돌: 패키지·서명·자체 권한·Provider 충돌을 확인하세요."
-            PackageInstaller.STATUS_FAILURE_BLOCKED -> "설치가 기기 정책 또는 펌웨어에서 차단됐습니다."
+            PackageInstaller.STATUS_FAILURE_CONFLICT -> "다른 앱과 충돌하여 설치할 수 없습니다."
+            PackageInstaller.STATUS_FAILURE_BLOCKED -> "기기에서 설치를 허용하지 않았습니다."
             PackageInstaller.STATUS_FAILURE_ABORTED -> "설치가 취소됐습니다."
             PackageInstaller.STATUS_FAILURE_STORAGE -> "설치 공간이 부족합니다."
-            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "Android 버전 또는 ABI가 호환되지 않습니다."
+            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "이 기기에서 사용할 수 없는 앱입니다."
             else -> "설치 실패"
         }
         val result = "$explanation\n대상: $expected\n상태: $status / $legacy\n${if (other != null) "충돌 앱: $other\n" else ""}$message"
