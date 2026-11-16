@@ -36,7 +36,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb shell wm size 1920x1080
-            adb shell wm density 160
+            adb shell wm density 320
             gradle --no-daemon :app:connectedDebugAndroidTest
             adb pull /sdcard/Download/genie-tv-ui.png tv-ui.png
             adb pull /sdcard/Download/genie-app-ui.png app-ui.png
