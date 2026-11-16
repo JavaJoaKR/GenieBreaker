@@ -61,3 +61,5 @@ gradle :app:testDebugUnitTest :app:assembleRelease :app:lintRelease
 - Flutter 3.35.7 모듈은 CI에서 `flutter pub get`, `flutter analyze`, `flutter test`, `flutter build aar --no-profile --target-platform android-arm,android-x64`로 빌드한 뒤 기존 Gradle 앱에 포함합니다. MA4000용 ARM32와 테스트용 x86_64 엔진이 포함되어 APK 크기가 증가합니다. `.android`는 생성 파일이며 커밋하지 않습니다.
 
 듀얼앱 생성 전 Flutter 옵션 화면에서 앱 이름, 런처 이름, 리소스 패키지명, taskAffinity 분리, 네이티브 라이브러리 추출을 개별 토글할 수 있습니다. 선택은 원본 앱별로 저장됩니다. 재생성 시 동일한 듀얼 패키지/서명 키를 사용하고 버전을 올립니다. 원본과 동시 설치하기 위한 패키지명·공급자 주소·선언 권한 이름과 새 서명은 필수이며 보존 옵션이 없습니다. 리소스 패키지 또는 라이브러리 설정 보존은 호환성 실험이고 설치/실행 성공을 보장하지 않습니다. 서명·DRM·서버 인증을 우회하지 않습니다.
+
+업데이트 확인은 저장된 유효 APK를 먼저 검사하고 성공한 조회에만 6시간 간격을 적용합니다. 최초 실패 시 5/15/45초 간격으로 최대 3회 재시도하고 화면 복귀 후에도 다시 확인합니다. 오류는 문제 기록에 저장하며 비어 있거나 아직 업로드 중인 릴리스를 최신 버전으로 오인하지 않습니다.
