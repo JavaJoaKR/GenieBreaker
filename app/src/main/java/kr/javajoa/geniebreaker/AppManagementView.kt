@@ -47,7 +47,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         val dualFilter = button("내 듀얼앱") { }
         dualFilter.setOnClickListener { onlyDuals = !onlyDuals; dualFilter.text = if (onlyDuals) "모든 앱" else "내 듀얼앱"; refresh() }
         header.addView(dualFilter, LayoutParams(dp(112), dp(44)))
-        val more = button("보기 설정") { AlertDialog.Builder(activity).setTitle("앱 표시").setSingleChoiceItems(arrayOf("실행 가능한 앱", "전체 설치 앱"), if (allApps) 1 else 0) { dialog, index -> allApps = index == 1; dialog.dismiss(); refresh() }.setNegativeButton("닫기", null).show() }
+        val more = button("보기 설정") { TvMenus.show(activity, "보기 설정", listOf("실행 가능한 앱", "전체 설치 앱"), selected = if (allApps) 1 else 0) { index -> allApps = index == 1; refresh() } }
         header.addView(more, LayoutParams(dp(102), dp(44)).apply { leftMargin = dp(10) })
         addView(header)
         status.maxLines = 1; status.ellipsize = android.text.TextUtils.TruncateAt.END
@@ -146,7 +146,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         } else actions += "듀얼앱 만들기" to { create(pkg) }
         if (record == null || duals.isInstalled(record.source)) actions += "원본 앱 실행" to { launch(record?.source ?: pkg.packageName) }
         actions += "더 보기" to { more(pkg, record) }
-        AlertDialog.Builder(activity).setTitle(pkg.applicationInfo?.loadLabel(pm)).setItems(actions.map { it.first }.toTypedArray()) { _, index -> actions[index].second() }.setNegativeButton("닫기", null).show()
+        TvMenus.show(activity, pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "앱 관리", actions.map { it.first }) { index -> actions.getOrNull(index)?.second?.invoke() }
     }
     private fun create(pkg: PackageInfo) {
         if (busy) return
@@ -174,7 +174,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         if (record == null || duals.isInstalled(record.source)) actions += "원본 앱 제거" to { uninstall(record?.source ?: pkg.packageName) }
         actions += "설치 결과 보기" to { notice(installState.getString("result", null) ?: "설치 결과가 없습니다") }
         actions += "앱 정보" to { notice("${pkg.packageName}\n버전 ${pkg.versionName}\n${record?.let { "듀얼앱: ${it.target}" } ?: ""}") }
-        AlertDialog.Builder(activity).setTitle("앱 관리").setItems(actions.map { it.first }.toTypedArray()) { _, index -> actions[index].second() }.setNegativeButton("닫기", null).show()
+        TvMenus.show(activity, "앱 관리", actions.map { it.first }) { index -> actions.getOrNull(index)?.second?.invoke() }
     }
     private fun uninstall(packageName: String) {
         try {
@@ -220,7 +220,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
             ui { notice("APK를 저장했습니다") }
         } catch (error: Exception) { ui { notice("저장 실패: ${error.message}") } } }
     }
-    private fun notice(message: String) { if (!activity.isDestroyed && !activity.isFinishing) AlertDialog.Builder(activity).setMessage(message).setPositiveButton("닫기", null).show() }
+    private fun notice(message: String) { if (!activity.isDestroyed && !activity.isFinishing) TvMenus.notice(activity, message) }
     private fun ui(action: () -> Unit) { main.post { if (!activity.isDestroyed && !activity.isFinishing) action() } }
     fun close() { installState.unregisterOnSharedPreferenceChangeListener(installListener); worker.shutdownNow(); main.removeCallbacksAndMessages(null) }
 }

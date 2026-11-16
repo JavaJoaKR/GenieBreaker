@@ -24,6 +24,9 @@ class MainActivity : Activity() {
     private lateinit var bluetoothTab: Button
     private lateinit var appsTab: Button
     private var appTabSelected = false
+    private lateinit var filesPage: FilePane
+    private lateinit var filesTab: Button
+    private var filesSelected = false
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var scanExpired = false
     private var watchdogScheduled = false
@@ -135,9 +138,11 @@ class MainActivity : Activity() {
         if (!preview) updater.checkForUpdate(automatic = true)
         scan.requestFocus()
         selectTab(savedInstanceState?.getBoolean("apps_tab") == true)
+        if (savedInstanceState?.getBoolean("files_tab") == true) selectFiles()
     }
     override fun onSaveInstanceState(out: Bundle) {
         out.putBoolean("apps_tab", appTabSelected)
+        out.putBoolean("files_tab", filesSelected)
         out.putString("companion_address", pendingCompanionAddress)
         out.putBundle("names", Bundle().apply { names.snapshot().forEach { (key, value) -> putString(key, value) } })
         super.onSaveInstanceState(out)
@@ -148,16 +153,20 @@ class MainActivity : Activity() {
             setPadding(dp(if (compact) 18 else 32), dp(if (compact) 16 else 28), dp(if (compact) 18 else 32), dp(if (compact) 16 else 24)); setBackgroundColor(backgroundColor)
         }
         setContentView(root)
-        val sidebar = column().apply { setPadding(0, dp(6), dp(24), 0) }
+        val sidebar = column().apply { setPadding(0, 0, dp(24), 0) }
         root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 136 else 176), -1))
         val brand = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         brand.addView(ImageView(this).apply { setImageResource(R.drawable.icon) }, LinearLayout.LayoutParams(dp(34), dp(34)))
-        brand.addView(label("GenieBreaker", if (compact) 13 else 17, white, true).apply { setPadding(dp(8), 0, 0, 0) })
+        val branding = column().apply { setPadding(dp(8), 0, 0, 0) }
+        branding.addView(label("GenieBreaker", if (compact) 13 else 17, white, true))
+        branding.addView(label("v${BuildConfig.VERSION_NAME}", 10, muted).apply { setPadding(0, dp(4), 0, 0) })
+        brand.addView(branding)
         sidebar.addView(brand)
         sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(if (compact) 18 else 34)))
         bluetoothTab = actionButton("블루투스", false) { selectTab(false) }.apply { isSelected = true }
         appsTab = actionButton("앱 관리", false) { selectTab(true) }
-        sidebar.addView(bluetoothTab); sidebar.addView(appsTab)
+        filesTab = actionButton("파일탐색기", false) { selectFiles() }
+        sidebar.addView(bluetoothTab); sidebar.addView(appsTab); sidebar.addView(filesTab)
         sidebar.addView(Space(this), LinearLayout.LayoutParams(1, 0, 1f))
         permission = actionButton("권한 허용", false, ::requestAccess)
         power = actionButton("블루투스 켜기", false, ::enableBluetooth)
@@ -171,6 +180,8 @@ class MainActivity : Activity() {
         pageHost.addView(content, FrameLayout.LayoutParams(-1, -1))
         appsPage = AppManagementView(this).apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0); visibility = View.GONE }
         pageHost.addView(appsPage, FrameLayout.LayoutParams(-1, -1))
+        filesPage = FilePane(this).apply { setPadding(dp(24), 0, 0, 0); visibility = View.GONE }
+        pageHost.addView(filesPage, FrameLayout.LayoutParams(-1, -1))
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = column()
         titles.addView(label("블루투스", if (compact) 24 else 32, white, true))
@@ -216,12 +227,21 @@ class MainActivity : Activity() {
         content.addView(footer)
     }
     private fun selectTab(apps: Boolean) {
+        filesSelected = false; filesPage.visibility = View.GONE; filesPage.pause()
         appTabSelected = apps
         bluetoothPage.visibility = if (apps) View.GONE else View.VISIBLE
         appsPage.visibility = if (apps) View.VISIBLE else View.GONE
         bluetoothTab.isSelected = !apps; appsTab.isSelected = apps
-        for (tab in listOf(bluetoothTab, appsTab)) tab.background = rounded(if (tab.isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10, if (tab.hasFocus()) accent else Color.TRANSPARENT)
+        filesTab.isSelected = false
+        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = rounded(if (tab.isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10, if (tab.hasFocus()) accent else Color.TRANSPARENT)
         if (apps) appsPage.refresh()
+    }
+    private fun selectFiles() {
+        selectTab(false)
+        filesSelected = true; bluetoothPage.visibility = View.GONE; filesPage.visibility = View.VISIBLE
+        bluetoothTab.isSelected = false; filesTab.isSelected = true
+        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = rounded(if (tab.isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10)
+        filesPage.show(); filesPage.resume()
     }
     private fun devicePanel(title: String): Triple<LinearLayout, LinearLayout, TextView> {
         val panel = column().apply { setPadding(dp(3), dp(8), dp(3), dp(4)) }
@@ -350,8 +370,9 @@ class MainActivity : Activity() {
         else registerReceiver(receiver, filter)
         registered = true; refresh()
     }
-    override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume(); if (::appsPage.isInitialized && appTabSelected) appsPage.resume() }
-    override fun onDestroy() { if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); if (::appsPage.isInitialized) appsPage.close(); uiHandler.removeCallbacksAndMessages(null); super.onDestroy() }
+    override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume(); if (::appsPage.isInitialized && appTabSelected) appsPage.resume(); if (::filesPage.isInitialized && filesSelected) filesPage.resume() }
+    override fun onPause() { if (::filesPage.isInitialized) filesPage.pause(); super.onPause() }
+    override fun onDestroy() { if (::filesPage.isInitialized) filesPage.close(); if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); if (::appsPage.isInitialized) appsPage.close(); uiHandler.removeCallbacksAndMessages(null); super.onDestroy() }
     override fun onStop() {
         uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false
         if (registered) { unregisterReceiver(receiver); registered = false }
@@ -477,6 +498,8 @@ class MainActivity : Activity() {
     @Deprecated("Platform result callback used for vendor compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (TvMenus.result(requestCode, resultCode, data)) return
+        if (::filesPage.isInitialized && filesPage.result(requestCode, resultCode, data)) return
         if (requestCode == 610) { appsPage.exportResult(resultCode, data); return }
         if (requestCode != 501) return
         val address = pendingCompanionAddress; pendingCompanionAddress = null
@@ -490,16 +513,15 @@ class MainActivity : Activity() {
         message("$operation 실패: ${error.javaClass.simpleName}. 오류 기록을 확인하세요.")
     }
     private fun showSettings() {
-        AlertDialog.Builder(this).setTitle("GenieBreaker ${BuildConfig.VERSION_NAME}")
-            .setItems(arrayOf(updateActionLabel, "문제 기록")) { _, which -> if (which == 0) updater.click() else showDiagnostics() }
-            .setNegativeButton("닫기", null).show()
+        TvMenus.show(this, "설정", listOf(updateActionLabel, "문제 기록")) { which ->
+            if (which == 0) updater.click() else if (which == 1) showDiagnostics()
+        }
     }
     private fun showDiagnostics() {
-        val text = label(Diagnostics.read(this), 12).apply { setPadding(dp(16), dp(16), dp(16), dp(16)); setTextIsSelectable(true) }
-        AlertDialog.Builder(this).setTitle("오류 기록")
-            .setView(ScrollView(this).apply { addView(text) })
-            .setNeutralButton("복사") { _, _ -> getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker diagnostics", text.text)) }
-            .setPositiveButton("닫기", null).show()
+        val text = Diagnostics.read(this)
+        TvMenus.show(this, "문제 기록", listOf("복사"), text) { which -> if (which == 0)
+            getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker diagnostics", text))
+        }
     }
     private fun bondedDevice(address: String): BluetoothDevice? {
         if (!access()) return null

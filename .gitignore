@@ -3,3 +3,8 @@
 local.properties
 *.jks
 .idea/
+
+flutter_ui/.android/
+flutter_ui/.ios/
+flutter_ui/.dart_tool/
+flutter_ui/.metadata

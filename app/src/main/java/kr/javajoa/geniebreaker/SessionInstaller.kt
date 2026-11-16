@@ -15,7 +15,10 @@ internal object SessionInstaller {
         val app = context.applicationContext
         state(app).edit().putString("progress", "설치 파일을 준비하고 있습니다").remove("result").apply()
         val worker = Executors.newSingleThreadExecutor()
+        FileWork.lock.readLock().lock()
+        try { FileWork.pending.incrementAndGet() } finally { FileWork.lock.readLock().unlock() }
         worker.execute {
+            FileWork.lock.readLock().lock()
             var id = -1
             var committed = false
             try {
@@ -44,6 +47,8 @@ internal object SessionInstaller {
                 state(app).edit().remove("progress").putString("result", "설치 요청 실패\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}").apply()
             } finally {
                 if (id >= 0 && !committed) try { app.packageManager.packageInstaller.abandonSession(id) } catch (_: Exception) { }
+                FileWork.pending.decrementAndGet()
+                FileWork.lock.readLock().unlock()
                 worker.shutdown()
             }
         }

@@ -14,6 +14,7 @@ import java.io.FileNotFoundException
 class UpdateProvider : ContentProvider() {
     override fun onCreate() = true
     private fun file(uri: Uri): File {
+        if (uri.path?.startsWith("/browse/") == true && uri.pathSegments.size == 2) return BrowseFiles.file(uri)
         if (uri.path == "/update.apk") return File(requireNotNull(context).cacheDir, "updates/update.apk")
         val id = uri.path?.removePrefix("/edited/")
         if (uri.path?.startsWith("/edited/") == true && id != null && id.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")))
@@ -24,7 +25,7 @@ class UpdateProvider : ContentProvider() {
         if (mode != "r") throw FileNotFoundException("Read only")
         return ParcelFileDescriptor.open(file(uri), ParcelFileDescriptor.MODE_READ_ONLY)
     }
-    override fun getType(uri: Uri): String { file(uri); return "application/vnd.android.package-archive" }
+    override fun getType(uri: Uri): String = if (uri.path?.startsWith("/browse/") == true) BrowseFiles.type(file(uri)) else { file(uri); "application/vnd.android.package-archive" }
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor {
         val file = file(uri)
         val columns = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)

@@ -42,9 +42,11 @@ internal class ApkWorkshop(private val context: Context) {
         require(context.filesDir.usableSpace > sourceBytes * 3 + 16L * 1024 * 1024) { "APK 작업을 위한 저장 공간이 부족합니다." }
         require(sourceBytes <= 200L * 1024 * 1024) { "32비트 기기 보호를 위해 원본 합계 200MB 이하만 처리합니다." }
         val id = UUID.randomUUID().toString()
-        val work = File(context.cacheDir, "apk-work/$id").apply { mkdirs() }
-        val output = File(context.filesDir, "edited/$id.apk").apply { parentFile?.mkdirs() }
+        val work = File(context.cacheDir, "apk-work/$id")
+        val output = File(context.filesDir, "edited/$id.apk")
+        FileWork.lock.readLock().lock()
         try {
+            work.mkdirs(); output.parentFile?.mkdirs()
             progress("APK를 읽고 있습니다")
             val bundle = ApkBundle()
             var apk: ApkModule? = null
@@ -166,6 +168,6 @@ internal class ApkWorkshop(private val context: Context) {
         } catch (failure: Throwable) {
             output.delete()
             throw failure
-        } finally { work.deleteRecursively() }
+        } finally { try { work.deleteRecursively() } finally { FileWork.lock.readLock().unlock() } }
     }
 }

@@ -6,7 +6,8 @@ android {
     defaultConfig {
         applicationId 'kr.javajoa.geniebreaker'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
-        minSdk 23
+        minSdk 26
+        ndk { abiFilters 'armeabi-v7a', 'x86_64' }
         targetSdk 35
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
         versionName '0.1.' + (System.getenv('BUILD_NUMBER') ?: '1')
@@ -24,6 +25,8 @@ android {
 }
 
 dependencies {
+    debugImplementation 'kr.javajoa.genie_ui:flutter_debug:1.0'
+    releaseImplementation 'kr.javajoa.genie_ui:flutter_release:1.0'
     implementation 'io.github.reandroid:ARSCLib:1.4.0'
     implementation 'com.android.tools.build:apksig:8.9.2'
     testImplementation 'junit:junit:4.13.2'

@@ -30,6 +30,7 @@ internal class AppUpdater(private val activity: Activity, private val state: (St
         if (!busy.compareAndSet(false, true)) return
         ui { state("업데이트 확인 중", false) }
         executor.execute {
+            FileWork.lock.readLock().lock()
             try {
                 if (apk.exists()) {
                     if (validUpdate(apk)) { ui { state("업데이트 설치", true) }; return@execute }
@@ -83,7 +84,7 @@ internal class AppUpdater(private val activity: Activity, private val state: (St
                 } finally { temporary.delete() }
             } catch (_: Exception) {
                 ui { state("업데이트 확인", true); if (!automatic) toast("업데이트를 확인하지 못했습니다. 인터넷 연결 후 다시 시도하세요.") }
-            } finally { busy.set(false) }
+            } finally { busy.set(false); FileWork.lock.readLock().unlock() }
         }
     }
     fun click() {
