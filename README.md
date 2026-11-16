@@ -21,7 +21,7 @@ Shizuku 권한 확장은 후속 범위입니다. 아직 MA4000 실기기에서 �
 [Releases](https://github.com/JavaJoaKR/GenieBreaker/releases)에서 최신 개발 빌드 APK를 받으세요.
 모든 브랜치 push마다 빌드·Lint 후 커밋별 prerelease와 APK·SHA256 체크섬을 발행합니다.
 PR은 검증과 artifact 업로드만 수행합니다. 여러 커밋을 한 번에 push하면 해당 push의 최종 커밋을 빌드합니다.
-Java 코드와 Android 기본 UI만 사용하므로 ARM32(armeabi-v7a)에 네이티브 라이브러리 제약이 없습니다.
+Kotlin 코드와 Android 기본 UI만 사용하므로 ARM32(armeabi-v7a)에 네이티브 라이브러리 제약이 없습니다.
 
 ## 개발
 
