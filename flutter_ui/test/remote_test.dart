@@ -5,6 +5,38 @@ import 'package:genie_ui/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('Menu is bounded, centered, and dismisses through the outside barrier', (tester) async {
+    var closed = false;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'title': '보기 설정', 'items': ['실행 가능한 앱', '전체 설치 앱'], 'focus': 0};
+      if (call.method == 'close') closed = true;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    final rect = tester.getRect(find.byKey(const ValueKey('popup-surface')));
+    expect(rect.width, lessThanOrEqualTo(490));
+    expect(rect.height, lessThan(536));
+    expect(rect.center.dx, closeTo(400, 1));
+    expect(rect.center.dy, closeTo(300, 1));
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+    expect(closed, true);
+  });
+  testWidgets('Compatibility settings stay collapsed until requested', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'title': '듀얼앱 만들기', 'cloneOptions': true,
+        'options': {'renameApp': true, 'renameLaunchers': true, 'renameResources': true, 'isolateTasks': true, 'extractLibraries': true}};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    expect(find.text('리소스 패키지 변경'), findsNothing);
+    await tester.tap(find.text('호환성 옵션'));
+    await tester.pumpAndSettle();
+    expect(find.text('리소스 패키지 변경'), findsOneWidget);
+    expect(tester.getRect(find.text('듀얼앱 만들기').last).bottom, lessThan(600));
+  });
   testWidgets('Clone options are submitted as selected without immediate generation', (tester) async {
     Map? submitted;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
@@ -54,6 +86,6 @@ void main() {
     await tester.tap(find.text('취소'));
     await tester.pumpAndSettle();
     expect(cleaned, false);
-    expect(find.byType(Dialog), findsNothing);
+    expect(find.byType(PopupPanel), findsNothing);
   });
 }

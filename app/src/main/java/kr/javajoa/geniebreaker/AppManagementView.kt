@@ -106,6 +106,9 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     fun refresh() {
         if (loading || busy) return
         loading = true
+        val selectedPackage = packages.getOrNull(grid.selectedItemPosition)?.packageName
+        val oldPosition = grid.firstVisiblePosition
+        val hadGridFocus = grid.hasFocus()
         worker.execute {
             try {
                 val records = duals.all(); val clonePackages = records.map { it.target }.toSet()
@@ -123,7 +126,11 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                         (allApps || pm.getLeanbackLaunchIntentForPackage(pkg.packageName) != null || pm.getLaunchIntentForPackage(pkg.packageName) != null)
                 }.sortedBy { it.applicationInfo!!.loadLabel(pm).toString().lowercase() }
                 ui {
-                    packages = items; grid.adapter = adapter; empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+                    packages = items; adapter.notifyDataSetChanged()
+                    val selectedIndex = items.indexOfFirst { it.packageName == selectedPackage }
+                    if (hadGridFocus && selectedIndex >= 0) grid.setSelection(selectedIndex)
+                    else if (items.isNotEmpty()) grid.smoothScrollToPosition(oldPosition.coerceAtMost(items.lastIndex))
+                    empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
                     empty.text = if (onlyDuals) "아직 만든 듀얼앱이 없습니다" else "표시할 앱이 없습니다. 보기 설정을 확인하세요."
                     status.text = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
                     loading = false
