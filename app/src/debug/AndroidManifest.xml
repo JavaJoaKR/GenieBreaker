@@ -4,5 +4,9 @@
     <uses-permission android:name="org.geniebreaker.fixture.OUTSIDE_NAMESPACE" />
     <application>
         <provider android:name=".FixtureProvider" android:authorities="org.geniebreaker.fixture.provider" android:exported="false" />
+        <activity android:name=".StartupProbeActivity" android:exported="true" android:label="@string/probe_launcher_name" />
+        <activity-alias android:name=".StartupProbeAlias" android:targetActivity=".StartupProbeActivity" android:exported="true" android:label="@string/probe_launcher_name">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent-filter>
+        </activity-alias>
     </application>
 </manifest>

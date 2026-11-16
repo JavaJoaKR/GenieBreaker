@@ -1,0 +1,4 @@
+<resources>
+ <string name="probe_launcher_name">Original launcher resource name</string>
+ <string name="probe_ready">CLONE_PROBE_READY</string>
+</resources>

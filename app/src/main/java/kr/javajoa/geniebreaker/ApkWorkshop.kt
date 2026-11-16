@@ -11,6 +11,8 @@ import com.android.apksig.ApkVerifier
 import com.reandroid.apk.ApkBundle
 import com.reandroid.apk.ApkModule
 import com.reandroid.arsc.chunk.xml.ResXmlElement
+import com.reandroid.arsc.chunk.xml.ResXmlAttribute
+import com.reandroid.arsc.value.ValueType
 import java.io.File
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -55,12 +57,17 @@ internal class ApkWorkshop(private val context: Context) {
                 val original = manifest.packageName
                 val root = manifest.manifestElement
                 require(root.searchAttributeByName("sharedUserId") == null) { "공유 시스템 UID 앱은 안전하게 재서명할 수 없습니다." }
+                val sourceResources by lazy { context.packageManager.getResourcesForApplication(source) }
+                fun textValue(attribute: ResXmlAttribute): String? {
+                    attribute.valueAsString?.let { return it }
+                    return if (attribute.valueType == ValueType.REFERENCE) try { sourceResources.getText(attribute.data).toString() } catch (_: android.content.res.Resources.NotFoundException) { null } else null
+                }
                 val declarations = linkedMapOf<String, String>()
                 val declaredElements = manifest.recursive(ResXmlElement::class.java)
                 while (declaredElements.hasNext()) {
                     val element = declaredElements.next()
                     if (element.getName(false) in setOf("permission", "permission-tree", "permission-group")) {
-                        element.searchAttributeByName("name")?.valueAsString?.let { name -> declarations[name] = ApkIdentity.permission(name, original, spec.packageName) }
+                        element.searchAttributeByName("name")?.let(::textValue)?.let { name -> declarations[name] = ApkIdentity.permission(name, original, spec.packageName) }
                     }
                 }
                 // Components retain their original bytecode namespaces; provider identifiers must be unique.
@@ -71,8 +78,13 @@ internal class ApkWorkshop(private val context: Context) {
                     val attributes = element.attributes
                     while (attributes.hasNext()) {
                         val attribute = attributes.next()
-                        val value = attribute.valueAsString ?: continue
                         val name = attribute.getName(false)
+                        // Labels are commonly TYPE_REFERENCE, so rewrite before reading a string.
+                        if (name == "label" && tag in setOf("application", "activity", "activity-alias")) {
+                            attribute.setValueAsString(spec.label)
+                            continue
+                        }
+                        val value = textValue(attribute) ?: continue
                         val componentName = name in setOf("name", "targetActivity", "backupAgent", "appComponentFactory", "manageSpaceActivity", "parentActivityName") &&
                             (tag in setOf("application", "activity", "activity-alias", "service", "receiver", "provider") || name == "parentActivityName")
                         when {

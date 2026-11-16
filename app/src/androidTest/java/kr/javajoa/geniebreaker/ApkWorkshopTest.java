@@ -34,10 +34,15 @@ public class ApkWorkshopTest {
         try {
             ApkEditSpec spec = new ApkEditSpec("APK edit verification", name, 42, false);
             result = new ApkWorkshop(context).build(context.getApplicationInfo(), spec, progress -> kotlin.Unit.INSTANCE);
-            PackageInfo parsed = context.getPackageManager().getPackageArchiveInfo(result.getFile().getAbsolutePath(), android.content.pm.PackageManager.GET_PERMISSIONS | android.content.pm.PackageManager.GET_PROVIDERS);
+            PackageInfo parsed = context.getPackageManager().getPackageArchiveInfo(result.getFile().getAbsolutePath(), android.content.pm.PackageManager.GET_PERMISSIONS | android.content.pm.PackageManager.GET_PROVIDERS | android.content.pm.PackageManager.GET_ACTIVITIES);
             assertNotNull(parsed); assertEquals(name, parsed.packageName); assertEquals(42, parsed.versionCode);
             assertEquals("APK edit verification", parsed.applicationInfo.nonLocalizedLabel.toString());
             assertTrue(result.getCertificate().length() > 50);
+            parsed.applicationInfo.sourceDir = result.getFile().getAbsolutePath();
+            parsed.applicationInfo.publicSourceDir = result.getFile().getAbsolutePath();
+            for (android.content.pm.ActivityInfo activity : parsed.activities) {
+                if (activity.name.contains("StartupProbe")) assertEquals("APK edit verification", activity.nonLocalizedLabel.toString());
+            }
             assertNotNull(parsed.permissions);
             for (android.content.pm.PermissionInfo permission : parsed.permissions) {
                 assertTrue("Declared permission must belong to clone namespace: " + permission.name, permission.name.startsWith(name + "."));
@@ -62,6 +67,19 @@ public class ApkWorkshopTest {
             String install = shell("pm install -t /data/local/tmp/genie-edit-test.apk");
             assertTrue("Edited APK installation failed: " + install, install.contains("Success"));
             assertNotNull(context.getPackageManager().getPackageInfo(name, 0));
+            String start = shell("am start -W -n " + name + "/" + context.getPackageName() + ".StartupProbeAlias");
+            assertTrue("Cloned alias did not start: " + start, start.contains("Status: ok"));
+            boolean ready = false;
+            for (int attempt = 0; attempt < 20; attempt++) {
+                android.view.accessibility.AccessibilityNodeInfo root = InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();
+                if (root != null) {
+                    ready = !root.findAccessibilityNodeInfosByText("CLONE_PROBE_READY").isEmpty(); root.recycle();
+                    if (ready) break;
+                }
+                android.os.SystemClock.sleep(250);
+            }
+            assertTrue("Cloned activity failed after installation. " + shell("logcat -d -b crash -t 30"), ready);
+            assertFalse("Cloned process exited after startup", shell("pidof " + name).trim().isEmpty());
         } finally {
             shell("pm uninstall " + name); shell("rm -f /data/local/tmp/genie-edit-test.apk");
             if (result != null) {
