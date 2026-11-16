@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     private var searching = false
     private var searched = false
     private var preview = false
+    private val compact: Boolean get() = resources.configuration.screenWidthDp < 800
     private val backgroundColor = Color.rgb(20, 23, 29)
     private val surface = Color.rgb(29, 33, 41)
     private val muted = Color.rgb(166, 175, 190)
@@ -122,16 +123,16 @@ class MainActivity : Activity() {
     private fun buildScreen() {
         val root = column().apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(32), dp(28), dp(32), dp(24)); setBackgroundColor(backgroundColor)
+            setPadding(dp(if (compact) 18 else 32), dp(if (compact) 16 else 28), dp(if (compact) 18 else 32), dp(if (compact) 16 else 24)); setBackgroundColor(backgroundColor)
         }
         setContentView(root)
         val sidebar = column().apply { setPadding(0, dp(6), dp(24), 0) }
-        root.addView(sidebar, LinearLayout.LayoutParams(dp(190), -1))
+        root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 142 else 190), -1))
         val brand = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         brand.addView(SymbolView("bluetooth", accent), LinearLayout.LayoutParams(dp(25), dp(30)))
-        brand.addView(label("GenieBreaker", 17, white, true).apply { setPadding(dp(8), 0, 0, 0) })
+        brand.addView(label("GenieBreaker", if (compact) 13 else 17, white, true).apply { setPadding(dp(8), 0, 0, 0) })
         sidebar.addView(brand)
-        sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(34)))
+        sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(if (compact) 18 else 34)))
         sidebar.addView(label("블루투스", 17, accent, true).apply {
             setPadding(dp(14), dp(14), dp(14), dp(14)); background = rounded(0xff253346.toInt(), 10)
         })
@@ -145,11 +146,11 @@ class MainActivity : Activity() {
         sidebar.addView(actionButton("오류 기록", false) { showDiagnostics() })
         sidebar.addView(label("GenieBreaker ${BuildConfig.VERSION_NAME}", 11).apply { setPadding(dp(4), dp(15), 0, 0) })
         root.addView(View(this).apply { setBackgroundColor(0xff353a44.toInt()) }, LinearLayout.LayoutParams(dp(1), -1))
-        val content = column().apply { setPadding(dp(28), 0, 0, 0) }
+        val content = column().apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0) }
         root.addView(content, LinearLayout.LayoutParams(0, -1, 1f))
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = column()
-        titles.addView(label("블루투스", 32, white, true))
+        titles.addView(label("블루투스", if (compact) 24 else 32, white, true))
 
         heading.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         badge = label("확인 중", 12, accent).apply {
@@ -158,7 +159,7 @@ class MainActivity : Activity() {
         }
         heading.addView(badge)
         content.addView(heading)
-        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(20), 0, dp(16)) }
+        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(if (compact) 12 else 20), 0, dp(if (compact) 10 else 16)) }
         status = label("", 13).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
         toolbar.addView(status, LinearLayout.LayoutParams(0, dp(52), 1f))
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleSmall).apply {
@@ -168,12 +169,18 @@ class MainActivity : Activity() {
         scan = actionButton("기기 검색", true, ::discover).apply { minWidth = dp(122) }
         toolbar.addView(scan, LinearLayout.LayoutParams(dp(132), dp(52)).apply { setMargins(dp(12), 0, 0, 0) })
         content.addView(toolbar)
-        val panels = LinearLayout(this)
-        content.addView(panels, LinearLayout.LayoutParams(-1, 0, 1f))
+        val panels = LinearLayout(this).apply { orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
+        if (compact) content.addView(ScrollView(this).apply { addView(panels) }, LinearLayout.LayoutParams(-1, 0, 1f))
+        else content.addView(panels, LinearLayout.LayoutParams(-1, 0, 1f))
         val left = devicePanel("등록된 기기")
         val right = devicePanel("주변 기기")
-        panels.addView(left.first, LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, dp(12), 0) })
-        panels.addView(right.first, LinearLayout.LayoutParams(0, -1, 1.15f))
+        if (compact) {
+            panels.addView(right.first, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+            panels.addView(left.first, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            panels.addView(left.first, LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, dp(12), 0) })
+            panels.addView(right.first, LinearLayout.LayoutParams(0, -1, 1.15f))
+        }
         registeredList = left.second; nearbyList = right.second
         registeredCount = left.third; nearbyCount = right.third
         registeredEmpty = emptyState("bluetooth", "등록된 기기가 없습니다", "새 기기를 페어링하면\n여기에 표시됩니다.")
@@ -194,7 +201,8 @@ class MainActivity : Activity() {
         panel.addView(heading)
         panel.addView(Space(this), LinearLayout.LayoutParams(1, dp(16)))
         val list = column()
-        panel.addView(ScrollView(this).apply { isFillViewport = true; clipToPadding = false; addView(list) }, LinearLayout.LayoutParams(-1, 0, 1f))
+        if (compact) panel.addView(list)
+        else panel.addView(ScrollView(this).apply { isFillViewport = true; clipToPadding = false; addView(list) }, LinearLayout.LayoutParams(-1, 0, 1f))
         return Triple(panel, list, count)
     }
     private fun emptyState(symbol: String, title: String, hint: String) = column().apply {
@@ -214,9 +222,9 @@ class MainActivity : Activity() {
     }
     private fun actionButton(text: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
         this.text = text; textSize = 13f; isAllCaps = false; isFocusable = true
-        minHeight = dp(46); minimumHeight = dp(46); setPadding(dp(12), dp(8), dp(12), dp(8))
+        minHeight = dp(if (compact) 36 else 46); minimumHeight = dp(if (compact) 36 else 46); setPadding(dp(12), dp(8), dp(12), dp(8))
         setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-        layoutParams = LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) }
+        layoutParams = LinearLayout.LayoutParams(-1, dp(if (compact) 36 else 46)).apply { topMargin = dp(if (compact) 5 else 8) }
         fun restyle(focused: Boolean) {
             background = rounded(if (primary) accent else 0xff292e38.toInt(), 10, if (focused) white else Color.TRANSPARENT)
             setTextColor(if (primary) backgroundColor else white)
