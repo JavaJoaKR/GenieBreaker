@@ -134,6 +134,7 @@ public final class MainActivity extends Activity {
     }
     private void renderDevices() {
         if (!access() || adapter == null) return;
+        try {
         View focused = getCurrentFocus(); Object tag = focused == null ? null : focused.getTag();
         boolean listFocus = focused != null && focused.getParent() == devices;
         devices.removeAllViews();
@@ -146,11 +147,15 @@ public final class MainActivity extends Activity {
         for (BluetoothDevice d : found.values()) if (d.getBondState() != BluetoothDevice.BOND_BONDED) { addDevice(d); count++; }
         if (count == 0) devices.addView(label("검색을 눌러 새 기기를 찾아보세요", 15, Color.WHITE));
         if (listFocus) { View replacement = tag == null ? null : devices.findViewWithTag(tag); if (replacement != null) replacement.requestFocus(); else scan.requestFocus(); }
+        } catch (SecurityException e) { message("권한이 변경되었습니다. 근처 기기 권한을 확인하세요."); }
     }
     private void addDevice(BluetoothDevice d) {
+        if (!access()) return;
+        try {
         String name = d.getName(); if (name == null || name.trim().isEmpty()) name = "이름 없는 기기";
         String state = d.getBondState() == BluetoothDevice.BOND_BONDED ? "등록됨" : d.getBondState() == BluetoothDevice.BOND_BONDING ? "페어링 중" : "선택하여 페어링";
         devices.addView(button(name + "   ·   " + state + "\n" + d.getAddress(), () -> pair(d), d.getAddress()));
+        } catch (SecurityException e) { message("기기 정보를 읽을 권한이 없습니다."); }
     }
     private void pair(BluetoothDevice d) {
         try {
