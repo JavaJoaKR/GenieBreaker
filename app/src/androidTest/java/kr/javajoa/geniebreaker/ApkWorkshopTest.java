@@ -34,10 +34,19 @@ public class ApkWorkshopTest {
         try {
             ApkEditSpec spec = new ApkEditSpec("APK edit verification", name, 42, false);
             result = new ApkWorkshop(context).build(context.getApplicationInfo(), spec, progress -> kotlin.Unit.INSTANCE);
-            PackageInfo parsed = context.getPackageManager().getPackageArchiveInfo(result.getFile().getAbsolutePath(), 0);
+            PackageInfo parsed = context.getPackageManager().getPackageArchiveInfo(result.getFile().getAbsolutePath(), android.content.pm.PackageManager.GET_PERMISSIONS | android.content.pm.PackageManager.GET_PROVIDERS);
             assertNotNull(parsed); assertEquals(name, parsed.packageName); assertEquals(42, parsed.versionCode);
             assertEquals("APK edit verification", parsed.applicationInfo.nonLocalizedLabel.toString());
             assertTrue(result.getCertificate().length() > 50);
+            assertNotNull(parsed.permissions);
+            for (android.content.pm.PermissionInfo permission : parsed.permissions) {
+                assertTrue("Declared permission must belong to clone namespace: " + permission.name, permission.name.startsWith(name + "."));
+            }
+            assertNotNull(parsed.providers);
+            for (android.content.pm.ProviderInfo provider : parsed.providers) {
+                assertFalse("Original global provider authority survived", provider.authority.contains("org.geniebreaker.fixture.provider"));
+            }
+
             ParcelFileDescriptor[] copy = InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommandRwe("dd of=/data/local/tmp/genie-edit-test.apk bs=8192");
             try (java.io.InputStream input = new java.io.FileInputStream(result.getFile());
                  java.io.OutputStream output = new ParcelFileDescriptor.AutoCloseOutputStream(copy[1])) {

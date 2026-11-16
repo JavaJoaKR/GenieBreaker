@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Regression fixture: declaration deliberately outside applicationId. -->
+    <permission android:name="org.geniebreaker.fixture.OUTSIDE_NAMESPACE" android:protectionLevel="signature" />
+    <uses-permission android:name="org.geniebreaker.fixture.OUTSIDE_NAMESPACE" />
+    <application>
+        <provider android:name=".FixtureProvider" android:authorities="org.geniebreaker.fixture.provider" android:exported="false" />
+    </application>
+</manifest>

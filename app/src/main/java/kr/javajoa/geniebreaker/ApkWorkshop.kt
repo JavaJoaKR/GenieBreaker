@@ -55,6 +55,14 @@ internal class ApkWorkshop(private val context: Context) {
                 val original = manifest.packageName
                 val root = manifest.manifestElement
                 require(root.searchAttributeByName("sharedUserId") == null) { "공유 시스템 UID 앱은 안전하게 재서명할 수 없습니다." }
+                val declarations = linkedMapOf<String, String>()
+                val declaredElements = manifest.recursive(ResXmlElement::class.java)
+                while (declaredElements.hasNext()) {
+                    val element = declaredElements.next()
+                    if (element.getName(false) in setOf("permission", "permission-tree", "permission-group")) {
+                        element.searchAttributeByName("name")?.valueAsString?.let { name -> declarations[name] = ApkIdentity.permission(name, original, spec.packageName) }
+                    }
+                }
                 // Components retain their original bytecode namespaces; provider identifiers must be unique.
                 val elements = manifest.recursive(ResXmlElement::class.java)
                 while (elements.hasNext()) {
@@ -73,13 +81,13 @@ internal class ApkWorkshop(private val context: Context) {
                                 attribute.setValueAsString(qualified)
                             }
                             name == "authorities" -> attribute.setValueAsString(value.split(';').joinToString(";") { authority ->
-                                if (spec.packageName == original) authority
-                                else if (authority.startsWith(original)) spec.packageName + authority.removePrefix(original)
-                                else "$authority.gb${id.take(8)}"
+                                ApkIdentity.authority(authority.trim(), original, spec.packageName)
                             })
-                            tag in setOf("permission", "permission-tree", "permission-group", "uses-permission") && name == "name" && value.startsWith("$original.") ->
-                                attribute.setValueAsString(spec.packageName + value.removePrefix(original))
-                            name in setOf("permission", "readPermission", "writePermission", "taskAffinity") && value.startsWith(original) ->
+                            (tag in setOf("permission", "permission-tree", "permission-group") || tag.startsWith("uses-permission")) && name == "name" && declarations.containsKey(value) ->
+                                attribute.setValueAsString(declarations.getValue(value))
+                            name in setOf("permission", "readPermission", "writePermission", "permissionGroup") && declarations.containsKey(value) ->
+                                attribute.setValueAsString(declarations.getValue(value))
+                            name == "taskAffinity" && (value == original || value.startsWith("$original.")) ->
                                 attribute.setValueAsString(spec.packageName + value.removePrefix(original))
                             name == "label" && tag in setOf("activity", "activity-alias") -> attribute.setValueAsString(spec.label)
                         }
@@ -127,8 +135,16 @@ internal class ApkWorkshop(private val context: Context) {
                 progress("서명과 패키지 정보를 검증하고 있습니다")
                 val verification = ApkVerifier.Builder(output).setMinCheckedPlatformVersion(26).build().verify()
                 require(verification.isVerified) { "생성한 APK의 서명 검증에 실패했습니다: ${verification.errors}" }
-                val parsed = context.packageManager.getPackageArchiveInfo(output.absolutePath, 0)
+                val parsed = context.packageManager.getPackageArchiveInfo(output.absolutePath, PackageManager.GET_PERMISSIONS or PackageManager.GET_PROVIDERS)
                 require(parsed?.packageName == spec.packageName) { "수정된 패키지 정보를 Android가 읽지 못했습니다." }
+                parsed?.permissions?.forEach { permission ->
+                    val owner = try { context.packageManager.getPermissionInfo(permission.name, 0).packageName } catch (_: PackageManager.NameNotFoundException) { null }
+                    require(owner == null || owner == spec.packageName) { "권한 충돌: ${permission.name} (사용 중인 앱: $owner)" }
+                }
+                parsed?.providers?.forEach { provider -> provider.authority?.split(';')?.forEach { authority ->
+                    val owner = context.packageManager.resolveContentProvider(authority, 0)?.packageName
+                    require(owner == null || owner == spec.packageName) { "Provider 충돌: $authority (사용 중인 앱: $owner)" }
+                } }
                 val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.encoded).joinToString(":") { "%02X".format(it) }
                 File(output.parentFile, "$id.json").writeText(org.json.JSONObject().put("source", source.packageName).put("package", spec.packageName).put("label", spec.label).put("certificate", fingerprint).toString())
                 return EditedApk(id, output, spec.packageName, fingerprint)

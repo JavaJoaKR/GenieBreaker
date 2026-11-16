@@ -28,8 +28,19 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     private var busy = false
     private var loading = false
     private var packages = emptyList<PackageInfo>()
+    private val installState = SessionInstaller.state(activity)
+    private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        main.post { if (!activity.isDestroyed) {
+            status.text = installState.getString("result", null) ?: installState.getString("progress", null) ?: status.text
+        } }
+    }
     private val preferences = activity.getSharedPreferences("apk_workshop", Context.MODE_PRIVATE)
     init {
+        installState.registerOnSharedPreferenceChangeListener(installListener)
+        status.isFocusable = true; status.setOnClickListener {
+            notice(installState.getString("result", null) ?: installState.getString("progress", null) ?: "설치 결과가 없습니다")
+        }
+        status.maxLines = 2; status.ellipsize = android.text.TextUtils.TruncateAt.END
         orientation = VERTICAL
         val top = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
         top.addView(text("앱 관리", 32, true), LayoutParams(0, -2, 1f))
@@ -96,7 +107,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                 val items = pm.getInstalledPackages(0).filter { pkg -> pkg.packageName != activity.packageName && pkg.applicationInfo != null &&
                     (allApps || (pkg.applicationInfo!!.flags and ApplicationInfo.FLAG_SYSTEM == 0)) }
                     .sortedBy { it.applicationInfo!!.loadLabel(pm).toString().lowercase() }
-                ui { packages = items; list.adapter = adapter; status.text = "${items.size}개 앱  ·  선택하면 실행·편집·제거할 수 있습니다."; loading = false }
+                ui { packages = items; list.adapter = adapter; status.text = installState.getString("result", null) ?: installState.getString("progress", null) ?: "${items.size}개 앱  ·  선택하면 실행·편집·제거할 수 있습니다."; loading = false }
             } catch (error: Exception) { ui { loading = false; status.text = "앱 목록을 읽지 못했습니다: ${error.message}" } }
         }
     }
@@ -130,7 +141,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
             }
         }
         val label = field("앱 이름", app.loadLabel(pm).toString())
-        val packageName = field("패키지명", pkg.packageName + ".gb")
+        val packageName = field("패키지명", availablePackage(pkg.packageName))
         val version = field("버전 코드", pkg.versionCode.toString(), true)
         val fresh = CheckBox(activity).apply { text = "새 서명 키 생성 (체크 해제 시 기존 수정본과 같은 키)"; textSize = 12f }
         fields.addView(fresh)
@@ -142,6 +153,10 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
             if (code == null || code < 1) { version.error = "1 이상의 숫자를 입력하세요"; return@setOnClickListener }
             val spec = ApkEditSpec(label.text.toString().trim(), packageName.text.toString().trim(), code, fresh.isChecked)
             if (!spec.packageName.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+"))) { packageName.error = "올바른 패키지명을 입력하세요"; return@setOnClickListener }
+            if (spec.freshKey && installed(spec.packageName)) {
+                packageName.error = "이미 설치된 패키지입니다. 새 서명에는 다른 이름이 필요합니다. 예: ${availablePackage(pkg.packageName)}"
+                return@setOnClickListener
+            }
             dialog.dismiss(); busy = true; status.text = "수정본을 준비하고 있습니다"
             worker.execute {
                 try {
@@ -196,14 +211,22 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         try {
             val file = File(activity.filesDir, "edited/$id.apk")
             require(file.isFile)
-            val uri = Uri.parse("content://${activity.packageName}.updates/edited/$id")
-            activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = ClipData.newRawUri("Edited APK", uri) })
+            val metadata = JSONObject(File(activity.filesDir, "edited/$id.json").readText())
+            SessionInstaller.submit(activity, file, metadata.getString("package"))
+            status.text = "설치 파일 확인 중. 아래 설치 결과를 선택하면 상세 오류를 볼 수 있습니다."
         } catch (error: Exception) { notice("설치 화면을 열지 못했습니다: ${error.message}") }
     }
     fun resume() {
         preferences.getString("pending_install", null)?.let { id -> if (Build.VERSION.SDK_INT < 26 || pm.canRequestPackageInstalls()) install(id) }
         refresh()
+    }
+    private fun installed(name: String): Boolean = try { pm.getPackageInfo(name, 0); true } catch (_: PackageManager.NameNotFoundException) { false }
+    private fun availablePackage(original: String): String {
+        for (index in 0..99) {
+            val name = original + if (index == 0) ".gb" else ".gb$index"
+            if (!installed(name)) return name
+        }
+        return "$original.gb${System.currentTimeMillis().toString().takeLast(6)}"
     }
     private fun export(id: String) {
         preferences.edit().putString("pending_export", id).apply()
@@ -221,5 +244,5 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     }
     private fun notice(message: String) { if (!activity.isDestroyed && !activity.isFinishing) AlertDialog.Builder(activity).setMessage(message).setPositiveButton("닫기", null).show() }
     private fun ui(action: () -> Unit) { main.post { if (!activity.isDestroyed && !activity.isFinishing) action() } }
-    fun close() { worker.shutdownNow(); main.removeCallbacksAndMessages(null) }
+    fun close() { installState.unregisterOnSharedPreferenceChangeListener(installListener); worker.shutdownNow(); main.removeCallbacksAndMessages(null) }
 }

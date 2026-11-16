@@ -1,0 +1,86 @@
+package kr.javajoa.geniebreaker
+
+import android.app.PendingIntent
+import android.content.*
+import android.content.pm.PackageInstaller
+import android.os.Build
+import java.io.File
+import java.util.concurrent.Executors
+
+/** Preserve the platform's actual result instead of relying on generic installer error screens. */
+internal object SessionInstaller {
+    const val RESULT_ACTION = "kr.javajoa.geniebreaker.INSTALL_RESULT"
+    fun state(context: Context) = context.getSharedPreferences("install_results", Context.MODE_PRIVATE)
+    fun submit(context: Context, apk: File, expectedPackage: String) {
+        val app = context.applicationContext
+        state(app).edit().putString("progress", "설치 파일을 준비하고 있습니다").remove("result").apply()
+        val worker = Executors.newSingleThreadExecutor()
+        worker.execute {
+            var id = -1
+            var committed = false
+            try {
+                val parsed = app.packageManager.getPackageArchiveInfo(apk.absolutePath, 0) ?: error("APK를 읽을 수 없습니다")
+                require(parsed.packageName == expectedPackage) { "설치 대상 불일치: 요청 $expectedPackage / 실제 ${parsed.packageName}" }
+                val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                    setAppPackageName(expectedPackage); setSize(apk.length())
+                    if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+                }
+                val installer = app.packageManager.packageInstaller
+                id = installer.createSession(params)
+                installer.openSession(id).use { session ->
+                    session.openWrite("base.apk", 0, apk.length()).use { target ->
+                        apk.inputStream().use { source -> source.copyTo(target) }; session.fsync(target)
+                    }
+                    val callback = Intent(app, InstallResultReceiver::class.java).setAction(RESULT_ACTION)
+                        .setData(android.net.Uri.parse("geniebreaker://install/$id"))
+                        .putExtra("expected_package", expectedPackage)
+                    val mutable = if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
+                    val pending = PendingIntent.getBroadcast(app, id, callback, PendingIntent.FLAG_UPDATE_CURRENT or mutable)
+                    state(app).edit().putString("progress", "Android 설치 확인 대기 중: $expectedPackage").apply()
+                    session.commit(pending.intentSender); committed = true
+                }
+            } catch (error: Exception) {
+                Diagnostics.record(app, "Install $expectedPackage", error)
+                state(app).edit().remove("progress").putString("result", "설치 요청 실패\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}").apply()
+            } finally {
+                if (id >= 0 && !committed) try { app.packageManager.packageInstaller.abandonSession(id) } catch (_: Exception) { }
+                worker.shutdown()
+            }
+        }
+    }
+}
+
+class InstallResultReceiver : BroadcastReceiver() {
+    @Suppress("DEPRECATION")
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != SessionInstaller.RESULT_ACTION) return
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        val expected = intent.getStringExtra("expected_package") ?: "알 수 없음"
+        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            val confirmation = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) else intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+            try {
+                requireNotNull(confirmation) { "설치 확인 화면을 받지 못했습니다" }
+                context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (error: Exception) {
+                Diagnostics.record(context, "Installer confirmation", error)
+                SessionInstaller.state(context).edit().remove("progress").putString("result", "설치 확인 화면을 열지 못했습니다\n${error.message}").apply()
+            }
+            return
+        }
+        val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "상세 응답 없음"
+        val other = intent.getStringExtra(PackageInstaller.EXTRA_OTHER_PACKAGE_NAME)
+        val legacy = intent.getIntExtra("android.content.pm.extra.LEGACY_STATUS", 0)
+        val explanation = when (status) {
+            PackageInstaller.STATUS_SUCCESS -> "설치 완료"
+            PackageInstaller.STATUS_FAILURE_CONFLICT -> "설치 충돌: 패키지·서명·자체 권한·Provider 충돌을 확인하세요."
+            PackageInstaller.STATUS_FAILURE_BLOCKED -> "설치가 기기 정책 또는 펌웨어에서 차단됐습니다."
+            PackageInstaller.STATUS_FAILURE_ABORTED -> "설치가 취소됐습니다."
+            PackageInstaller.STATUS_FAILURE_STORAGE -> "설치 공간이 부족합니다."
+            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "Android 버전 또는 ABI가 호환되지 않습니다."
+            else -> "설치 실패"
+        }
+        val result = "$explanation\n대상: $expected\n상태: $status / $legacy\n${if (other != null) "충돌 앱: $other\n" else ""}$message"
+        Diagnostics.record(context, result)
+        SessionInstaller.state(context).edit().remove("progress").putString("result", result).apply()
+    }
+}
