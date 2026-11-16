@@ -108,7 +108,7 @@ internal class AppUpdater(private val activity: Activity, private val state: (St
             }
             val uri = Uri.parse("content://${activity.packageName}.updates/update.apk")
             activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).setClipData(ClipData.newRawUri("GenieBreaker update", uri)))
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = ClipData.newRawUri("GenieBreaker update", uri) })
         } catch (_: ActivityNotFoundException) { toast("이 펌웨어에는 사용할 수 있는 APK 설치 화면이 없습니다") }
         catch (_: Exception) { apk.delete(); state("업데이트 확인", true); toast("업데이트 파일을 확인하지 못했습니다. 다시 받아주세요") }
     }
