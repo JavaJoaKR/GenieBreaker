@@ -252,7 +252,7 @@ class _GeniePageState extends State<GeniePage> {
       Positioned.fill(child: GestureDetector(key: const ValueKey('popup-barrier'), onTap: () => perform('close'),
         child: const ColoredBox(color: Color(0x99050b14)))),
       SafeArea(child: Center(child: Padding(padding: const EdgeInsets.all(24), child: FocusScope(
-        key: ValueKey(data?['pageId'] ?? 'loading'),
+        key: ValueKey(data == null ? 'loading' : data?['pageId'] ?? 'root'),
         child: PopupPanel(title: data?['title'] as String? ?? '불러오는 중',
           wide: configure || (data?['message'] as String? ?? '').length > 180,
           breadcrumbs: (data?['breadcrumbs'] as List? ?? []).cast<String>(), onBack: back, onClose: () => perform('close'),
