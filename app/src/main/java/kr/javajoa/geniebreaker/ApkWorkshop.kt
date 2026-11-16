@@ -61,25 +61,25 @@ internal class ApkWorkshop(private val context: Context) {
                     val attributes = element.attributes
                     while (attributes.hasNext()) {
                         val attribute = attributes.next()
-                        val value = attribute.dataAsString ?: continue
+                        val value = attribute.valueAsString ?: continue
                         val name = attribute.getName(false)
                         val componentName = name in setOf("name", "targetActivity", "backupAgent", "appComponentFactory", "manageSpaceActivity", "parentActivityName") &&
                             (tag in setOf("application", "activity", "activity-alias", "service", "receiver", "provider") || name == "parentActivityName")
                         when {
                             componentName && name != "authorities" -> {
                                 val qualified = when { value.startsWith(".") -> original + value; !value.contains('.') -> "$original.$value"; else -> value }
-                                attribute.setDataAsString(qualified)
+                                attribute.setValueAsString(qualified)
                             }
-                            name == "authorities" -> attribute.setDataAsString(value.split(';').joinToString(";") { authority ->
+                            name == "authorities" -> attribute.setValueAsString(value.split(';').joinToString(";") { authority ->
                                 if (spec.packageName == original) authority
                                 else if (authority.startsWith(original)) spec.packageName + authority.removePrefix(original)
                                 else "$authority.gb${id.take(8)}"
                             })
                             tag in setOf("permission", "permission-tree", "permission-group", "uses-permission") && name == "name" && value.startsWith("$original.") ->
-                                attribute.setDataAsString(spec.packageName + value.removePrefix(original))
+                                attribute.setValueAsString(spec.packageName + value.removePrefix(original))
                             name in setOf("permission", "readPermission", "writePermission", "taskAffinity") && value.startsWith(original) ->
-                                attribute.setDataAsString(spec.packageName + value.removePrefix(original))
-                            name == "label" && tag in setOf("activity", "activity-alias") -> attribute.setDataAsString(spec.label)
+                                attribute.setValueAsString(spec.packageName + value.removePrefix(original))
+                            name == "label" && tag in setOf("activity", "activity-alias") -> attribute.setValueAsString(spec.label)
                         }
                     }
                 }
