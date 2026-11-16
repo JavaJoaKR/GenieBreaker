@@ -46,14 +46,17 @@ internal class AppUpdater(
         ui { state("업데이트 확인 중", false) }
         executor.execute {
             FileWork.lock.readLock().lock()
+            var cachedVersion = 0L
             try {
                 if (apk.exists()) {
-                    if (validUpdate(apk)) { succeeded(); ui { state("업데이트 설치", true) }; return@execute }
-                    apk.delete()
+                    if (validUpdate(apk)) {
+                        cachedVersion = version(requireNotNull(activity.packageManager.getPackageArchiveInfo(apk.path, 0)))
+                        ui { state("업데이트 설치", true) }
+                    } else apk.delete()
                 }
                 // A cached APK must be detected before applying the successful-check interval.
                 if (automatic && !failed && System.currentTimeMillis() - preferences.getLong("last_check", 0) < 6 * 60 * 60 * 1000) {
-                    ui { state("업데이트 확인", true) }; return@execute
+                    ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 확인", true) }; return@execute
                 }
                 val releases = catalogLoader?.invoke() ?: run {
                     val connection = connect("https://api.github.com/repos/JavaJoaKR/GenieBreaker/releases?per_page=100")
@@ -63,10 +66,10 @@ internal class AppUpdater(
                 val installed = version(activity.packageManager.getPackageInfo(activity.packageName, 0))
                 val latest = ReleaseCatalog.latest(releases)
                 val candidate = latest.url
-                if (latest.version <= installed) {
+                if (latest.version <= maxOf(installed, cachedVersion)) {
                     succeeded()
                     preferences.edit().putLong("last_check", System.currentTimeMillis()).apply()
-                    ui { state("업데이트 확인", true); if (!automatic) toast("최신 버전입니다") }
+                    ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 확인", true); if (!automatic && cachedVersion == 0L) toast("최신 버전입니다") }
                     return@execute
                 }
                 ui { state("업데이트 받는 중", false) }
@@ -86,7 +89,7 @@ internal class AppUpdater(
                             }
                         } }
                     } finally { download.disconnect() }
-                    require(validUpdate(temporary)) { "앱 ID·버전 또는 서명이 일치하지 않습니다" }
+                    require(validUpdate(temporary) && activity.packageManager.getPackageArchiveInfo(temporary.path, 0)?.let(::version) == latest.version) { "앱 ID·버전 또는 서명이 일치하지 않습니다" }
                     check(temporary.renameTo(apk)) { "업데이트 파일을 저장하지 못했습니다" }
                     succeeded()
                     preferences.edit().putLong("last_check", System.currentTimeMillis()).apply()
@@ -96,7 +99,7 @@ internal class AppUpdater(
                 if (!closed) {
                     failed = true
                     Diagnostics.record(activity, "Update check", error)
-                    ui { state("업데이트 다시 확인", true); if (!automatic) toast("확인하지 못했습니다. 잠시 후 자동으로 다시 시도합니다.") }
+                    ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 다시 확인", true); if (!automatic) toast("확인하지 못했습니다. 잠시 후 자동으로 다시 시도합니다.") }
                 }
             } finally {
                 busy.set(false); FileWork.lock.readLock().unlock()
