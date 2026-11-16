@@ -5,6 +5,25 @@ import 'package:genie_ui/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('Files move left through folders before returning to the sidebar', (tester) async {
+    var sidebar = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'title': '파일탐색기', 'files': true,
+        'entries': [{'name': '듀얼앱 설치파일', 'path': 'apks:', 'directory': true, 'detail': '폴더'}], 'apkSize': '4 MB', 'cacheSize': '1 MB'};
+      if (call.method == 'sidebar') sidebar++;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(sidebar, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(sidebar, 1);
+  });
   testWidgets('Confirmation actions stay visible with a long message', (tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return {'title': '앱을 제거할까요?', 'items': ['취소', '제거 요청'], 'message': List.filled(50, '앱 데이터가 삭제됩니다.').join('\n')};

@@ -145,6 +145,8 @@ class _GeniePageState extends State<GeniePage> {
   String location = '';
   bool working = false;
   bool advanced = false;
+  bool storageFocused = false;
+  bool storageOnRight = false;
   Map<String, bool> cloneOptions = {};
   @override
   void initState() {
@@ -338,9 +340,10 @@ class _GeniePageState extends State<GeniePage> {
         const SizedBox(height: 24),
         if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
         Expanded(child: LayoutBuilder(builder: (context, constraints) {
+          storageOnRight = root && constraints.maxWidth >= 560;
           if (!root) return folders;
           if (constraints.maxWidth < 560) return Column(children: [Expanded(child: folders), SizedBox(height: 155, child: SingleChildScrollView(child: storage))]);
-          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: folders), const SizedBox(width: 16), SizedBox(width: 220, child: SingleChildScrollView(child: storage))]);
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: folders), const SizedBox(width: 16), SizedBox(width: 220, child: Focus(skipTraversal: true, onFocusChange: (value) => storageFocused = value, child: SingleChildScrollView(child: storage)))]);
         })),
         const SizedBox(height: 14), const Text('방향키  이동     확인  선택     뒤로  돌아가기', style: TextStyle(color: muted, fontSize: 11)),
       ]),
@@ -351,7 +354,7 @@ class _GeniePageState extends State<GeniePage> {
     final files = data?['files'] == true;
     return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) { if (!didPop) back(); },
       child: Focus(onKeyEvent: (_, event) {
-        if (files && event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (files && event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.arrowLeft && !(storageOnRight && storageFocused)) {
           bridge.invokeMethod<void>('sidebar'); return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
