@@ -25,7 +25,7 @@ class UpdateProvider : ContentProvider() {
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor {
         val file = file(uri)
         val columns = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
-        return MatrixCursor(columns).apply { addRow(columns.map { when (it) { OpenableColumns.DISPLAY_NAME -> "GenieBreaker.apk"; OpenableColumns.SIZE -> file.length(); else -> null } }.toTypedArray()) }
+        return MatrixCursor(columns).apply { addRow(columns.map<String, Any?> { when (it) { OpenableColumns.DISPLAY_NAME -> "GenieBreaker.apk"; OpenableColumns.SIZE -> file.length(); else -> null } }.toTypedArray()) }
     }
     override fun insert(uri: Uri, values: ContentValues?): Uri? = throw UnsupportedOperationException()
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = throw UnsupportedOperationException()

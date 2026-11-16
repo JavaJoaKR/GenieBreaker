@@ -38,7 +38,7 @@ jobs:
             adb shell wm size 1920x1080
             adb shell wm density 320
             gradle --no-daemon :app:connectedDebugAndroidTest
-            adb pull /sdcard/Android/data/kr.javajoa.geniebreaker/files/tv-ui.png tv-ui.png
+            adb pull /sdcard/Download/genie-tv-ui.png tv-ui.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:

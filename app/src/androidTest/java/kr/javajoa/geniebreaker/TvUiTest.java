@@ -40,9 +40,9 @@ public class TvUiTest {
             assertTrue("Late name must retain row identity and D-pad focus", preserved[0]);
             Bitmap screenshot = instrumentation.getUiAutomation().takeScreenshot();
             assertNotNull(screenshot);
-            File output = new File(activity.getExternalFilesDir(null), "tv-ui.png");
-            try (FileOutputStream stream = new FileOutputStream(output)) {
-                assertTrue(screenshot.compress(Bitmap.CompressFormat.PNG, 100, stream));
+            try (android.os.ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/genie-tv-ui.png");
+                 java.io.InputStream pipe = new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)) {
+                while (pipe.read() != -1) { }
             }
             screenshot.recycle();
         } finally { instrumentation.runOnMainSync(activity::finish); }

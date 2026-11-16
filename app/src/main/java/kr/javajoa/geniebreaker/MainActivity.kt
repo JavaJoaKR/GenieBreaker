@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.bluetooth.*
 import android.content.*
 import android.content.pm.PackageManager
+import android.companion.*
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.location.LocationManager
@@ -36,6 +37,9 @@ class MainActivity : Activity() {
     private val found = linkedMapOf<String, BluetoothDevice>()
     private val names = DeviceNames()
     private val rows = linkedMapOf<String, DeviceRow>()
+    private lateinit var bluetoothActions: BluetoothActions
+    private var pendingCompanionAddress: String? = null
+    private val linked = mutableSetOf<String>()
     private var registered = false
     private var searching = false
     private var searched = false
@@ -75,11 +79,17 @@ class MainActivity : Activity() {
                             else -> "페어링이 취소되었거나 등록이 해제되었습니다."
                         })
                     }
+                    BluetoothDevice.ACTION_ACL_CONNECTED, BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                        deviceExtra(intent)?.let { device ->
+                            if (intent.action == BluetoothDevice.ACTION_ACL_CONNECTED) linked.add(device.address) else linked.remove(device.address)
+                        }
+                        renderDevices()
+                    }
                     BluetoothAdapter.ACTION_DISCOVERY_STARTED -> { searching = true; refresh() }
                     BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { searching = false; refresh() }
                     else -> refresh()
                 }
-            } catch (_: SecurityException) { message("근처 기기 권한이 필요합니다. 왼쪽에서 권한을 허용하세요.") }
+            } catch (error: Exception) { operationError("블루투스 상태 갱신", error) }
         }
     }
     @Suppress("DEPRECATION")
@@ -89,16 +99,23 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Diagnostics.install(applicationContext)
         window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
         preview = BuildConfig.DEBUG && intent.getBooleanExtra("ui_preview", false)
         adapter = getSystemService(BluetoothManager::class.java)?.adapter
         savedInstanceState?.getBundle("names")?.let { bundle -> bundle.keySet().forEach { names.merge(it, bundle.getString(it)) } }
+        pendingCompanionAddress = savedInstanceState?.getString("companion_address")
+        bluetoothActions = BluetoothActions(this) { text ->
+            message(text)
+            if (text.contains("실패") && !isFinishing && !isDestroyed) AlertDialog.Builder(this).setTitle("블루투스 요청 결과").setMessage(text).setPositiveButton("닫기", null).show()
+        }
         buildScreen()
         updater = AppUpdater(this) { text, enabled -> updateButton.text = text; updateButton.isEnabled = enabled }
         if (!preview) updater.checkForUpdate(automatic = true)
         scan.requestFocus()
     }
     override fun onSaveInstanceState(out: Bundle) {
+        out.putString("companion_address", pendingCompanionAddress)
         out.putBundle("names", Bundle().apply { names.snapshot().forEach { (key, value) -> putString(key, value) } })
         super.onSaveInstanceState(out)
     }
@@ -124,6 +141,8 @@ class MainActivity : Activity() {
         sidebar.addView(permission); sidebar.addView(power)
         updateButton = actionButton("업데이트 확인", false) { updater.click() }
         sidebar.addView(updateButton)
+        sidebar.addView(actionButton("앱 실행 / 이름", false) { AppLauncher(this).show() })
+        sidebar.addView(actionButton("오류 기록", false) { showDiagnostics() })
         sidebar.addView(label("GenieBreaker ${BuildConfig.VERSION_NAME}", 11).apply { setPadding(dp(4), dp(15), 0, 0) })
         root.addView(View(this).apply { setBackgroundColor(0xff353a44.toInt()) }, LinearLayout.LayoutParams(dp(1), -1))
         val content = column().apply { setPadding(dp(28), 0, 0, 0) }
@@ -151,8 +170,8 @@ class MainActivity : Activity() {
         content.addView(toolbar)
         val panels = LinearLayout(this)
         content.addView(panels, LinearLayout.LayoutParams(-1, 0, 1f))
-        val left = devicePanel("등록된 기기", "다시 사용할 기기를 확인하세요.")
-        val right = devicePanel("주변 기기", "선택하면 페어링을 요청합니다.")
+        val left = devicePanel("등록된 기기")
+        val right = devicePanel("주변 기기")
         panels.addView(left.first, LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, dp(12), 0) })
         panels.addView(right.first, LinearLayout.LayoutParams(0, -1, 1.15f))
         registeredList = left.second; nearbyList = right.second
@@ -166,7 +185,7 @@ class MainActivity : Activity() {
         footer.addView(label("뒤로  나가기", 11))
         content.addView(footer)
     }
-    private fun devicePanel(title: String, subtitle: String): Triple<LinearLayout, LinearLayout, TextView> {
+    private fun devicePanel(title: String): Triple<LinearLayout, LinearLayout, TextView> {
         val panel = column().apply { background = rounded(surface, 16); setPadding(dp(18), dp(18), dp(18), dp(10)) }
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         heading.addView(label(title, 17, white, true), LinearLayout.LayoutParams(0, -2, 1f))
@@ -223,12 +242,12 @@ class MainActivity : Activity() {
             setOnFocusChangeListener { _, focused ->
                 background = rounded(if (focused) 0xff303e52.toInt() else 0xff252b35.toInt(), 12, if (focused) accent else Color.TRANSPARENT)
             }
-            setOnClickListener { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) }
+            setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: Exception) { operationError("기기 선택", error) } }
         }
         fun bind(name: String?, bondState: Int, kind: String) {
             title.text = name ?: "이름 확인 중…"
             val state = when (bondState) {
-                BluetoothDevice.BOND_BONDED -> "등록됨"
+                BluetoothDevice.BOND_BONDED -> if (address in linked) "기기 링크 연결됨" else "등록됨"
                 BluetoothDevice.BOND_BONDING -> "페어링 중"
                 else -> if (name == null) "이름을 기다리는 중" else "페어링 가능"
             }
@@ -262,9 +281,12 @@ class MainActivity : Activity() {
         checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
     } else checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    private fun requestAccess() = requestPermissions(if (Build.VERSION.SDK_INT >= 31)
-        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+    private fun requestAccess() {
+        try { requestPermissions(if (Build.VERSION.SDK_INT >= 31)
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+            else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+        } catch (error: Exception) { operationError("권한 요청", error) }
+    }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults); refresh()
     }
@@ -272,6 +294,7 @@ class MainActivity : Activity() {
         super.onStart()
         if (preview) { showPreview(); return }
         val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED); addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             addAction(BluetoothDevice.ACTION_NAME_CHANGED); addAction(BluetoothDevice.ACTION_CLASS_CHANGED)
             addAction(BluetoothDevice.ACTION_FOUND); addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED); addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
@@ -283,7 +306,7 @@ class MainActivity : Activity() {
         registered = true; refresh()
     }
     override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume() }
-    override fun onDestroy() { if (::updater.isInitialized) updater.close(); super.onDestroy() }
+    override fun onDestroy() { if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); super.onDestroy() }
     override fun onStop() {
         if (registered) { unregisterReceiver(receiver); registered = false }
         try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
@@ -311,7 +334,7 @@ class MainActivity : Activity() {
                 searched -> "검색이 끝났습니다. 기기를 선택해 페어링하세요."
                 else -> "기기를 페어링 모드로 설정한 뒤 검색하세요." })
             renderDevices()
-        } catch (_: SecurityException) { message("근처 기기 권한이 필요합니다.") }
+        } catch (error: Exception) { operationError("블루투스 상태", error) }
     }
     private fun enableBluetooth() {
         val bt = adapter ?: run { message("블루투스를 지원하지 않습니다"); return }
@@ -336,22 +359,90 @@ class MainActivity : Activity() {
             }
             found.clear(); searched = true; renderDevices()
             if (bt.startDiscovery()) refresh() else message("검색을 시작하지 못했습니다. 잠시 후 다시 시도하세요.")
-        } catch (_: SecurityException) { message("검색 권한이 없습니다") }
+        } catch (error: Exception) { operationError("기기 검색", error) }
     }
     private fun pair(device: BluetoothDevice) {
         if (!access()) { requestAccess(); return }
         try {
-            if (device.bondState == BluetoothDevice.BOND_BONDED) {
-                AlertDialog.Builder(this).setTitle(names.get(device.address) ?: device.name ?: "등록된 기기")
-                    .setMessage("등록된 기기입니다. 페어링과 실제 연결은 별개입니다. 연결·해제·등록 삭제는 추후 권한 확장 기능으로 제공할 예정입니다.")
-                    .setPositiveButton("닫기", null).show(); return
-            }
-            adapter?.cancelDiscovery()
-            if (device.bondState == BluetoothDevice.BOND_BONDING) { message("페어링 진행 중입니다"); return }
-            message(if (device.createBond()) "페어링 요청됨 · 시스템 확인 창을 확인하세요" else "페어링 요청 실패 · 기기의 페어링 모드를 확인하세요")
-        } catch (_: SecurityException) { message("페어링 권한이 없습니다") }
+            val title = names.get(device.address) ?: device.name ?: "이름 확인 중"
+            val bonded = device.bondState == BluetoothDevice.BOND_BONDED
+            val actions = if (bonded) arrayOf("연결 시도", "연결 해제 시도", "등록 삭제", "기기 정보")
+                else arrayOf("페어링", "다른 페어링 방식", "기기 정보")
+            AlertDialog.Builder(this).setTitle(title).setItems(actions) { _, index ->
+                try {
+                    if (bonded) when (index) {
+                        0 -> bluetoothActions.connection(device, true)
+                        1 -> bluetoothActions.connection(device, false)
+                        2 -> AlertDialog.Builder(this).setTitle("등록을 삭제할까요?")
+                            .setMessage("리모컨이나 키보드를 삭제하면 조작할 수 없게 될 수 있습니다. 다른 입력 수단을 준비하세요.")
+                            .setPositiveButton("삭제") { _, _ -> bluetoothActions.forget(device) }.setNegativeButton("취소", null).show()
+                        else -> deviceDetails(device)
+                    } else when (index) {
+                        0 -> {
+                            adapter?.cancelDiscovery()
+                            if (device.bondState == BluetoothDevice.BOND_BONDING) message("이미 페어링 중입니다.") else bluetoothActions.bond(device)
+                        }
+                        1 -> companionPair(device)
+                        else -> deviceDetails(device)
+                    }
+                } catch (error: Exception) { operationError("기기 선택", error) }
+            }.setNegativeButton("닫기", null).show()
+        } catch (error: Exception) { operationError("기기 선택", error) }
     }
-
+    private fun deviceDetails(device: BluetoothDevice) {
+        try {
+            val name = names.get(device.address) ?: device.name ?: "이름 확인 중"
+            AlertDialog.Builder(this).setTitle(name).setMessage("${device.address}\n${if (device.bondState == BluetoothDevice.BOND_BONDED) "등록됨" else "등록되지 않음"}\n${if (device.address in linked) "기기 링크 연결됨" else "링크 연결 상태 미확인"}\n\n등록 상태와 오디오·입력 프로필의 실제 연결 상태는 다를 수 있습니다.")
+                .setPositiveButton("닫기", null).show()
+        } catch (error: Exception) { operationError("기기 정보", error) }
+    }
+    @Suppress("DEPRECATION")
+    private fun companionPair(device: BluetoothDevice) {
+        if (Build.VERSION.SDK_INT < 26 || !packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
+            message("이 펌웨어는 대체 페어링 서비스를 제공하지 않습니다."); return
+        }
+        try {
+            adapter?.cancelDiscovery()
+            pendingCompanionAddress = device.address
+            val manager = getSystemService(CompanionDeviceManager::class.java)
+            val request = AssociationRequest.Builder().addDeviceFilter(BluetoothDeviceFilter.Builder().setAddress(device.address).build()).setSingleDevice(true).build()
+            val callback = object : CompanionDeviceManager.Callback() {
+                private fun chooser(sender: IntentSender) {
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) try { startIntentSenderForResult(sender, 501, null, 0, 0, 0) }
+                        catch (error: Exception) { operationError("대체 페어링 화면", error) }
+                    }
+                }
+                override fun onDeviceFound(chooserLauncher: IntentSender) { chooser(chooserLauncher) }
+                override fun onAssociationPending(intentSender: IntentSender) { chooser(intentSender) }
+                override fun onFailure(error: CharSequence?) { runOnUiThread { if (!isDestroyed) message("대체 페어링 실패: ${error ?: "기기를 찾지 못했습니다"}") } }
+            }
+            if (Build.VERSION.SDK_INT >= 33) manager.associate(request, mainExecutor, callback)
+            else manager.associate(request, callback, null)
+            message("대체 페어링 준비 중입니다. 기기를 페어링 모드로 유지하세요.")
+        } catch (error: Exception) { operationError("대체 페어링", error) }
+    }
+    @Deprecated("Platform result callback used for vendor compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != 501) return
+        val address = pendingCompanionAddress; pendingCompanionAddress = null
+        if (resultCode != RESULT_OK || address == null) { message("대체 페어링이 취소되었습니다."); return }
+        try {
+            adapter?.getRemoteDevice(address)?.let { device -> found[address] = device; bluetoothActions.bond(device) }
+        } catch (error: Exception) { operationError("대체 페어링 완료", error) }
+    }
+    private fun operationError(operation: String, error: Exception) {
+        Diagnostics.record(this, operation, error)
+        message("$operation 실패: ${error.javaClass.simpleName}. 오류 기록을 확인하세요.")
+    }
+    private fun showDiagnostics() {
+        val text = label(Diagnostics.read(this), 12).apply { setPadding(dp(16), dp(16), dp(16), dp(16)); setTextIsSelectable(true) }
+        AlertDialog.Builder(this).setTitle("오류 기록")
+            .setView(ScrollView(this).apply { addView(text) })
+            .setNeutralButton("복사") { _, _ -> getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker diagnostics", text.text)) }
+            .setPositiveButton("닫기", null).show()
+    }
     private fun bondedDevice(address: String): BluetoothDevice? {
         if (!access()) return null
         return try { adapter?.bondedDevices?.firstOrNull { it.address == address } }
@@ -388,7 +479,7 @@ class MainActivity : Activity() {
             registeredEmpty.visibility = if (bonded.isEmpty()) View.VISIBLE else View.GONE
             nearbyEmpty.visibility = if (nearby.isEmpty()) View.VISIBLE else View.GONE
             if (focusedAddress != null && currentFocus !is DeviceRow) (rows[focusedAddress] ?: scan).requestFocus()
-        } catch (_: SecurityException) { message("기기 목록을 읽을 권한이 없습니다.") }
+        } catch (error: Exception) { operationError("기기 목록", error) }
     }
     /** Debug-only fixtures for instrumentation screenshots, never shown in release builds. */
     private fun showPreview() {
