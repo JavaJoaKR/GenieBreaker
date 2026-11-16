@@ -126,7 +126,8 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                         (allApps || pm.getLeanbackLaunchIntentForPackage(pkg.packageName) != null || pm.getLaunchIntentForPackage(pkg.packageName) != null)
                 }.sortedBy { it.applicationInfo!!.loadLabel(pm).toString().lowercase() }
                 ui {
-                    packages = items; adapter.notifyDataSetChanged()
+                    packages = items
+                    if (grid.adapter !== adapter) grid.adapter = adapter else adapter.notifyDataSetChanged()
                     val selectedIndex = items.indexOfFirst { it.packageName == selectedPackage }
                     if (hadGridFocus && selectedIndex >= 0) grid.setSelection(selectedIndex)
                     else if (items.isNotEmpty()) grid.smoothScrollToPosition(oldPosition.coerceAtMost(items.lastIndex))

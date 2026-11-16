@@ -47,6 +47,12 @@ public class TvUiTest {
             screenshot.recycle();
             instrumentation.runOnMainSync(activity::previewAppsTab);
             android.os.SystemClock.sleep(800);
+            instrumentation.runOnMainSync(() -> {
+                android.widget.GridView shelf = findGrid(activity.findViewById(android.R.id.content));
+                assertNotNull("App shelf must exist", shelf);
+                assertNotNull("App shelf must attach its adapter on first load", shelf.getAdapter());
+                assertTrue("Launchable apps must be displayed", shelf.getAdapter().getCount() > 0);
+            });
             instrumentation.waitForIdleSync();
             try (android.os.ParcelFileDescriptor fd = instrumentation.getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/genie-app-ui.png");
                  java.io.InputStream pipe = new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)) { while (pipe.read() != -1) { } }
@@ -76,6 +82,16 @@ public class TvUiTest {
             instrumentation.runOnMainSync(() -> assertTrue("Left key returns from Flutter files to native sidebar", activity.getCurrentFocus() instanceof android.widget.Button && ((android.widget.Button) activity.getCurrentFocus()).getText().toString().equals("파일탐색기")));
 
         } finally { instrumentation.runOnMainSync(activity::finish); }
+    }
+    private android.widget.GridView findGrid(android.view.View view) {
+        if (view instanceof android.widget.GridView) return (android.widget.GridView) view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.widget.GridView grid = findGrid(group.getChildAt(i)); if (grid != null) return grid;
+            }
+        }
+        return null;
     }
     private void capture(Instrumentation instrumentation, String name) throws Exception {
         try (android.os.ParcelFileDescriptor fd = instrumentation.getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/" + name);
