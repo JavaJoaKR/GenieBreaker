@@ -5,6 +5,17 @@ import 'package:genie_ui/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('Confirmation actions stay visible with a long message', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'title': '앱을 제거할까요?', 'items': ['취소', '제거 요청'], 'message': List.filled(50, '앱 데이터가 삭제됩니다.').join('\n')};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.text('제거 요청')).bottom, lessThan(600));
+    expect(tester.getRect(find.text('취소')).bottom, lessThan(600));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Menu is bounded, centered, and dismisses through the outside barrier', (tester) async {
     var closed = false;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
@@ -80,7 +91,7 @@ void main() {
     });
     await tester.pumpWidget(const GenieUI());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('듀얼앱 설치파일 정리'));
+    await tester.tap(find.text('설치파일 정리'));
     await tester.pumpAndSettle();
     expect(cleaned, false);
     await tester.tap(find.text('취소'));

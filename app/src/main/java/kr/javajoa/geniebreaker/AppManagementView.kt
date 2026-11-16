@@ -24,6 +24,8 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     private val duals = DualApps(activity.applicationContext)
     private val grid = GridView(activity)
     private val status = text("앱을 선택해 듀얼앱을 만드세요", 14)
+    private val count = text("설치된 앱", 12)
+    private var shelfAdapter: BaseAdapter? = null
     private val empty = text("표시할 앱이 없습니다", 18)
     private var allApps = false
     private var onlyDuals = false
@@ -35,6 +37,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> main.post {
         if (!activity.isDestroyed) {
             status.text = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
+            status.isFocusable = installState.contains("result") || installState.contains("progress")
             grid.invalidateViews()
         }
     } }
@@ -42,7 +45,10 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         orientation = VERTICAL
         installState.registerOnSharedPreferenceChangeListener(installListener)
         val header = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text("앱 관리", 32, true), LayoutParams(0, -2, 1f))
+        val titles = LinearLayout(activity).apply { orientation = VERTICAL }
+        titles.addView(text("앱 관리", 30, true))
+        titles.addView(count, LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        header.addView(titles, LayoutParams(0, -2, 1f))
         val dualFilter = button("내 듀얼앱") { }
         dualFilter.setOnClickListener { onlyDuals = !onlyDuals; dualFilter.text = if (onlyDuals) "모든 앱" else "내 듀얼앱"; refresh() }
         header.addView(dualFilter, LayoutParams(dp(112), dp(44)))
@@ -50,13 +56,13 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         header.addView(more, LayoutParams(dp(102), dp(44)).apply { leftMargin = dp(10) })
         addView(header)
         status.maxLines = 1; status.ellipsize = android.text.TextUtils.TruncateAt.END
-        status.isFocusable = true; status.background = focusBackground()
-        status.setPadding(dp(12), dp(10), dp(12), dp(10))
+        status.isFocusable = false; status.background = null
+        status.setPadding(0, dp(8), 0, dp(8))
         status.setOnClickListener { notice(installState.getString("result", null) ?: installState.getString("progress", null) ?: "앱을 선택하고 ‘듀얼앱 만들기’를 누르세요. 설치 확인만 하면 별도 앱으로 사용할 수 있습니다.") }
-        addView(status, LayoutParams(-1, dp(44)).apply { topMargin = dp(18); bottomMargin = dp(18) })
+        addView(status, LayoutParams(-1, dp(36)).apply { topMargin = dp(10); bottomMargin = dp(8) })
         val shelf = FrameLayout(activity)
         addView(shelf, LayoutParams(-1, 0, 1f))
-        grid.numColumns = GridView.AUTO_FIT; grid.columnWidth = dp(200); grid.horizontalSpacing = dp(14); grid.verticalSpacing = dp(14)
+        grid.numColumns = GridView.AUTO_FIT; grid.columnWidth = dp(160); grid.horizontalSpacing = dp(12); grid.verticalSpacing = dp(12)
         grid.stretchMode = GridView.STRETCH_COLUMN_WIDTH; grid.clipToPadding = false; grid.setPadding(dp(3), dp(3), dp(3), dp(3))
         if (Build.VERSION.SDK_INT >= 26) grid.setDefaultFocusHighlightEnabled(false)
         grid.selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
@@ -68,41 +74,38 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density + .5f).toInt()
     private fun text(value: String, size: Int, bold: Boolean = false) = TextView(activity).apply {
-        text = value; textSize = size.toFloat(); setTextColor(if (bold) 0xffeff4ff.toInt() else 0xff9baac1.toInt())
+        text = value; textSize = size.toFloat(); setTextColor(if (bold) TvDesign.ink else TvDesign.muted)
         includeFontPadding = false; if (bold) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
     }
-    private fun shape(color: Int, stroke: Int = Color.TRANSPARENT) = GradientDrawable().apply { setColor(color); cornerRadius = dp(16).toFloat(); setStroke(dp(2), stroke) }
-    private fun focusBackground() = StateListDrawable().apply {
-        addState(intArrayOf(android.R.attr.state_selected), shape(0xff203c62.toInt(), 0xff7aafff.toInt()))
-        addState(intArrayOf(android.R.attr.state_focused), shape(0xff203c62.toInt(), 0xff7aafff.toInt()))
-        addState(intArrayOf(android.R.attr.state_pressed), shape(0xff203c62.toInt(), 0xff7aafff.toInt()))
-        addState(intArrayOf(), shape(0xff131f33.toInt()))
-    }
+    private fun focusBackground() = TvDesign.selector(activity)
     private fun button(title: String, action: () -> Unit) = Button(activity).apply {
-        text = title; textSize = 13f; isAllCaps = false; isFocusable = true; stateListAnimator = null
+        text = title; textSize = 14f; isAllCaps = false; isFocusable = true; stateListAnimator = null
         if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false)
-        background = focusBackground(); setTextColor(0xffeff4ff.toInt()); setPadding(dp(10), 0, dp(10), 0); setOnClickListener { action() }
+        background = focusBackground(); setTextColor(TvDesign.ink); setPadding(dp(10), 0, dp(10), 0); setOnClickListener { action() }
     }
-    private val adapter: BaseAdapter get() = object : BaseAdapter() {
+    private val adapter: BaseAdapter get() = shelfAdapter ?: object : BaseAdapter() {
         override fun getCount() = packages.size
         override fun getItem(position: Int) = packages[position]
         override fun getItemId(position: Int) = position.toLong()
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val card = (convertView as? LinearLayout) ?: LinearLayout(activity).apply {
-                orientation = VERTICAL; gravity = Gravity.CENTER; minimumHeight = dp(152)
-                setPadding(dp(18), dp(20), dp(18), dp(18)); background = focusBackground()
-                addView(ImageView(activity), LayoutParams(dp(48), dp(48)))
-                addView(text("", 17, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.CENTER }, LayoutParams(-1, -2).apply { topMargin = dp(15) })
-                addView(text("", 12).apply { gravity = Gravity.CENTER }, LayoutParams(-1, -2).apply { topMargin = dp(8) })
+                orientation = VERTICAL; gravity = Gravity.CENTER; minimumHeight = dp(128)
+                setPadding(dp(12), dp(16), dp(12), dp(12)); background = focusBackground()
+                addView(ImageView(activity), LayoutParams(dp(42), dp(42)))
+                addView(text("", 15, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.CENTER }, LayoutParams(-1, -2).apply { topMargin = dp(12) })
+                addView(text("", 11).apply { gravity = Gravity.CENTER }, LayoutParams(-1, -2).apply { topMargin = dp(6) })
             }
             val pkg = packages[position]; val app = pkg.applicationInfo
             (card.getChildAt(0) as ImageView).setImageDrawable(app?.loadIcon(pm))
             (card.getChildAt(1) as TextView).text = app?.loadLabel(pm) ?: "앱"
             val record = duals.record(pkg.packageName) ?: duals.all().firstOrNull { it.target == pkg.packageName }
-            (card.getChildAt(2) as TextView).text = when { record == null -> "듀얼앱 만들기"; duals.isInstalled(record.target) -> "듀얼앱 사용 중"; else -> "설치 준비됨" }
+            (card.getChildAt(2) as TextView).apply {
+                text = when { record == null -> ""; duals.isInstalled(record.target) -> "듀얼앱 사용 중"; else -> "설치 준비됨" }
+                setTextColor(TvDesign.blue)
+            }
             return card
         }
-    }
+    }.also { shelfAdapter = it }
     fun refresh() {
         if (loading || busy) return
         loading = true
@@ -127,6 +130,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                 }.sortedBy { it.applicationInfo!!.loadLabel(pm).toString().lowercase() }
                 ui {
                     packages = items
+                    count.text = if (onlyDuals) "내 듀얼앱 · ${items.size}개" else "설치된 앱 · ${items.size}개"
                     if (grid.adapter !== adapter) grid.adapter = adapter else adapter.notifyDataSetChanged()
                     val selectedIndex = items.indexOfFirst { it.packageName == selectedPackage }
                     if (hadGridFocus && selectedIndex >= 0) grid.setSelection(selectedIndex)
@@ -134,6 +138,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                     empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
                     empty.text = if (onlyDuals) "아직 만든 듀얼앱이 없습니다" else "표시할 앱이 없습니다. 보기 설정을 확인하세요."
                     status.text = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
+                    status.isFocusable = installState.contains("result") || installState.contains("progress")
                     loading = false
                 }
             } catch (error: Exception) { ui { loading = false; status.text = "앱을 불러오지 못했습니다. 다시 시도하세요."; Diagnostics.record(activity, "App shelf", error) } }

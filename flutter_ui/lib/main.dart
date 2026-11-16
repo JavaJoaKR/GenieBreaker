@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 
 const bridge = MethodChannel('genie/ui');
 const ink = Color(0xffeff4ff);
-const muted = Color(0xff9baac1);
-const blue = Color(0xff79adff);
+const muted = Color(0xff9eafc7);
+const blue = Color(0xff85b5ff);
 const canvas = Color(0xff0b1220);
 const panel = Color(0xff101e32);
 void main() => runApp(const GenieUI());
@@ -21,12 +21,15 @@ class GenieUI extends StatelessWidget {
       filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
         backgroundColor: blue, foregroundColor: canvas, minimumSize: const Size(110, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)).copyWith(
+          side: WidgetStateProperty.resolveWith((states) => BorderSide(color: states.contains(WidgetState.focused) ? ink : Colors.transparent, width: 2)))),
       outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
         foregroundColor: ink, minimumSize: const Size(92, 48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))).copyWith(
+          side: WidgetStateProperty.resolveWith((states) => BorderSide(color: states.contains(WidgetState.focused) ? blue : const Color(0xff344c6b), width: 2)),
+          backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused) ? const Color(0xff213e63) : Colors.transparent))),
     ),
-    shortcuts: {...WidgetsApp.defaultShortcuts, const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent()},
+    shortcuts: {...WidgetsApp.defaultShortcuts, const SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): const ActivateIntent()},
     home: const GeniePage(),
   );
 }
@@ -61,9 +64,9 @@ class _RemoteTileState extends State<RemoteTile> {
         }
       },
       shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space, includeRepeats: false): ActivateIntent(),
       },
       actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) { widget.onTap(); return null; })},
       child: Semantics(button: true, selected: widget.selected, toggled: widget.toggle, label: widget.title,
@@ -71,11 +74,13 @@ class _RemoteTileState extends State<RemoteTile> {
           duration: const Duration(milliseconds: 110),
           constraints: const BoxConstraints(minHeight: 54),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(color: focused ? const Color(0xff203c62) : const Color(0xff16263d),
-            borderRadius: BorderRadius.circular(12), border: Border.all(color: focused ? blue : Colors.transparent, width: 2)),
+          decoration: BoxDecoration(color: focused ? const Color(0xff213e63) : const Color(0xff15263e),
+            borderRadius: BorderRadius.circular(12), border: Border.all(color: focused ? blue : const Color(0xff263b55), width: 2)),
           child: Row(children: [
-            if (widget.toggle == null) ...[Icon(widget.selected ? Icons.check_circle_rounded : widget.icon,
-              color: widget.danger ? const Color(0xffffa4a4) : focused || widget.selected ? blue : muted, size: 22), const SizedBox(width: 12)],
+            if (widget.toggle == null) ...[Container(width: 34, height: 34, alignment: Alignment.center,
+              decoration: BoxDecoration(color: widget.danger ? const Color(0xff40292e) : const Color(0xff1c3453), borderRadius: BorderRadius.circular(9)),
+              child: Icon(widget.selected ? Icons.check_circle_rounded : widget.icon,
+                color: widget.danger ? const Color(0xffffa4a4) : blue, size: 20)), const SizedBox(width: 12)],
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(widget.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500,
                 color: widget.danger ? const Color(0xffffb6b6) : ink)),
@@ -214,6 +219,7 @@ class _GeniePageState extends State<GeniePage> {
   Widget menuBody() {
     final configure = data?['cloneOptions'] == true;
     final items = (data?['items'] as List? ?? []).cast<String>();
+    final confirmation = isConfirmation;
     const labels = {
       'renameApp': ['앱 이름 변경', '앱 이름에 듀얼 표시'],
       'renameLaunchers': ['런처 이름 변경', 'TV 홈 화면의 실행 이름 변경'],
@@ -237,14 +243,45 @@ class _GeniePageState extends State<GeniePage> {
             subtitle: labels[key]![1], toggle: cloneOptions[key] ?? true, onTap: () => toggleOption(key)),
           TextButton(onPressed: () { setState(() => cloneOptions.updateAll((key, value) => true)); bridge.invokeMethod<void>('options', cloneOptions); }, child: const Text('기본값 복원')),
         ],
-      ] else ...[
+      ] else if (!confirmation) ...[
         for (var i = 0; i < items.length; i++) RemoteTile(items[i], key: ValueKey('${data?['pageId'] ?? 'root'}-$i'),
           autofocus: i == (data?['focus'] ?? 0), selected: data?['selected'] == i,
           danger: RegExp('제거|삭제|지우기').hasMatch(items[i]),
-          icon: data?['selected'] != null && data?['selected'] != -1 ? Icons.radio_button_unchecked : Icons.chevron_right_rounded,
+          icon: data?['selected'] != null && data?['selected'] != -1 ? Icons.radio_button_unchecked : actionIcon(items[i]),
           onFocus: () => bridge.invokeMethod<void>('focus', i), onTap: () => perform('choose', i)),
       ],
     ]));
+  }
+  bool get isConfirmation {
+    final items = (data?['items'] as List? ?? []).cast<String>();
+    return items.length == 2 && ['취소', '나중에'].contains(items.first) && (data?['message'] as String? ?? '').isNotEmpty;
+  }
+  IconData actionIcon(String label) {
+    if (RegExp('제거|삭제|지우기').hasMatch(label)) return Icons.delete_outline_rounded;
+    if (label.contains('실행')) return Icons.play_arrow_rounded;
+    if (label.contains('만들기')) return Icons.copy_all_rounded;
+    if (label.contains('업데이트') || label.contains('설치')) return Icons.system_update_rounded;
+    if (label.contains('연결 해제')) return Icons.link_off_rounded;
+    if (label.contains('연결') || label.contains('페어링')) return Icons.bluetooth_rounded;
+    if (label.contains('저장')) return Icons.save_alt_rounded;
+    if (label.contains('복사')) return Icons.content_copy_rounded;
+    if (label.contains('보기')) return Icons.more_horiz_rounded;
+    if (label.contains('기록') || label.contains('정보')) return Icons.info_outline_rounded;
+    return Icons.chevron_right_rounded;
+  }
+  Widget? menuFooter(bool configure) {
+    if (configure) return Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+      OutlinedButton(onPressed: back, child: const Text('취소')), const SizedBox(width: 12),
+      FilledButton(onPressed: working ? null : () => perform('build', cloneOptions), child: const Text('듀얼앱 만들기')),
+    ]);
+    if (!isConfirmation) return null;
+    final items = (data!['items'] as List).cast<String>();
+    final danger = RegExp('제거|삭제|지우기').hasMatch(items[1]);
+    return Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+      OutlinedButton(autofocus: true, onPressed: () => perform('choose', 0), child: Text(items[0])), const SizedBox(width: 12),
+      FilledButton(style: danger ? FilledButton.styleFrom(backgroundColor: const Color(0xffffb4ab)) : null,
+        onPressed: working ? null : () => perform('choose', 1), child: Text(items[1])),
+    ]);
   }
   Widget menuOverlay() {
     final configure = data?['cloneOptions'] == true;
@@ -257,34 +294,55 @@ class _GeniePageState extends State<GeniePage> {
           wide: configure || (data?['message'] as String? ?? '').length > 180,
           breadcrumbs: (data?['breadcrumbs'] as List? ?? []).cast<String>(), onBack: back, onClose: () => perform('close'),
           body: data == null && error == null ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())) : menuBody(),
-          footer: configure ? Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            OutlinedButton(onPressed: back, child: const Text('취소')), const SizedBox(width: 12),
-            FilledButton(onPressed: working ? null : () => perform('build', cloneOptions), child: const Text('듀얼앱 만들기')),
-          ]) : null,
+          footer: menuFooter(configure),
         ),
       )))),
     ]);
   }
   Widget filesPage() {
     final entries = (data?['entries'] as List? ?? []).cast<Map>();
-    return ColoredBox(color: canvas, child: Padding(padding: const EdgeInsets.all(8),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(data?['title'] as String? ?? '파일탐색기', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 20),
-        if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
-        Expanded(child: ListView(children: [
-          if (location.isNotEmpty) RemoteTile('상위 폴더', autofocus: true, icon: Icons.arrow_back, onTap: back),
-          if (location.isEmpty) ...[
-            RemoteTile('기기 폴더 연결', autofocus: true, subtitle: 'USB · 다운로드 · 허용한 폴더', icon: Icons.create_new_folder_outlined, onTap: () => perform('pick')),
-            RemoteTile('듀얼앱 설치파일 정리', subtitle: '${data?['apkSize'] ?? ''}', icon: Icons.delete_outline, onTap: () => cleanup('apks')),
-            RemoteTile('캐시 정리', subtitle: '${data?['cacheSize'] ?? ''}', icon: Icons.cleaning_services_outlined, onTap: () => cleanup('cache')),
-          ],
-          for (final entry in entries) RemoteTile(entry['name'] as String, subtitle: entry['detail'] as String?,
-            icon: entry['directory'] == true ? Icons.folder_outlined : Icons.insert_drive_file_outlined,
-            onTap: () { final path = entry['path'] as String; if (entry['directory'] == true) { parents.add(location); load(path); } else { perform('open', path); } }),
-          if (location.isNotEmpty && entries.isEmpty) const Padding(padding: EdgeInsets.all(28), child: Text('폴더가 비어 있습니다', style: TextStyle(color: muted, fontSize: 20))),
+    final root = location.isEmpty;
+    final folders = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
+        Expanded(child: Text(root ? '내 폴더' : '폴더 내용', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
+        Text('${entries.length}개', style: const TextStyle(color: muted, fontSize: 12)),
+      ])),
+      Expanded(child: ListView(children: [
+        if (!root) RemoteTile('상위 폴더', autofocus: true, icon: Icons.arrow_back, onTap: back),
+        for (var i = 0; i < entries.length; i++) RemoteTile(entries[i]['name'] as String, key: ValueKey(entries[i]['path']),
+          autofocus: root && i == 0, subtitle: entries[i]['detail'] as String?,
+          icon: entries[i]['directory'] == true ? Icons.folder_outlined : (entries[i]['path'] as String).endsWith('.apk') ? Icons.android_rounded : Icons.insert_drive_file_outlined,
+          onTap: () { final path = entries[i]['path'] as String; if (entries[i]['directory'] == true) { parents.add(location); load(path); } else { perform('open', path); } }),
+        if (entries.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 48), child: Column(children: [
+          Icon(Icons.folder_open_rounded, color: muted, size: 42), SizedBox(height: 16), Text('폴더가 비어 있습니다', style: TextStyle(color: muted, fontSize: 17)),
         ])),
-        const SizedBox(height: 12), const Text('방향키  이동     확인  선택     뒤로  돌아가기', style: TextStyle(color: muted, fontSize: 12)),
+      ])),
+    ]);
+    final storage = Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(
+      color: panel, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xff263b55))),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('저장공간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)), const SizedBox(height: 16),
+        Text('듀얼앱 설치파일  ${data?['apkSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: () => cleanup('apks'), icon: const Icon(Icons.delete_outline, size: 18), label: const Text('설치파일 정리')),
+        const SizedBox(height: 12), Text('캐시  ${data?['cacheSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: () => cleanup('cache'), icon: const Icon(Icons.cleaning_services_outlined, size: 18), label: const Text('캐시 정리')),
+        const SizedBox(height: 8), const Text('설치된 앱과 서명 키는 유지됩니다.', style: TextStyle(color: muted, fontSize: 11, height: 1.5)),
+      ]),
+    );
+    return ColoredBox(color: canvas, child: Padding(padding: const EdgeInsets.all(0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(data?['title'] as String? ?? '파일탐색기', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6), Text(root ? '기기 폴더와 설치파일을 한곳에서' : '파일탐색기  ›  ${data?['title'] ?? ''}', style: const TextStyle(color: muted, fontSize: 12)),
+        ])), if (root) ...[const SizedBox(width: 12), OutlinedButton.icon(onPressed: () => perform('pick'), icon: const Icon(Icons.add_rounded, size: 19), label: const Text('폴더 연결'))]]),
+        const SizedBox(height: 24),
+        if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
+        Expanded(child: LayoutBuilder(builder: (context, constraints) {
+          if (!root) return folders;
+          if (constraints.maxWidth < 560) return Column(children: [Expanded(child: folders), SizedBox(height: 155, child: SingleChildScrollView(child: storage))]);
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: folders), const SizedBox(width: 16), SizedBox(width: 220, child: SingleChildScrollView(child: storage))]);
+        })),
+        const SizedBox(height: 14), const Text('방향키  이동     확인  선택     뒤로  돌아가기', style: TextStyle(color: muted, fontSize: 11)),
       ]),
     ));
   }

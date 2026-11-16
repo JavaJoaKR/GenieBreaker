@@ -67,11 +67,11 @@ class MainActivity : Activity() {
     private var searched = false
     private var preview = false
     private val compact: Boolean get() = resources.configuration.screenWidthDp < 800
-    private val backgroundColor = Color.rgb(11, 18, 32)
+    private val backgroundColor = TvDesign.canvas
     private val surface = Color.rgb(17, 28, 46)
-    private val muted = Color.rgb(155, 171, 196)
-    private val accent = Color.rgb(122, 175, 255)
-    private val white = Color.rgb(240, 243, 249)
+    private val muted = TvDesign.muted
+    private val accent = TvDesign.blue
+    private val white = TvDesign.ink
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -152,8 +152,8 @@ class MainActivity : Activity() {
             setPadding(dp(if (compact) 18 else 32), dp(if (compact) 16 else 28), dp(if (compact) 18 else 32), dp(if (compact) 16 else 24)); setBackgroundColor(backgroundColor)
         }
         setContentView(root)
-        val sidebar = column().apply { setPadding(0, 0, dp(24), 0) }
-        root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 136 else 176), -1))
+        val sidebar = column().apply { setPadding(0, 0, dp(20), 0) }
+        root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 144 else 184), -1))
         val brand = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         brand.addView(ImageView(this).apply { setImageResource(R.drawable.icon) }, LinearLayout.LayoutParams(dp(34), dp(34)))
         val branding = column().apply { setPadding(dp(8), 0, 0, 0) }
@@ -161,7 +161,7 @@ class MainActivity : Activity() {
         branding.addView(label("v${BuildConfig.VERSION_NAME}", 10, muted).apply { setPadding(0, dp(4), 0, 0) })
         brand.addView(branding)
         sidebar.addView(brand)
-        sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(if (compact) 18 else 34)))
+        sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(if (compact) 22 else 38)))
         bluetoothTab = actionButton("블루투스", false) { selectTab(false) }.apply { isSelected = true }
         appsTab = actionButton("앱 관리", false) { selectTab(true) }
         filesTab = actionButton("파일탐색기", false) { selectFiles() }
@@ -170,8 +170,9 @@ class MainActivity : Activity() {
         permission = actionButton("권한 허용", false, ::requestAccess)
         power = actionButton("블루투스 켜기", false, ::enableBluetooth)
         sidebar.addView(permission); sidebar.addView(power)
-        sidebar.addView(actionButton("설정", false) { showSettings() })
-        root.addView(View(this).apply { setBackgroundColor(0xff1d2e46.toInt()) }, LinearLayout.LayoutParams(dp(1), -1))
+        sidebar.addView(actionButton("설정", false) { showSettings() }.apply { decorateNav(this, R.drawable.nav_settings) })
+        decorateNav(bluetoothTab, R.drawable.nav_bluetooth); decorateNav(appsTab, R.drawable.nav_apps); decorateNav(filesTab, R.drawable.nav_files)
+        root.addView(View(this).apply { setBackgroundColor(TvDesign.border) }, LinearLayout.LayoutParams(dp(1), -1))
         val content = column().apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0) }
         bluetoothPage = content
         val pageHost = FrameLayout(this)
@@ -179,11 +180,12 @@ class MainActivity : Activity() {
         pageHost.addView(content, FrameLayout.LayoutParams(-1, -1))
         appsPage = AppManagementView(this).apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0); visibility = View.GONE }
         pageHost.addView(appsPage, FrameLayout.LayoutParams(-1, -1))
-        filesPage = FilePane(this) { filesTab.requestFocus() }.apply { setPadding(dp(24), 0, 0, 0); visibility = View.GONE }
+        filesPage = FilePane(this) { filesTab.requestFocus() }.apply { setPadding(dp(28), 0, 0, 0); visibility = View.GONE }
         pageHost.addView(filesPage, FrameLayout.LayoutParams(-1, -1))
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = column()
-        titles.addView(label("블루투스", if (compact) 24 else 32, white, true))
+        titles.addView(label("블루투스", if (compact) 24 else 30, white, true))
+        titles.addView(label("헤드폰 · 리모컨 · 입력 기기", 12).apply { setPadding(0, dp(6), 0, 0) })
 
         heading.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         badge = label("확인 중", 12, accent).apply {
@@ -192,15 +194,15 @@ class MainActivity : Activity() {
         }
         heading.addView(badge)
         content.addView(heading)
-        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(if (compact) 12 else 20), 0, dp(if (compact) 10 else 16)) }
+        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(if (compact) 10 else 16), 0, dp(if (compact) 10 else 16)) }
         status = label("", 13).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
-        toolbar.addView(status, LinearLayout.LayoutParams(0, dp(52), 1f))
+        toolbar.addView(status, LinearLayout.LayoutParams(0, dp(46), 1f))
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleSmall).apply {
             indeterminateTintList = android.content.res.ColorStateList.valueOf(accent); visibility = View.GONE
         }
         toolbar.addView(progress, LinearLayout.LayoutParams(dp(20), dp(20)).apply { setMargins(dp(8), 0, dp(12), 0) })
         scan = actionButton("기기 검색", true, ::discover).apply { minWidth = dp(122) }
-        toolbar.addView(scan, LinearLayout.LayoutParams(dp(132), dp(52)).apply { setMargins(dp(12), 0, 0, 0) })
+        toolbar.addView(scan, LinearLayout.LayoutParams(dp(122), dp(46)).apply { setMargins(dp(12), 0, 0, 0) })
         content.addView(toolbar)
         val panels = LinearLayout(this).apply { orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
         if (compact) content.addView(ScrollView(this).apply { addView(panels) }, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -232,24 +234,24 @@ class MainActivity : Activity() {
         appsPage.visibility = if (apps) View.VISIBLE else View.GONE
         bluetoothTab.isSelected = !apps; appsTab.isSelected = apps
         filesTab.isSelected = false
-        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = rounded(if (tab.isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10, if (tab.hasFocus()) accent else Color.TRANSPARENT)
+        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = TvDesign.selector(this, nav = true)
         if (apps) appsPage.refresh()
     }
     private fun selectFiles() {
         selectTab(false)
         filesSelected = true; bluetoothPage.visibility = View.GONE; filesPage.visibility = View.VISIBLE
         bluetoothTab.isSelected = false; filesTab.isSelected = true
-        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = rounded(if (tab.isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10)
+        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = TvDesign.selector(this, nav = true)
         filesPage.show(); filesPage.resume()
     }
     private fun devicePanel(title: String): Triple<LinearLayout, LinearLayout, TextView> {
-        val panel = column().apply { setPadding(dp(3), dp(8), dp(3), dp(4)) }
+        val panel = column().apply { setPadding(dp(12), dp(12), dp(12), dp(8)); background = TvDesign.shape(this@MainActivity, TvDesign.surface, 18, TvDesign.border) }
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        heading.addView(label(title, 17, white, true), LinearLayout.LayoutParams(0, -2, 1f))
-        val count = label("0", 13, muted)
+        heading.addView(label(title, 16, white, true), LinearLayout.LayoutParams(0, -2, 1f))
+        val count = label("0", 12, accent).apply { gravity = Gravity.CENTER; minWidth = dp(26); setPadding(dp(7), dp(4), dp(7), dp(4)); background = rounded(0xff193554.toInt(), 8) }
         heading.addView(count)
         panel.addView(heading)
-        panel.addView(Space(this), LinearLayout.LayoutParams(1, dp(16)))
+        panel.addView(Space(this), LinearLayout.LayoutParams(1, dp(12)))
         val list = column()
         if (compact) panel.addView(list)
         else panel.addView(ScrollView(this).apply { isFillViewport = true; clipToPadding = false; addView(list) }, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -270,18 +272,22 @@ class MainActivity : Activity() {
         this.text = text; textSize = size.toFloat(); setTextColor(color); includeFontPadding = false
         typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
     }
+    private fun decorateNav(button: Button, icon: Int) {
+        button.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        button.compoundDrawablePadding = dp(12)
+        button.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0)
+        button.background = TvDesign.selector(this, nav = true)
+        button.setPadding(dp(12), 0, dp(10), 0)
+    }
     private fun actionButton(text: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
         this.text = text; textSize = 14f; isAllCaps = false; isFocusable = true; stateListAnimator = null
         if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false)
-        minHeight = dp(if (compact) 36 else 46); minimumHeight = dp(if (compact) 36 else 46); setPadding(dp(12), dp(8), dp(12), dp(8))
-        setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-        layoutParams = LinearLayout.LayoutParams(-1, dp(if (compact) 36 else 46)).apply { topMargin = dp(if (compact) 5 else 8) }
-        fun restyle(focused: Boolean) {
-            background = rounded(if (primary) accent else if (isSelected) 0xff1c385e.toInt() else 0xff132039.toInt(), 10, if (focused) accent else Color.TRANSPARENT)
-            setTextColor(if (primary) backgroundColor else white)
-            elevation = if (focused) dp(4).toFloat() else 0f
-        }
-        restyle(false); setOnFocusChangeListener { _, focus -> restyle(focus) }; setOnClickListener { action() }
+        minHeight = dp(44); minimumHeight = dp(44); setPadding(dp(12), 0, dp(12), 0)
+        setTypeface(Typeface.DEFAULT, Typeface.NORMAL)
+        layoutParams = LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) }
+        background = TvDesign.selector(this@MainActivity, primary = primary)
+        setTextColor(if (primary) backgroundColor else white)
+        setOnClickListener { action() }
     }
     private inner class DeviceRow(val address: String) : LinearLayout(this@MainActivity) {
         private var lastBond = BluetoothDevice.BOND_NONE
@@ -293,17 +299,15 @@ class MainActivity : Activity() {
         init {
             orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             isFocusable = true; isClickable = true; if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false); descendantFocusability = FOCUS_BLOCK_DESCENDANTS
-            minimumHeight = dp(88); setPadding(dp(12), dp(12), dp(12), dp(12))
+            minimumHeight = dp(76); setPadding(dp(12), dp(12), dp(12), dp(12))
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
-            addView(symbol, LinearLayout.LayoutParams(dp(30), dp(34)).apply { rightMargin = dp(12) })
+            addView(symbol, LinearLayout.LayoutParams(dp(28), dp(30)).apply { rightMargin = dp(12) })
             val text = column()
-            title.maxLines = 2; title.ellipsize = TextUtils.TruncateAt.END
+            title.maxLines = 1; title.ellipsize = TextUtils.TruncateAt.END
             text.addView(title); text.addView(detail.apply { setPadding(0, dp(6), 0, 0); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
             addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-            background = rounded(0xff14233b.toInt(), 12)
-            setOnFocusChangeListener { _, focused ->
-                background = rounded(if (focused) 0xff203e66.toInt() else 0xff14233b.toInt(), 12, if (focused) accent else Color.TRANSPARENT)
-            }
+            addView(label("›", 23, muted).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(16), -1))
+            background = TvDesign.selector(this@MainActivity)
             setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) } }
         }
         fun bind(name: String?, bondState: Int, kind: String) {
