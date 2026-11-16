@@ -22,6 +22,8 @@ class MainActivity : Activity() {
     private lateinit var scan: Button
     private lateinit var power: Button
     private lateinit var permission: Button
+    private lateinit var updateButton: Button
+    private lateinit var updater: AppUpdater
     private lateinit var badge: TextView
     private lateinit var registeredList: LinearLayout
     private lateinit var nearbyList: LinearLayout
@@ -92,6 +94,8 @@ class MainActivity : Activity() {
         adapter = getSystemService(BluetoothManager::class.java)?.adapter
         savedInstanceState?.getBundle("names")?.let { bundle -> bundle.keySet().forEach { names.merge(it, bundle.getString(it)) } }
         buildScreen()
+        updater = AppUpdater(this) { text, enabled -> updateButton.text = text; updateButton.isEnabled = enabled }
+        if (!preview) updater.checkForUpdate(automatic = true)
         scan.requestFocus()
     }
     override fun onSaveInstanceState(out: Bundle) {
@@ -110,7 +114,7 @@ class MainActivity : Activity() {
         brand.addView(SymbolView("bluetooth", accent), LinearLayout.LayoutParams(dp(25), dp(30)))
         brand.addView(label("GenieBreaker", 17, white, true).apply { setPadding(dp(8), 0, 0, 0) })
         sidebar.addView(brand)
-        sidebar.addView(label("기기 설정", 12).apply { setPadding(0, dp(7), 0, dp(32)) })
+        sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(34)))
         sidebar.addView(label("블루투스", 17, accent, true).apply {
             setPadding(dp(14), dp(14), dp(14), dp(14)); background = rounded(0xff253346.toInt(), 10)
         })
@@ -118,14 +122,16 @@ class MainActivity : Activity() {
         permission = actionButton("권한 허용", false, ::requestAccess)
         power = actionButton("블루투스 켜기", false, ::enableBluetooth)
         sidebar.addView(permission); sidebar.addView(power)
-        sidebar.addView(label("MA4000  /  Android 14", 11).apply { setPadding(dp(4), dp(15), 0, 0) })
+        updateButton = actionButton("업데이트 확인", false) { updater.click() }
+        sidebar.addView(updateButton)
+        sidebar.addView(label("GenieBreaker ${BuildConfig.VERSION_NAME}", 11).apply { setPadding(dp(4), dp(15), 0, 0) })
         root.addView(View(this).apply { setBackgroundColor(0xff353a44.toInt()) }, LinearLayout.LayoutParams(dp(1), -1))
         val content = column().apply { setPadding(dp(28), 0, 0, 0) }
         root.addView(content, LinearLayout.LayoutParams(0, -1, 1f))
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = column()
         titles.addView(label("블루투스", 32, white, true))
-        titles.addView(label("헤드폰부터 키보드까지, TV에 새 기기를 등록하세요.", 13).apply { setPadding(0, dp(7), 0, 0) })
+
         heading.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         badge = label("확인 중", 12, accent).apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(6), dp(12), dp(6))
@@ -167,7 +173,7 @@ class MainActivity : Activity() {
         val count = label("0", 13, muted)
         heading.addView(count)
         panel.addView(heading)
-        panel.addView(label(subtitle, 11).apply { setPadding(0, dp(6), 0, dp(14)) })
+        panel.addView(Space(this), LinearLayout.LayoutParams(1, dp(16)))
         val list = column()
         panel.addView(ScrollView(this).apply { isFillViewport = true; clipToPadding = false; addView(list) }, LinearLayout.LayoutParams(-1, 0, 1f))
         return Triple(panel, list, count)
@@ -226,7 +232,7 @@ class MainActivity : Activity() {
                 BluetoothDevice.BOND_BONDING -> "페어링 중"
                 else -> if (name == null) "이름을 기다리는 중" else "페어링 가능"
             }
-            detail.text = "$state  •  ${address.takeLast(8)}"
+            detail.text = if (name == null) "$state  ${address.takeLast(8)}" else state
             symbol.kind = kind; symbol.invalidate()
             contentDescription = "${title.text}, $state, $address"
         }
@@ -276,7 +282,8 @@ class MainActivity : Activity() {
         else registerReceiver(receiver, filter)
         registered = true; refresh()
     }
-    override fun onResume() { super.onResume(); if (::status.isInitialized) refresh() }
+    override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume() }
+    override fun onDestroy() { if (::updater.isInitialized) updater.close(); super.onDestroy() }
     override fun onStop() {
         if (registered) { unregisterReceiver(receiver); registered = false }
         try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
@@ -406,6 +413,6 @@ class MainActivity : Activity() {
         row.requestFocus()
         names.merge(row.address, "Galaxy Buds FE")
         row.bind(names.get(row.address), BluetoothDevice.BOND_NONE, "audio")
-        return row.hasFocus() && rows[row.address] === row && row.title.text == "Galaxy Buds FE"
+        return row.hasFocus() && rows[row.address] === row && row.title.text.toString() == "Galaxy Buds FE"
     }
 }

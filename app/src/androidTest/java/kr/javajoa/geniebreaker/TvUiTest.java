@@ -14,12 +14,25 @@ import java.io.FileOutputStream;
 /** Runs against actual Android views on a 960x540dp landscape emulator. */
 @RunWith(AndroidJUnit4.class)
 public class TvUiTest {
+    @Test public void testUpdateProviderRejectsOtherFilesAndWrites() throws Exception {
+        android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String prefix = "content://" + context.getPackageName() + ".updates";
+        for (String path : new String[]{"/secrets", "/../update.apk", "/updates/update.apk"}) {
+            try { context.getContentResolver().openFileDescriptor(android.net.Uri.parse(prefix + path), "r"); fail("Unexpected file was exposed"); }
+            catch (java.io.FileNotFoundException expected) { }
+        }
+        try { context.getContentResolver().openFileDescriptor(android.net.Uri.parse(prefix + "/update.apk"), "rw"); fail("Provider allowed writes"); }
+        catch (java.io.FileNotFoundException expected) { }
+    }
     @Test public void testLateNameKeepsFocusAndCaptureScreen() throws Exception {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         Intent intent = new Intent(instrumentation.getTargetContext(), MainActivity.class)
                 .putExtra("ui_preview", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         MainActivity activity = (MainActivity) instrumentation.startActivitySync(intent);
         try {
+            instrumentation.waitForIdleSync();
+            instrumentation.setInTouchMode(false);
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN);
             instrumentation.waitForIdleSync();
             final boolean[] preserved = {false};
             instrumentation.runOnMainSync(() -> preserved[0] = activity.previewLateName());

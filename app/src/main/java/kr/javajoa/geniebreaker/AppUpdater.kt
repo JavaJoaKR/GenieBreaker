@@ -1,0 +1,146 @@
+package kr.javajoa.geniebreaker
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.*
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
+import org.json.JSONArray
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** Startup update checks. Downloads are automatic; installation always requires user consent. */
+internal class AppUpdater(private val activity: Activity, private val state: (String, Boolean) -> Unit) {
+    private val executor = Executors.newSingleThreadExecutor()
+    private val busy = AtomicBoolean(false)
+    private val preferences = activity.getSharedPreferences("updates", Context.MODE_PRIVATE)
+    private val apk = File(activity.cacheDir, "updates/update.apk")
+    private var waitingForPermission = false
+    private val repository = "https://github.com/JavaJoaKR/GenieBreaker/releases/download/"
+
+    fun checkForUpdate(automatic: Boolean = false) {
+        if (automatic && System.currentTimeMillis() - preferences.getLong("last_check", 0) < 6 * 60 * 60 * 1000) return
+        if (!busy.compareAndSet(false, true)) return
+        ui { state("업데이트 확인 중", false) }
+        executor.execute {
+            try {
+                if (apk.exists()) {
+                    if (validUpdate(apk)) { ui { state("업데이트 설치", true) }; return@execute }
+                    apk.delete()
+                }
+                val connection = connect("https://api.github.com/repos/JavaJoaKR/GenieBreaker/releases?per_page=30")
+                val releases = try {
+                    connection.inputStream.bufferedReader().use { JSONArray(it.readText()) }
+                } finally { connection.disconnect() }
+                val installed = version(activity.packageManager.getPackageInfo(activity.packageName, 0))
+                var candidate: String? = null
+                var newest = installed
+                for (i in 0 until releases.length()) {
+                    val release = releases.getJSONObject(i)
+                    if (release.optBoolean("draft") || !release.optString("body").contains("[channel:main]")) continue
+                    val assets = release.optJSONArray("assets") ?: continue
+                    for (j in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(j)
+                        val match = Regex("GenieBreaker-(\\d+)-[0-9a-f]+\\.apk").matchEntire(asset.optString("name")) ?: continue
+                        val code = match.groupValues[1].toLongOrNull() ?: continue
+                        val url = asset.optString("browser_download_url")
+                        if (code > newest && url.startsWith(repository)) { newest = code; candidate = url }
+                    }
+                }
+                if (candidate == null) {
+                    preferences.edit().putLong("last_check", System.currentTimeMillis()).apply()
+                    ui { state("업데이트 확인", true); if (!automatic) toast("최신 버전입니다") }
+                    return@execute
+                }
+                ui { state("업데이트 받는 중", false) }
+                apk.parentFile?.mkdirs()
+                val temporary = File.createTempFile("download-", ".apk", apk.parentFile)
+                try {
+                    val download = connect(candidate)
+                    try {
+                        require(download.contentLength.toLong() <= 50L * 1024 * 1024) { "업데이트 파일이 너무 큽니다" }
+                        download.inputStream.use { input -> temporary.outputStream().use { output ->
+                            val buffer = ByteArray(8192); var total = 0L
+                            while (true) {
+                                check(!Thread.currentThread().isInterrupted)
+                                val count = input.read(buffer); if (count < 0) break
+                                total += count; require(total <= 50L * 1024 * 1024)
+                                output.write(buffer, 0, count)
+                            }
+                        } }
+                    } finally { download.disconnect() }
+                    require(validUpdate(temporary)) { "앱 ID·버전 또는 서명이 일치하지 않습니다" }
+                    check(temporary.renameTo(apk)) { "업데이트 파일을 저장하지 못했습니다" }
+                    preferences.edit().putLong("last_check", System.currentTimeMillis()).apply()
+                    ui { state("업데이트 설치", true); if (!automatic) toast("다운로드 완료. 설치 버튼을 선택하세요") }
+                } finally { temporary.delete() }
+            } catch (_: Exception) {
+                ui { state("업데이트 확인", true); if (!automatic) toast("업데이트를 확인하지 못했습니다. 인터넷 연결 후 다시 시도하세요.") }
+            } finally { busy.set(false) }
+        }
+    }
+    fun click() {
+        if (busy.get()) return
+        if (apk.exists()) install() else checkForUpdate()
+    }
+    private fun install() {
+        try {
+            require(validUpdate(apk))
+            if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
+                AlertDialog.Builder(activity).setTitle("앱 업데이트 허용")
+                    .setMessage("GenieBreaker 업데이트를 설치하려면 이 앱의 ‘알 수 없는 앱 설치’를 한 번 허용해야 합니다.")
+                    .setNegativeButton("나중에", null)
+                    .setPositiveButton("허용 화면 열기") { _, _ ->
+                        try {
+                            waitingForPermission = true
+                            activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")))
+                        } catch (_: ActivityNotFoundException) { waitingForPermission = false; toast("펌웨어에서 설치 허용 화면을 지원하지 않습니다") }
+                        catch (_: SecurityException) { waitingForPermission = false; toast("펌웨어에서 설치 권한 변경을 차단했습니다") }
+                    }.show()
+                return
+            }
+            val uri = Uri.parse("content://${activity.packageName}.updates/update.apk")
+            activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).setClipData(ClipData.newRawUri("GenieBreaker update", uri)))
+        } catch (_: ActivityNotFoundException) { toast("이 펌웨어에는 사용할 수 있는 APK 설치 화면이 없습니다") }
+        catch (_: Exception) { apk.delete(); state("업데이트 확인", true); toast("업데이트 파일을 확인하지 못했습니다. 다시 받아주세요") }
+    }
+    fun resume() {
+        if (waitingForPermission) {
+            waitingForPermission = false
+            if (Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls()) install()
+        }
+    }
+    @Suppress("DEPRECATION")
+    private fun version(info: PackageInfo): Long = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+    @Suppress("DEPRECATION")
+    private fun validUpdate(file: File): Boolean {
+        val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        val installed = activity.packageManager.getPackageInfo(activity.packageName, flags)
+        val downloaded = activity.packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return false
+        if (downloaded.packageName != activity.packageName || version(downloaded) <= version(installed)) return false
+        fun signers(info: PackageInfo) = (if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures)
+            ?.map { it.toCharsString() }?.toSet() ?: emptySet()
+        val currentSigners = signers(installed)
+        return currentSigners.isNotEmpty() && currentSigners == signers(downloaded)
+    }
+    private fun connect(address: String): HttpURLConnection {
+        require(address.startsWith("https://"))
+        val connection = URL(address).openConnection() as HttpURLConnection
+        connection.connectTimeout = 15_000; connection.readTimeout = 20_000
+        connection.setRequestProperty("User-Agent", "GenieBreaker/${BuildConfig.VERSION_NAME}")
+        require(connection.responseCode == 200) { "서버 응답 ${connection.responseCode}" }
+        require(connection.url.protocol == "https")
+        return connection
+    }
+    private fun toast(text: String) { Toast.makeText(activity, text, Toast.LENGTH_LONG).show() }
+    private fun ui(action: () -> Unit) { activity.runOnUiThread { if (!activity.isDestroyed && !activity.isFinishing) action() } }
+    fun close() { executor.shutdownNow() }
+}
