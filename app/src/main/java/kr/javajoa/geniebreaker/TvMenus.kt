@@ -54,6 +54,7 @@ class TvMenuActivity : FlutterActivity() {
         // Callbacks cannot survive process death. Close safely instead of offering inert actions.
         if (pages.isEmpty()) { finish(); return }
         TvMenus.attach(this)
+        title = pages.last().title
     }
     internal fun push(page: MenuPage) { pages.add(page); publish() }
     private fun snapshot(): Map<String, Any> {
@@ -63,7 +64,7 @@ class TvMenuActivity : FlutterActivity() {
             "breadcrumbs" to pages.dropLast(1).map { it.title }, "depth" to pages.size,
             "cloneOptions" to (page.optionsAction != null), "options" to page.options)
     }
-    private fun publish() { if (pages.isNotEmpty()) channel?.invokeMethod("page", snapshot()) }
+    private fun publish() { if (pages.isNotEmpty()) { title = pages.last().title; channel?.invokeMethod("page", snapshot()) } }
     private fun back() { if (pages.size > 1) { pages.removeAt(pages.lastIndex); publish() } else finish() }
     @Deprecated("Android TV back key compatibility")
     override fun onBackPressed() = back()

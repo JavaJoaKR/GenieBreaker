@@ -17,17 +17,22 @@ class PopupNavigationTest {
             .putExtra("ui_preview", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val completed = AtomicInteger()
         val childActions = AtomicInteger()
-        fun waitFor(text: String): Boolean {
+        fun activePopup(): TvMenuActivity? {
+            var popup: TvMenuActivity? = null
+            instrumentation.runOnMainSync {
+                popup = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                    .filterIsInstance<TvMenuActivity>().firstOrNull()
+            }
+            return popup
+        }
+        fun waitFor(title: String): TvMenuActivity? {
             repeat(40) {
-                val root = instrumentation.uiAutomation.rootInActiveWindow
-                if (root != null) {
-                    val found = root.findAccessibilityNodeInfosByText(text).isNotEmpty()
-                    root.recycle()
-                    if (found) return true
-                }
+                val popup = activePopup()
+                if (popup != null && popup.title.toString() == title) return popup
                 android.os.SystemClock.sleep(100)
             }
-            return false
+            return null
         }
         try {
             instrumentation.setInTouchMode(false)
@@ -37,23 +42,31 @@ class PopupNavigationTest {
                     else completed.incrementAndGet()
                 }
             }
-            assertTrue("Popup must render", waitFor("상위 테스트 메뉴"))
-            android.os.SystemClock.sleep(200)
+            val rootPopup = waitFor("상위 테스트 메뉴")
+            assertNotNull("Popup host must appear", rootPopup)
+            android.os.SystemClock.sleep(4000)
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER)
-            assertTrue("Child stays in the same popup", waitFor("하위 테스트 메뉴"))
+            assertSame("Child stays in the same popup", rootPopup, waitFor("하위 테스트 메뉴"))
+            android.os.SystemClock.sleep(300)
             instrumentation.uiAutomation.executeShellCommand("screencap -p /sdcard/Download/genie-popup-depth.png").let { fd ->
                 android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { while (it.read() != -1) { } }
             }
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
             android.os.SystemClock.sleep(200)
-            assertTrue("Back restores parent", waitFor("상위 테스트 메뉴"))
+            assertSame("Back restores parent in the same host", rootPopup, waitFor("상위 테스트 메뉴"))
+            android.os.SystemClock.sleep(300)
             assertEquals(0, childActions.get())
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER)
             repeat(20) { if (completed.get() == 0) android.os.SystemClock.sleep(100) }
             assertEquals("Parent focus and actions still work", 1, completed.get())
         } finally {
-            instrumentation.runOnMainSync { activity.finish() }
+            instrumentation.runOnMainSync {
+                androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                    .filterIsInstance<TvMenuActivity>().forEach { it.finish() }
+                activity.finish()
+            }
         }
     }
 }
