@@ -31,7 +31,11 @@ jobs:
       - name: Prepare development signing key
         run: base64 --decode development-keystore.base64 > release.jks
       - name: Build and lint
-        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleRelease :app:lintRelease
+        run: |
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleRelease :app:lintRelease || {
+            cat app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt 2>/dev/null || true
+            exit 1
+          }
       - name: Name APK
         run: |
           mkdir -p dist

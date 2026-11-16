@@ -89,7 +89,7 @@ class MainActivity : Activity() {
                     BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { searching = false; refresh() }
                     else -> refresh()
                 }
-            } catch (error: Exception) { operationError("블루투스 상태 갱신", error) }
+            } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("블루투스 상태 갱신", error) }
         }
     }
     @Suppress("DEPRECATION")
@@ -242,7 +242,7 @@ class MainActivity : Activity() {
             setOnFocusChangeListener { _, focused ->
                 background = rounded(if (focused) 0xff303e52.toInt() else 0xff252b35.toInt(), 12, if (focused) accent else Color.TRANSPARENT)
             }
-            setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: Exception) { operationError("기기 선택", error) } }
+            setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) } }
         }
         fun bind(name: String?, bondState: Int, kind: String) {
             title.text = name ?: "이름 확인 중…"
@@ -285,7 +285,7 @@ class MainActivity : Activity() {
         try { requestPermissions(if (Build.VERSION.SDK_INT >= 31)
             arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
             else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
-        } catch (error: Exception) { operationError("권한 요청", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("권한 요청", error) }
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults); refresh()
@@ -334,7 +334,7 @@ class MainActivity : Activity() {
                 searched -> "검색이 끝났습니다. 기기를 선택해 페어링하세요."
                 else -> "기기를 페어링 모드로 설정한 뒤 검색하세요." })
             renderDevices()
-        } catch (error: Exception) { operationError("블루투스 상태", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("블루투스 상태", error) }
     }
     private fun enableBluetooth() {
         val bt = adapter ?: run { message("블루투스를 지원하지 않습니다"); return }
@@ -359,7 +359,7 @@ class MainActivity : Activity() {
             }
             found.clear(); searched = true; renderDevices()
             if (bt.startDiscovery()) refresh() else message("검색을 시작하지 못했습니다. 잠시 후 다시 시도하세요.")
-        } catch (error: Exception) { operationError("기기 검색", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 검색", error) }
     }
     private fun pair(device: BluetoothDevice) {
         if (!access()) { requestAccess(); return }
@@ -385,16 +385,16 @@ class MainActivity : Activity() {
                         1 -> companionPair(device)
                         else -> deviceDetails(device)
                     }
-                } catch (error: Exception) { operationError("기기 선택", error) }
+                } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) }
             }.setNegativeButton("닫기", null).show()
-        } catch (error: Exception) { operationError("기기 선택", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) }
     }
     private fun deviceDetails(device: BluetoothDevice) {
         try {
             val name = names.get(device.address) ?: device.name ?: "이름 확인 중"
             AlertDialog.Builder(this).setTitle(name).setMessage("${device.address}\n${if (device.bondState == BluetoothDevice.BOND_BONDED) "등록됨" else "등록되지 않음"}\n${if (device.address in linked) "기기 링크 연결됨" else "링크 연결 상태 미확인"}\n\n등록 상태와 오디오·입력 프로필의 실제 연결 상태는 다를 수 있습니다.")
                 .setPositiveButton("닫기", null).show()
-        } catch (error: Exception) { operationError("기기 정보", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 정보", error) }
     }
     @Suppress("DEPRECATION")
     private fun companionPair(device: BluetoothDevice) {
@@ -410,7 +410,7 @@ class MainActivity : Activity() {
                 private fun chooser(sender: IntentSender) {
                     runOnUiThread {
                         if (!isFinishing && !isDestroyed) try { startIntentSenderForResult(sender, 501, null, 0, 0, 0) }
-                        catch (error: Exception) { operationError("대체 페어링 화면", error) }
+                        catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링 화면", error) }
                     }
                 }
                 override fun onDeviceFound(chooserLauncher: IntentSender) { chooser(chooserLauncher) }
@@ -420,7 +420,7 @@ class MainActivity : Activity() {
             if (Build.VERSION.SDK_INT >= 33) manager.associate(request, mainExecutor, callback)
             else manager.associate(request, callback, null)
             message("대체 페어링 준비 중입니다. 기기를 페어링 모드로 유지하세요.")
-        } catch (error: Exception) { operationError("대체 페어링", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링", error) }
     }
     @Deprecated("Platform result callback used for vendor compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -430,7 +430,7 @@ class MainActivity : Activity() {
         if (resultCode != RESULT_OK || address == null) { message("대체 페어링이 취소되었습니다."); return }
         try {
             adapter?.getRemoteDevice(address)?.let { device -> found[address] = device; bluetoothActions.bond(device) }
-        } catch (error: Exception) { operationError("대체 페어링 완료", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링 완료", error) }
     }
     private fun operationError(operation: String, error: Exception) {
         Diagnostics.record(this, operation, error)
@@ -479,7 +479,7 @@ class MainActivity : Activity() {
             registeredEmpty.visibility = if (bonded.isEmpty()) View.VISIBLE else View.GONE
             nearbyEmpty.visibility = if (nearby.isEmpty()) View.VISIBLE else View.GONE
             if (focusedAddress != null && currentFocus !is DeviceRow) (rows[focusedAddress] ?: scan).requestFocus()
-        } catch (error: Exception) { operationError("기기 목록", error) }
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 목록", error) }
     }
     /** Debug-only fixtures for instrumentation screenshots, never shown in release builds. */
     private fun showPreview() {

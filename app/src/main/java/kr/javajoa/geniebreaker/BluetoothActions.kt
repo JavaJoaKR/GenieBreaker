@@ -16,7 +16,7 @@ internal class BluetoothActions(private val activity: Activity, private val repo
                 Diagnostics.record(activity, "createBond requested")
                 val accepted = device.createBond()
                 result(if (accepted) "페어링을 요청했습니다. PIN 또는 확인 창이 표시되면 승인하세요." else "페어링 요청이 거절됐습니다. 다른 페어링 방식을 시도할 수 있습니다.")
-            } catch (error: Exception) { failure("페어링", error) }
+            } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure("페어링", error) }
         }
     }
     fun forget(device: BluetoothDevice) {
@@ -24,7 +24,7 @@ internal class BluetoothActions(private val activity: Activity, private val repo
             try {
                 val accepted = device.javaClass.getMethod("removeBond").invoke(device) as? Boolean == true
                 result(if (accepted) "등록 삭제를 요청했습니다. 목록이 갱신될 때까지 기다려주세요." else "펌웨어에서 등록 삭제 요청을 거절했습니다.")
-            } catch (error: Exception) { failure("등록 삭제", error) }
+            } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure("등록 삭제", error) }
         }
     }
     fun connection(device: BluetoothDevice, connect: Boolean) {
@@ -34,20 +34,20 @@ internal class BluetoothActions(private val activity: Activity, private val repo
             result(if (connect) "연결 요청 중…" else "연결 해제 요청 중…")
             val requested = adapter.getProfileProxy(activity, object : BluetoothProfile.ServiceListener {
                 override fun onServiceConnected(id: Int, proxy: BluetoothProfile) {
-                    if (worker.isShutdown) { adapter.closeProfileProxy(id, proxy); return }
+                    if (worker.isShutdown) { try { adapter.closeProfileProxy(id, proxy) } catch (_: SecurityException) { } catch (_: Exception) { }; return }
                     worker.execute {
                         try {
                             val method = if (connect) "connect" else "disconnect"
                             val accepted = proxy.javaClass.getMethod(method, BluetoothDevice::class.java).invoke(proxy, device) as? Boolean == true
                             result(if (accepted) "요청을 보냈습니다. 실제 연결 상태는 기기 정보에서 확인하세요." else "펌웨어에서 요청을 거절했습니다. 기기 전원을 다시 켜서 자동 연결도 확인해보세요.")
-                        } catch (error: Exception) { failure(if (connect) "연결" else "연결 해제", error) }
-                        finally { try { adapter.closeProfileProxy(id, proxy) } catch (_: Exception) { } }
+                        } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure(if (connect) "연결" else "연결 해제", error) }
+                        finally { try { adapter.closeProfileProxy(id, proxy) } catch (_: SecurityException) { } catch (_: Exception) { } }
                     }
                 }
                 override fun onServiceDisconnected(id: Int) { }
             }, profile)
             if (!requested) result("이 기기는 해당 블루투스 프로필을 제공하지 않습니다.")
-        } catch (error: Exception) { failure("연결", error) }
+        } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure("연결", error) }
     }
     private fun failure(operation: String, caught: Exception) {
         val error = if (caught is InvocationTargetException) caught.targetException else caught
