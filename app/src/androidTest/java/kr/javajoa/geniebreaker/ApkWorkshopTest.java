@@ -32,7 +32,10 @@ public class ApkWorkshopTest {
             PackageInfo parsed = context.getPackageManager().getPackageArchiveInfo(result.getFile().getAbsolutePath(), 0);
             assertNotNull(parsed); assertEquals(name, parsed.packageName); assertEquals(42, parsed.versionCode);
             assertTrue(result.getCertificate().length() > 50);
-            shell("run-as " + context.getPackageName() + " cat " + result.getFile().getAbsolutePath() + " > /data/local/tmp/genie-edit-test.apk");
+            shell("touch /data/local/tmp/genie-edit-test.apk");
+            shell("chmod 666 /data/local/tmp/genie-edit-test.apk");
+            shell("run-as " + context.getPackageName() + " cp " + result.getFile().getAbsolutePath() + " /data/local/tmp/genie-edit-test.apk");
+            assertTrue("Test APK must be copied for shell installer", shell("ls -l /data/local/tmp/genie-edit-test.apk").contains(Long.toString(result.getFile().length())));
             String install = shell("pm install -t /data/local/tmp/genie-edit-test.apk");
             assertTrue("Edited APK installation failed: " + install, install.contains("Success"));
             assertNotNull(context.getPackageManager().getPackageInfo(name, 0));
