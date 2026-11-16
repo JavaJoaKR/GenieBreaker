@@ -40,7 +40,7 @@ class _RemoteTileState extends State<RemoteTile> {
     padding: const EdgeInsets.only(bottom: 10),
     child: FocusableActionDetector(
       autofocus: widget.autofocus,
-      onShowFocusHighlight: (value) {
+      onFocusChange: (value) {
         setState(() => focused = value);
         if (value) Scrollable.ensureVisible(context, alignment: .5, duration: const Duration(milliseconds: 130));
       },
