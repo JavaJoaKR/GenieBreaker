@@ -31,10 +31,10 @@ internal class ApkWorkshop(private val context: Context) {
         require(spec.packageName.length < 128 && spec.packageName.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+"))) { "패키지명을 영문으로 입력하세요. 예: com.example.tv" }
         require(spec.versionCode > 0) { "버전 코드는 1 이상이어야 합니다." }
         require(spec.packageName != context.packageName) { "GenieBreaker 자체의 패키지명은 사용할 수 없습니다." }
-        if (spec.packageName != source.packageName) {
-            val exists = try { context.packageManager.getPackageInfo(spec.packageName, 0); true } catch (_: PackageManager.NameNotFoundException) { false }
-            require(!exists) { "이 패키지명의 앱이 이미 설치되어 있습니다. 다른 패키지명을 선택하세요." }
-        }
+        @Suppress("DEPRECATION")
+        val existingTarget = if (spec.packageName != source.packageName) try {
+            context.packageManager.getPackageInfo(spec.packageName, if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES)
+        } catch (_: PackageManager.NameNotFoundException) { null } else null
         val paths = listOf(source.sourceDir) + (source.splitSourceDirs?.toList() ?: emptyList())
         val sourceBytes = paths.sumOf { File(it).length() }
         require(context.filesDir.usableSpace > sourceBytes * 3 + 16L * 1024 * 1024) { "APK 작업을 위한 저장 공간이 부족합니다." }
@@ -99,7 +99,7 @@ internal class ApkWorkshop(private val context: Context) {
                 val unsigned = File(work, "unsigned.apk")
                 module.writeApk(unsigned)
                 progress("새 서명으로 APK를 생성하고 있습니다")
-                val aliasBase = MessageDigest.getInstance("SHA-256").digest(source.packageName.toByteArray()).take(12).joinToString("") { "%02x".format(it) }
+                val aliasBase = MessageDigest.getInstance("SHA-256").digest(spec.packageName.toByteArray()).take(12).joinToString("") { "%02x".format(it) }
                 val alias = "gb-edit-$aliasBase" + if (spec.freshKey) "-$id" else ""
                 val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
                 if (!store.containsAlias(alias)) {
@@ -114,6 +114,13 @@ internal class ApkWorkshop(private val context: Context) {
                     }
                 }
                 val certificate = store.getCertificate(alias) as X509Certificate
+                if (existingTarget != null) {
+                    @Suppress("DEPRECATION")
+                    val signatures = if (Build.VERSION.SDK_INT >= 28) existingTarget.signingInfo?.apkContentsSigners else existingTarget.signatures
+                    require(signatures?.size == 1 && signatures[0].toByteArray().contentEquals(certificate.encoded)) {
+                        "이 패키지명에는 다른 키로 서명된 앱이 설치되어 있습니다. 다른 패키지명을 선택하거나 해당 앱을 직접 제거한 뒤 다시 시도하세요."
+                    }
+                }
                 val signer = ApkSigner.SignerConfig.Builder("GenieBreaker", store.getKey(alias, null) as PrivateKey, listOf(certificate)).build()
                 ApkSigner.Builder(listOf(signer)).setInputApk(unsigned).setOutputApk(output).setMinSdkVersion(26)
                     .setV1SigningEnabled(true).setV2SigningEnabled(true).setV3SigningEnabled(false).setV4SigningEnabled(false).build().sign()
