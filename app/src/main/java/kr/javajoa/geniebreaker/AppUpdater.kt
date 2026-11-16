@@ -1,7 +1,6 @@
 package kr.javajoa.geniebreaker
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.*
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -95,21 +94,15 @@ internal class AppUpdater(private val activity: Activity, private val state: (St
         try {
             require(validUpdate(apk))
             if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
-                AlertDialog.Builder(activity).setTitle("앱 업데이트 허용")
-                    .setMessage("GenieBreaker 업데이트를 설치하려면 이 앱의 ‘알 수 없는 앱 설치’를 한 번 허용해야 합니다.")
-                    .setNegativeButton("나중에", null)
-                    .setPositiveButton("허용 화면 열기") { _, _ ->
-                        try {
-                            waitingForPermission = true
-                            activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")))
-                        } catch (_: ActivityNotFoundException) { waitingForPermission = false; toast("펌웨어에서 설치 허용 화면을 지원하지 않습니다") }
-                        catch (_: SecurityException) { waitingForPermission = false; toast("펌웨어에서 설치 권한 변경을 차단했습니다") }
-                    }.show()
+                TvMenus.show(activity, "앱 업데이트 허용", listOf("나중에", "허용 화면 열기"), "업데이트를 설치하려면 이 앱의 ‘알 수 없는 앱 설치’를 허용해야 합니다.") { choice ->
+                    if (choice == 1) try {
+                        waitingForPermission = true
+                        activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")))
+                    } catch (_: Exception) { waitingForPermission = false; toast("펌웨어에서 설치 허용 화면을 지원하지 않습니다") }
+                }
                 return
             }
-            val uri = Uri.parse("content://${activity.packageName}.updates/update.apk")
-            activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = ClipData.newRawUri("GenieBreaker update", uri) })
+            SessionInstaller.submit(activity, apk, activity.packageName)
         } catch (_: ActivityNotFoundException) { toast("이 펌웨어에는 사용할 수 있는 APK 설치 화면이 없습니다") }
         catch (_: Exception) { apk.delete(); state("업데이트 확인", true); toast("업데이트 파일을 확인하지 못했습니다. 다시 받아주세요") }
     }

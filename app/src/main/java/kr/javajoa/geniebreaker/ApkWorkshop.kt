@@ -22,7 +22,7 @@ import java.security.cert.X509Certificate
 import java.util.UUID
 import javax.security.auth.x500.X500Principal
 
-internal data class ApkEditSpec(val label: String, val packageName: String, val versionCode: Int, val freshKey: Boolean = false)
+internal data class ApkEditSpec @JvmOverloads constructor(val label: String, val packageName: String, val versionCode: Int, val freshKey: Boolean = false, val options: CloneOptions = CloneOptions())
 internal data class EditedApk(val id: String, val file: File, val packageName: String, val certificate: String)
 
 /** Local-only APK editor. Never modifies the installed source or deletes its data. */
@@ -82,7 +82,7 @@ internal class ApkWorkshop(private val context: Context) {
                         val attribute = attributes.next()
                         val name = attribute.getName(false)
                         // Labels are commonly TYPE_REFERENCE, so rewrite before reading a string.
-                        if (name == "label" && tag in setOf("application", "activity", "activity-alias")) {
+                        if (name == "label" && ((tag == "application" && spec.options.renameApp) || (tag in setOf("activity", "activity-alias") && spec.options.renameLaunchers))) {
                             attribute.setValueAsString(spec.label)
                             continue
                         }
@@ -101,16 +101,15 @@ internal class ApkWorkshop(private val context: Context) {
                                 attribute.setValueAsString(declarations.getValue(value))
                             name in setOf("permission", "readPermission", "writePermission", "permissionGroup") && declarations.containsKey(value) ->
                                 attribute.setValueAsString(declarations.getValue(value))
-                            name == "taskAffinity" && (value == original || value.startsWith("$original.")) ->
+                            spec.options.isolateTasks && name == "taskAffinity" && (value == original || value.startsWith("$original.")) ->
                                 attribute.setValueAsString(spec.packageName + value.removePrefix(original))
-                            name == "label" && tag in setOf("activity", "activity-alias") -> attribute.setValueAsString(spec.label)
                         }
                     }
                 }
-                module.setPackageName(spec.packageName)
-                manifest.setApplicationLabel(spec.label)
+                if (spec.options.renameResources) module.setPackageName(spec.packageName) else manifest.setPackageName(spec.packageName)
+                if (spec.options.renameApp) manifest.setApplicationLabel(spec.label)
                 manifest.setVersionCode(spec.versionCode)
-                manifest.setExtractNativeLibs(true)
+                if (spec.options.extractLibraries) manifest.setExtractNativeLibs(true)
                 module.setApkSignatureBlock(null)
                 paths.forEach { path -> java.util.zip.ZipFile(path).use { zip ->
                     zip.entries().asSequence().map { it.name }.filter { name ->
@@ -160,7 +159,7 @@ internal class ApkWorkshop(private val context: Context) {
                     require(owner == null || owner == spec.packageName) { "Provider 충돌: $authority (사용 중인 앱: $owner)" }
                 } }
                 val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.encoded).joinToString(":") { "%02X".format(it) }
-                File(output.parentFile, "$id.json").writeText(org.json.JSONObject().put("source", source.packageName).put("package", spec.packageName).put("label", spec.label).put("certificate", fingerprint).toString())
+                File(output.parentFile, "$id.json").writeText(org.json.JSONObject().put("source", source.packageName).put("package", spec.packageName).put("label", spec.label).put("certificate", fingerprint).put("options", org.json.JSONObject(spec.options.values())).toString())
                 return EditedApk(id, output, spec.packageName, fingerprint)
             } finally {
                 apk?.close(); bundle.close()

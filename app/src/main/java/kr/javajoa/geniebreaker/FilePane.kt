@@ -50,6 +50,9 @@ internal class FilePane(private val activity: Activity) : FrameLayout(activity) 
         } }
         flutter.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
         flutterView = FlutterView(activity).also { addView(it, LayoutParams(-1, -1)); it.attachToFlutterEngine(flutter) }
+        flutterView?.isFocusable = true
+        flutterView?.isFocusableInTouchMode = true
+        flutterView?.requestFocus()
         flutter.lifecycleChannel.appIsResumed()
     }
     private fun entry(name: String, path: String, directory: Boolean, bytes: Long = 0L) = mapOf(

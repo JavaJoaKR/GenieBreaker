@@ -17,7 +17,7 @@ public class TvUiTest {
     @Test public void testUpdateProviderRejectsOtherFilesAndWrites() throws Exception {
         android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         String prefix = "content://" + context.getPackageName() + ".updates";
-        for (String path : new String[]{"/secrets", "/../update.apk", "/updates/update.apk", "/edited/../../secrets", "/edited/not-a-uuid"}) {
+        for (String path : new String[]{"/secrets", "/../update.apk", "/updates/update.apk", "/edited/../../secrets", "/edited/not-a-uuid", "/browse/not-a-token", "/browse/../../secrets"}) {
             try { context.getContentResolver().openFileDescriptor(android.net.Uri.parse(prefix + path), "r"); fail("Unexpected file was exposed"); }
             catch (java.io.FileNotFoundException expected) { }
         }
@@ -51,6 +51,23 @@ public class TvUiTest {
             try (android.os.ParcelFileDescriptor fd = instrumentation.getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/genie-app-ui.png");
                  java.io.InputStream pipe = new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)) { while (pipe.read() != -1) { } }
 
+            final int[] choice = {-1};
+            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.show(activity, "보기 설정", java.util.Arrays.asList("실행 가능한 앱", "전체 설치 앱"), "", 0, index -> { choice[0] = index; return kotlin.Unit.INSTANCE; }));
+            android.os.SystemClock.sleep(4000);
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            android.os.SystemClock.sleep(300);
+            capture(instrumentation, "genie-flutter-menu.png");
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            for (int attempt = 0; attempt < 30 && choice[0] < 0; attempt++) android.os.SystemClock.sleep(200);
+            assertEquals("Flutter menu returns the remote-selected choice", 1, choice[0]);
+            instrumentation.runOnMainSync(activity::previewFilesTab);
+            android.os.SystemClock.sleep(3500);
+            capture(instrumentation, "genie-files-ui.png");
+
         } finally { instrumentation.runOnMainSync(activity::finish); }
+    }
+    private void capture(Instrumentation instrumentation, String name) throws Exception {
+        try (android.os.ParcelFileDescriptor fd = instrumentation.getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/" + name);
+             java.io.InputStream pipe = new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)) { while (pipe.read() != -1) { } }
     }
 }

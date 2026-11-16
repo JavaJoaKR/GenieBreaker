@@ -34,7 +34,8 @@ internal class DualApps(private val context: Context) {
             signatures?.size == 1 && MessageDigest.getInstance("SHA-256").digest(signatures[0].toByteArray()).joinToString(":") { "%02X".format(it) } == record.certificate
         } catch (_: Exception) { false }
     }
-    fun build(source: PackageInfo, progress: (String) -> Unit): DualApp {
+    fun build(source: PackageInfo, progress: (String) -> Unit): DualApp = build(source, CloneOptions(), progress)
+    fun build(source: PackageInfo, options: CloneOptions, progress: (String) -> Unit): DualApp {
         val original = source.packageName
         val previous = record(original)?.takeIf(::owns)
         val target = previous?.target ?: (0..999).asSequence().map { DualPackageNames.candidate(original, it) }.firstOrNull { !isInstalled(it) }
@@ -44,8 +45,8 @@ internal class DualApps(private val context: Context) {
         @Suppress("DEPRECATION")
         val version = maxOf(1L, source.versionCode.toLong(), installedVersion.toLong() + 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         val app = requireNotNull(source.applicationInfo)
-        val label = app.loadLabel(context.packageManager).toString().take(72) + " 듀얼"
-        val output = ApkWorkshop(context).build(app, ApkEditSpec(label, target, version, false), progress)
+        val label = app.loadLabel(context.packageManager).toString().take(72) + if (options.renameApp || options.renameLaunchers) " 듀얼" else ""
+        val output = ApkWorkshop(context).build(app, ApkEditSpec(label, target, version, false, options), progress)
         val record = DualApp(original, target, output.id, label, output.certificate)
         preferences.edit().putString(original, JSONObject().put("target", target).put("id", output.id).put("label", label).put("certificate", output.certificate).toString()).commit()
         return record

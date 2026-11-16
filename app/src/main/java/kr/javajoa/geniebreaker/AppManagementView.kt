@@ -1,7 +1,6 @@
 package kr.javajoa.geniebreaker
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.*
 import android.content.pm.*
 import android.graphics.Color
@@ -150,11 +149,20 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     }
     private fun create(pkg: PackageInfo) {
         if (busy) return
+        val saved = preferences.getString("options_${pkg.packageName}", null)
+        val values = try { val json = JSONObject(saved ?: "{}"); CloneOptions().values().mapValues { (key, fallback) -> json.optBoolean(key, fallback) } } catch (_: Exception) { CloneOptions().values() }
+        TvMenus.cloneOptions(activity, pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "듀얼앱", values) { chosen ->
+            preferences.edit().putString("options_${pkg.packageName}", JSONObject(chosen).toString()).apply()
+            createWithOptions(pkg, CloneOptions.from(chosen))
+        }
+    }
+    private fun createWithOptions(pkg: PackageInfo, options: CloneOptions) {
+        if (busy) return
         if (Build.VERSION.SDK_INT < 26) { notice("이 기기에서는 듀얼앱을 만들 수 없습니다."); return }
         busy = true; grid.isEnabled = false; status.text = "듀얼앱을 준비하고 있습니다"
         worker.execute {
             try {
-                val record = duals.build(pkg) { progress -> ui { status.text = progress } }
+                val record = duals.build(pkg, options) { progress -> ui { status.text = progress } }
                 ui { busy = false; grid.isEnabled = true; grid.invalidateViews(); install(record.id) }
             } catch (error: Throwable) {
                 Diagnostics.record(activity, "Dual app build", error)
@@ -180,17 +188,18 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         try {
             val app = pm.getApplicationInfo(packageName, 0)
             if (app.flags and ApplicationInfo.FLAG_SYSTEM != 0) { notice("시스템 앱은 일반 권한으로 제거할 수 없습니다."); return }
-            AlertDialog.Builder(activity).setTitle("앱을 제거할까요?").setMessage("${app.loadLabel(pm)}\n이 앱의 데이터도 함께 삭제됩니다.")
-                .setPositiveButton("제거 요청") { _, _ -> try { activity.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))) } catch (error: Exception) { notice("제거 요청 실패: ${error.message}") } }
-                .setNegativeButton("취소", null).show()
+            TvMenus.show(activity, "앱을 제거할까요?", listOf("취소", "제거 요청"), "${app.loadLabel(pm)}\n이 앱의 데이터도 함께 삭제됩니다.") { choice ->
+                if (choice == 1) try { activity.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))) } catch (error: Exception) { notice("제거 요청 실패: ${error.message}") }
+            }
         } catch (error: Exception) { notice("앱 정보를 읽지 못했습니다: ${error.message}") }
     }
     private fun install(id: String) {
         if (Build.VERSION.SDK_INT >= 26 && !pm.canRequestPackageInstalls()) {
             preferences.edit().putString("pending_install", id).apply()
-            AlertDialog.Builder(activity).setTitle("설치 권한 필요").setMessage("이 앱의 ‘알 수 없는 앱 설치’를 허용해야 합니다.")
-                .setPositiveButton("허용 화면") { _, _ -> try { activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))) } catch (error: Exception) { notice(error.message ?: "허용 화면 없음") } }
-                .setNegativeButton("취소") { _, _ -> preferences.edit().remove("pending_install").apply() }.show()
+            TvMenus.show(activity, "설치 권한 필요", listOf("취소", "허용 화면"), "이 앱의 ‘알 수 없는 앱 설치’를 허용해야 합니다.") { choice ->
+                if (choice == 1) try { activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))) } catch (error: Exception) { notice(error.message ?: "허용 화면 없음") }
+                else preferences.edit().remove("pending_install").apply()
+            }
             return
         }
         preferences.edit().remove("pending_install").apply()
@@ -215,10 +224,10 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         val id = preferences.getString("pending_export", null); preferences.edit().remove("pending_export").apply()
         val uri = data?.data
         if (result != Activity.RESULT_OK || id == null || uri == null) return
-        worker.execute { try {
+        worker.execute { FileWork.reading { try {
             activity.contentResolver.openOutputStream(uri)?.use { output -> File(activity.filesDir, "edited/$id.apk").inputStream().use { it.copyTo(output) } } ?: error("저장 위치를 열지 못했습니다")
             ui { notice("APK를 저장했습니다") }
-        } catch (error: Exception) { ui { notice("저장 실패: ${error.message}") } } }
+        } catch (error: Exception) { ui { notice("저장 실패: ${error.message}") } } } }
     }
     private fun notice(message: String) { if (!activity.isDestroyed && !activity.isFinishing) TvMenus.notice(activity, message) }
     private fun ui(action: () -> Unit) { main.post { if (!activity.isDestroyed && !activity.isFinishing) action() } }

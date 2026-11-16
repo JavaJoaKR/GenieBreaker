@@ -2,7 +2,6 @@ package kr.javajoa.geniebreaker
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
 import android.bluetooth.*
 import android.content.*
 import android.content.pm.PackageManager
@@ -131,7 +130,7 @@ class MainActivity : Activity() {
         pendingCompanionAddress = savedInstanceState?.getString("companion_address")
         bluetoothActions = BluetoothActions(this) { text ->
             message(text)
-            if (text.contains("실패") && !isFinishing && !isDestroyed) AlertDialog.Builder(this).setTitle("블루투스 요청 결과").setMessage(text).setPositiveButton("닫기", null).show()
+            if (text.contains("실패") && !isFinishing && !isDestroyed) TvMenus.show(this, "블루투스 요청 결과", listOf("닫기"), text)
         }
         buildScreen()
         updater = AppUpdater(this) { text, _ -> updateActionLabel = text }
@@ -441,14 +440,12 @@ class MainActivity : Activity() {
             val bonded = device.bondState == BluetoothDevice.BOND_BONDED
             val actions = if (bonded) arrayOf("연결", "연결 해제", "기기 지우기", "상세 정보")
                 else arrayOf("페어링", "다른 페어링 방식", "기기 정보")
-            AlertDialog.Builder(this).setTitle(title).setItems(actions) { _, index ->
+            TvMenus.show(this, title, actions.toList()) { index ->
                 try {
                     if (bonded) when (index) {
                         0 -> bluetoothActions.connection(device, true)
                         1 -> bluetoothActions.connection(device, false)
-                        2 -> AlertDialog.Builder(this).setTitle("등록을 삭제할까요?")
-                            .setMessage("리모컨이나 키보드를 삭제하면 조작할 수 없게 될 수 있습니다. 다른 입력 수단을 준비하세요.")
-                            .setPositiveButton("삭제") { _, _ -> bluetoothActions.forget(device) }.setNegativeButton("취소", null).show()
+                        2 -> TvMenus.show(this, "등록을 삭제할까요?", listOf("취소", "삭제"), "리모컨이나 키보드를 삭제하면 조작할 수 없게 될 수 있습니다. 다른 입력 수단을 준비하세요.") { choice -> if (choice == 1) bluetoothActions.forget(device) }
                         else -> deviceDetails(device)
                     } else when (index) {
                         0 -> {
@@ -459,14 +456,14 @@ class MainActivity : Activity() {
                         else -> deviceDetails(device)
                     }
                 } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) }
-            }.setNegativeButton("닫기", null).show()
+            }
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) }
     }
     private fun deviceDetails(device: BluetoothDevice) {
         try {
             val name = names.get(device.address) ?: device.name ?: "이름 확인 중"
-            AlertDialog.Builder(this).setTitle(name).setMessage("${device.address}\n${if (device.bondState == BluetoothDevice.BOND_BONDED) "등록됨" else "등록되지 않음"}\n${if (device.address in linked) "기기 링크 연결됨" else "링크 연결 상태 미확인"}\n\n등록 상태와 오디오·입력 프로필의 실제 연결 상태는 다를 수 있습니다.")
-                .setPositiveButton("닫기", null).show()
+            TvMenus.show(this, name, listOf("닫기"), "${device.address}\n${if (device.bondState == BluetoothDevice.BOND_BONDED) "등록됨" else "등록되지 않음"}\n${if (device.address in linked) "기기 링크 연결됨" else "링크 연결 상태 미확인"}\n\n등록 상태와 오디오·입력 프로필의 실제 연결 상태는 다를 수 있습니다.")
+
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 정보", error) }
     }
     @Suppress("DEPRECATION")
@@ -588,5 +585,6 @@ class MainActivity : Activity() {
         row.bind(names.get(row.address), BluetoothDevice.BOND_NONE, "audio")
         return row.hasFocus() && rows[row.address] === row && row.title.text.toString() == "Galaxy Buds FE"
     }
+    fun previewFilesTab() { check(BuildConfig.DEBUG && preview); selectFiles() }
     fun previewAppsTab() { check(BuildConfig.DEBUG && preview); selectTab(true); appsTab.requestFocus() }
 }

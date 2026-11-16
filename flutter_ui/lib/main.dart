@@ -79,6 +79,7 @@ class _GeniePageState extends State<GeniePage> {
   final List<String> parents = [];
   String location = '';
   bool working = false;
+  Map<String, bool> cloneOptions = {};
   @override
   void initState() {
     super.initState();
@@ -89,7 +90,9 @@ class _GeniePageState extends State<GeniePage> {
     try {
       final next = Map<String, dynamic>.from(await bridge.invokeMethod(path.isEmpty ? 'ready' : 'list', path) as Map);
       if (!mounted) return;
-      setState(() { data = next; location = path; error = null; });
+      setState(() { data = next; location = path; error = null;
+        if (next['cloneOptions'] == true) cloneOptions = Map<String, bool>.from(next['options'] as Map);
+      });
     } catch (e) { if (mounted) setState(() => error = e is PlatformException ? e.message : '$e'); }
   }
   Future<void> perform(String method, [dynamic argument]) async {
@@ -120,6 +123,14 @@ class _GeniePageState extends State<GeniePage> {
   @override
   Widget build(BuildContext context) {
     final files = data?['files'] == true;
+    final configure = data?['cloneOptions'] == true;
+    const optionLabels = {
+      'renameApp': ['앱 이름 변경', '앱 이름에 듀얼 표시'],
+      'renameLaunchers': ['런처 이름 변경', 'TV 홈 화면과 실행 항목 이름 변경'],
+      'renameResources': ['리소스 패키지 변경', '끄면 리소스 내부 패키지명은 원본 유지 · 호환성 실험'],
+      'isolateTasks': ['실행 작업 분리', '끄면 원본 taskAffinity 유지'],
+      'extractLibraries': ['네이티브 라이브러리 추출', '끄면 원본 추출 설정 유지 · 설치 실패 가능'],
+    };
     final entries = (data?['entries'] as List? ?? []).cast<Map>();
     final items = (data?['items'] as List? ?? []).cast<String>();
     return PopScope(canPop: !files || parents.isEmpty, onPopInvokedWithResult: (didPop, _) { if (!didPop) back(); },
@@ -145,6 +156,15 @@ class _GeniePageState extends State<GeniePage> {
                 subtitle: entry['detail'] as String?, icon: entry['directory'] == true ? Icons.folder_outlined : Icons.insert_drive_file_outlined,
                 onTap: () { final path = entry['path'] as String; if (entry['directory'] == true) { parents.add(location); load(path); } else { perform('open', path); } }),
               if (location.isNotEmpty && entries.isEmpty) const Padding(padding: EdgeInsets.all(28), child: Text('폴더가 비어 있습니다', style: TextStyle(color: muted, fontSize: 20))),
+            ] else if (configure) ...[
+              const Padding(padding: EdgeInsets.only(bottom: 18), child: Text('패키지·공급자 주소·충돌 권한·서명은 별도 설치를 위해 변경됩니다.\n설치 검사는 앱 내부 실행·인증·DRM 호환성을 보장하지 않습니다.', style: TextStyle(color: muted, fontSize: 14))),
+              RemoteTile('기본값 복원', autofocus: true, icon: Icons.restore, onTap: () => setState(() => cloneOptions.updateAll((key, value) => true))),
+              for (final entry in optionLabels.entries) RemoteTile(entry.value[0], key: ValueKey(entry.key),
+                subtitle: '${cloneOptions[entry.key] == true ? "켬" : "끔"} · ${entry.value[1]}',
+                selected: cloneOptions[entry.key] == true, icon: Icons.toggle_off_outlined,
+                onTap: () => setState(() => cloneOptions[entry.key] = !(cloneOptions[entry.key] ?? true))),
+              RemoteTile('듀얼앱 만들기', icon: Icons.copy_all_rounded, onTap: () => perform('build', cloneOptions)),
+              RemoteTile('취소', icon: Icons.close, onTap: () => perform('close')),
             ] else ...[
               for (var i = 0; i < items.length; i++) RemoteTile(items[i], autofocus: i == 0,
                 selected: data?['selected'] == i, onTap: () => perform('choose', i)),

@@ -51,3 +51,13 @@ gradle :app:testDebugUnitTest :app:assembleRelease :app:lintRelease
 
 - [ARSCLib 1.4.0](https://github.com/REAndroid/ARSCLib), Apache-2.0: 바이너리 리소스와 분할 APK 편집.
 - [Android apksig](https://android.googlesource.com/platform/tools/apksig/), Apache-2.0: 서명 생성·검증.
+
+
+### Flutter 메뉴와 파일탐색기
+
+- 설정·보기 설정·블루투스 작업·앱 작업 메뉴는 Flutter로 표시합니다. 리모컨 방향키와 확인/뒤로 키를 지원합니다. 메인 화면 좌측 이름 아래에 버전을 표시합니다.
+- 파일탐색기 탭에서 생성한 듀얼앱 APK와 앱 캐시를 탐색합니다. USB/공유 저장소는 ‘기기 폴더 연결’로 사용자가 허용한 문서 트리만 읽습니다. 펌웨어에 폴더 선택기가 없으면 내부 폴더만 이용할 수 있습니다. 다른 앱의 비공개 데이터에는 접근하지 않습니다.
+- APK 선택 시 시스템 설치 확인을 요청하며 다른 파일은 지원하는 뷰어로 엽니다. 생성 APK 정리와 캐시 정리는 별도 확인 후 실행하고 설치된 앱·듀얼앱 기록·서명 키는 유지합니다. 진행 중인 파일 작업이 있으면 정리를 거부합니다.
+- Flutter 3.35.7 모듈은 CI에서 `flutter pub get`, `flutter analyze`, `flutter test`, `flutter build aar --no-profile --target-platform android-arm,android-x64`로 빌드한 뒤 기존 Gradle 앱에 포함합니다. MA4000용 ARM32와 테스트용 x86_64 엔진이 포함되어 APK 크기가 증가합니다. `.android`는 생성 파일이며 커밋하지 않습니다.
+
+듀얼앱 생성 전 Flutter 옵션 화면에서 앱 이름, 런처 이름, 리소스 패키지명, taskAffinity 분리, 네이티브 라이브러리 추출을 개별 토글할 수 있습니다. 선택은 원본 앱별로 저장됩니다. 재생성 시 동일한 듀얼 패키지/서명 키를 사용하고 버전을 올립니다. 원본과 동시 설치하기 위한 패키지명·공급자 주소·선언 권한 이름과 새 서명은 필수이며 보존 옵션이 없습니다. 리소스 패키지 또는 라이브러리 설정 보존은 호환성 실험이고 설치/실행 성공을 보장하지 않습니다. 서명·DRM·서버 인증을 우회하지 않습니다.

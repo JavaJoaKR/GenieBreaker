@@ -5,6 +5,25 @@ import 'package:genie_ui/main.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('Clone options are submitted as selected without immediate generation', (tester) async {
+    Map? submitted;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'title': '듀얼앱 옵션', 'cloneOptions': true,
+        'options': {'renameApp': true, 'renameLaunchers': true, 'renameResources': true, 'isolateTasks': true, 'extractLibraries': true}};
+      if (call.method == 'build') submitted = call.arguments as Map;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('앱 이름 변경'));
+    await tester.pumpAndSettle();
+    expect(submitted, isNull);
+    await tester.scrollUntilVisible(find.text('듀얼앱 만들기'), 180);
+    await tester.tap(find.text('듀얼앱 만들기'));
+    await tester.pumpAndSettle();
+    expect(submitted?['renameApp'], false);
+    expect(submitted?['renameResources'], true);
+  });
   testWidgets('Remote selection returns the focused menu item', (tester) async {
     Object? choice;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
