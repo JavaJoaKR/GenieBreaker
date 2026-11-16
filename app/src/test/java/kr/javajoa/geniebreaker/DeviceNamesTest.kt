@@ -33,4 +33,17 @@ class DeviceNamesTest {
         assertEquals("Keyboard", names.get("B"))
         assertEquals(2, names.snapshot().size)
     }
+    @Test fun missingNameStopsLoadingAndStillAcceptsLateName() {
+        var now = 100L
+        val names = DeviceNames { now }
+        names.seed("A", null)
+        assertTrue(names.isPending("A"))
+        now += 12_001
+        names.seed("A", null)
+        assertFalse(names.isPending("A"))
+        assertNull(names.get("A"))
+        names.merge("A", "Late headset")
+        assertEquals("Late headset", names.get("A"))
+        assertFalse(names.isPending("A"))
+    }
 }

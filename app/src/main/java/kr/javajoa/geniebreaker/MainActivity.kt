@@ -19,6 +19,19 @@ import android.widget.*
 /** Leanback-style settings, implemented with platform views and no UI runtime. */
 class MainActivity : Activity() {
     private var adapter: BluetoothAdapter? = null
+    private lateinit var bluetoothPage: LinearLayout
+    private lateinit var appsPage: AppManagementView
+    private lateinit var bluetoothTab: Button
+    private lateinit var appsTab: Button
+    private var appTabSelected = false
+    private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var scanExpired = false
+    private val nameTick = Runnable { if (registered && !preview) renderDevices() }
+    private val scanWatchdog = Runnable {
+        scanExpired = true; searching = false
+        try { adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
+        refresh()
+    }
     private lateinit var status: TextView
     private lateinit var scan: Button
     private lateinit var power: Button
@@ -87,7 +100,7 @@ class MainActivity : Activity() {
                         renderDevices()
                     }
                     BluetoothAdapter.ACTION_DISCOVERY_STARTED -> { searching = true; refresh() }
-                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { searching = false; refresh() }
+                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { searching = false; uiHandler.removeCallbacks(scanWatchdog); refresh() }
                     else -> refresh()
                 }
             } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("블루투스 상태 갱신", error) }
@@ -114,8 +127,10 @@ class MainActivity : Activity() {
         updater = AppUpdater(this) { text, enabled -> updateButton.text = text; updateButton.isEnabled = enabled }
         if (!preview) updater.checkForUpdate(automatic = true)
         scan.requestFocus()
+        if (savedInstanceState?.getBoolean("apps_tab") == true) selectTab(true)
     }
     override fun onSaveInstanceState(out: Bundle) {
+        out.putBoolean("apps_tab", appTabSelected)
         out.putString("companion_address", pendingCompanionAddress)
         out.putBundle("names", Bundle().apply { names.snapshot().forEach { (key, value) -> putString(key, value) } })
         super.onSaveInstanceState(out)
@@ -129,25 +144,29 @@ class MainActivity : Activity() {
         val sidebar = column().apply { setPadding(0, dp(6), dp(24), 0) }
         root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 142 else 190), -1))
         val brand = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        brand.addView(SymbolView("bluetooth", accent), LinearLayout.LayoutParams(dp(25), dp(30)))
+        brand.addView(ImageView(this).apply { setImageResource(R.drawable.icon) }, LinearLayout.LayoutParams(dp(34), dp(34)))
         brand.addView(label("GenieBreaker", if (compact) 13 else 17, white, true).apply { setPadding(dp(8), 0, 0, 0) })
         sidebar.addView(brand)
         sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(if (compact) 18 else 34)))
-        sidebar.addView(label("블루투스", 17, accent, true).apply {
-            setPadding(dp(14), dp(14), dp(14), dp(14)); background = rounded(0xff253346.toInt(), 10)
-        })
+        bluetoothTab = actionButton("블루투스", false) { selectTab(false) }.apply { isSelected = true }
+        appsTab = actionButton("앱 관리", false) { selectTab(true) }
+        sidebar.addView(bluetoothTab); sidebar.addView(appsTab)
         sidebar.addView(Space(this), LinearLayout.LayoutParams(1, 0, 1f))
         permission = actionButton("권한 허용", false, ::requestAccess)
         power = actionButton("블루투스 켜기", false, ::enableBluetooth)
         sidebar.addView(permission); sidebar.addView(power)
         updateButton = actionButton("업데이트 확인", false) { updater.click() }
         sidebar.addView(updateButton)
-        sidebar.addView(actionButton("앱 실행 / 이름", false) { AppLauncher(this).show() })
         sidebar.addView(actionButton("오류 기록", false) { showDiagnostics() })
         sidebar.addView(label("GenieBreaker ${BuildConfig.VERSION_NAME}", 11).apply { setPadding(dp(4), dp(15), 0, 0) })
         root.addView(View(this).apply { setBackgroundColor(0xff353a44.toInt()) }, LinearLayout.LayoutParams(dp(1), -1))
         val content = column().apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0) }
-        root.addView(content, LinearLayout.LayoutParams(0, -1, 1f))
+        bluetoothPage = content
+        val pageHost = FrameLayout(this)
+        root.addView(pageHost, LinearLayout.LayoutParams(0, -1, 1f))
+        pageHost.addView(content, FrameLayout.LayoutParams(-1, -1))
+        appsPage = AppManagementView(this).apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0); visibility = View.GONE }
+        pageHost.addView(appsPage, FrameLayout.LayoutParams(-1, -1))
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = column()
         titles.addView(label("블루투스", if (compact) 24 else 32, white, true))
@@ -192,6 +211,14 @@ class MainActivity : Activity() {
         footer.addView(label("뒤로  나가기", 11))
         content.addView(footer)
     }
+    private fun selectTab(apps: Boolean) {
+        appTabSelected = apps
+        bluetoothPage.visibility = if (apps) View.GONE else View.VISIBLE
+        appsPage.visibility = if (apps) View.VISIBLE else View.GONE
+        bluetoothTab.isSelected = !apps; appsTab.isSelected = apps
+        for (tab in listOf(bluetoothTab, appsTab)) tab.background = rounded(if (tab.isSelected) 0xff253346.toInt() else 0xff222832.toInt(), 10, if (tab.hasFocus()) accent else Color.TRANSPARENT)
+        if (apps) appsPage.refresh()
+    }
     private fun devicePanel(title: String): Triple<LinearLayout, LinearLayout, TextView> {
         val panel = column().apply { background = rounded(surface, 16); setPadding(dp(18), dp(18), dp(18), dp(10)) }
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -226,7 +253,7 @@ class MainActivity : Activity() {
         setTypeface(Typeface.DEFAULT, Typeface.BOLD)
         layoutParams = LinearLayout.LayoutParams(-1, dp(if (compact) 36 else 46)).apply { topMargin = dp(if (compact) 5 else 8) }
         fun restyle(focused: Boolean) {
-            background = rounded(if (primary) accent else 0xff292e38.toInt(), 10, if (focused) white else Color.TRANSPARENT)
+            background = rounded(if (primary) accent else if (isSelected) 0xff253346.toInt() else 0xff222832.toInt(), 10, if (focused) accent else Color.TRANSPARENT)
             setTextColor(if (primary) backgroundColor else white)
             elevation = if (focused) dp(4).toFloat() else 0f
         }
@@ -253,11 +280,12 @@ class MainActivity : Activity() {
             setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) } }
         }
         fun bind(name: String?, bondState: Int, kind: String) {
-            title.text = name ?: "이름 확인 중…"
+            val pending = name == null && names.isPending(address)
+            title.text = name ?: if (pending) "이름 확인 중…" else "블루투스 기기 ${address.takeLast(5)}"
             val state = when (bondState) {
                 BluetoothDevice.BOND_BONDED -> if (address in linked) "기기 링크 연결됨" else "등록됨"
                 BluetoothDevice.BOND_BONDING -> "페어링 중"
-                else -> if (name == null) "이름을 기다리는 중" else "페어링 가능"
+                else -> if (pending) "잠시 기다려주세요" else "페어링 가능"
             }
             detail.text = if (name == null) "$state  ${address.takeLast(8)}" else state
             symbol.kind = kind; symbol.invalidate()
@@ -313,9 +341,10 @@ class MainActivity : Activity() {
         else registerReceiver(receiver, filter)
         registered = true; refresh()
     }
-    override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume() }
-    override fun onDestroy() { if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); super.onDestroy() }
+    override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume(); if (::appsPage.isInitialized && appTabSelected) appsPage.resume() }
+    override fun onDestroy() { if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); if (::appsPage.isInitialized) appsPage.close(); uiHandler.removeCallbacksAndMessages(null); super.onDestroy() }
     override fun onStop() {
+        uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog)
         if (registered) { unregisterReceiver(receiver); registered = false }
         try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
         super.onStop()
@@ -328,7 +357,7 @@ class MainActivity : Activity() {
         if (bt == null) { badge.text = "지원 안 됨"; message("이 기기는 블루투스를 지원하지 않습니다."); scan.isEnabled = false; power.visibility = View.GONE; return }
         if (!access()) { badge.text = "권한 필요"; message("왼쪽의 ‘권한 허용’을 선택해 시작하세요."); return }
         try {
-            searching = bt.isDiscovering
+            searching = bt.isDiscovering && !scanExpired
             power.visibility = if (bt.isEnabled) View.GONE else View.VISIBLE
             badge.text = if (bt.isEnabled) "● 켜짐" else "꺼짐"
             scan.text = if (searching) "검색 중지" else if (searched) "다시 검색" else "기기 검색"
@@ -365,8 +394,11 @@ class MainActivity : Activity() {
                     message("위치 서비스가 꺼져 있어 이 Android 버전에서 검색할 수 없습니다"); return
                 }
             }
-            found.clear(); searched = true; renderDevices()
-            if (bt.startDiscovery()) refresh() else message("검색을 시작하지 못했습니다. 잠시 후 다시 시도하세요.")
+            found.clear(); searched = true; scanExpired = false; renderDevices()
+            if (bt.startDiscovery()) {
+                uiHandler.removeCallbacks(scanWatchdog); uiHandler.postDelayed(scanWatchdog, 35_000)
+                refresh()
+            } else message("검색을 시작하지 못했습니다. 잠시 후 다시 시도하세요.")
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 검색", error) }
     }
     private fun pair(device: BluetoothDevice) {
@@ -433,6 +465,7 @@ class MainActivity : Activity() {
     @Deprecated("Platform result callback used for vendor compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 610) { appsPage.exportResult(resultCode, data); return }
         if (requestCode != 501) return
         val address = pendingCompanionAddress; pendingCompanionAddress = null
         if (resultCode != RESULT_OK || address == null) { message("대체 페어링이 취소되었습니다."); return }
@@ -487,6 +520,8 @@ class MainActivity : Activity() {
             registeredEmpty.visibility = if (bonded.isEmpty()) View.VISIBLE else View.GONE
             nearbyEmpty.visibility = if (nearby.isEmpty()) View.VISIBLE else View.GONE
             if (focusedAddress != null && currentFocus !is DeviceRow) (rows[focusedAddress] ?: scan).requestFocus()
+            uiHandler.removeCallbacks(nameTick)
+            if (rows.keys.any { names.isPending(it) }) uiHandler.postDelayed(nameTick, 1_000)
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 목록", error) }
     }
     /** Debug-only fixtures for instrumentation screenshots, never shown in release builds. */
@@ -514,4 +549,5 @@ class MainActivity : Activity() {
         row.bind(names.get(row.address), BluetoothDevice.BOND_NONE, "audio")
         return row.hasFocus() && rows[row.address] === row && row.title.text.toString() == "Galaxy Buds FE"
     }
+    fun previewAppsTab() { check(BuildConfig.DEBUG && preview); selectTab(true); appsTab.requestFocus() }
 }

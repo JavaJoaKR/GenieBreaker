@@ -17,7 +17,7 @@ public class TvUiTest {
     @Test public void testUpdateProviderRejectsOtherFilesAndWrites() throws Exception {
         android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         String prefix = "content://" + context.getPackageName() + ".updates";
-        for (String path : new String[]{"/secrets", "/../update.apk", "/updates/update.apk"}) {
+        for (String path : new String[]{"/secrets", "/../update.apk", "/updates/update.apk", "/edited/../../secrets", "/edited/not-a-uuid"}) {
             try { context.getContentResolver().openFileDescriptor(android.net.Uri.parse(prefix + path), "r"); fail("Unexpected file was exposed"); }
             catch (java.io.FileNotFoundException expected) { }
         }
@@ -45,6 +45,12 @@ public class TvUiTest {
                 while (pipe.read() != -1) { }
             }
             screenshot.recycle();
+            instrumentation.runOnMainSync(activity::previewAppsTab);
+            android.os.SystemClock.sleep(800);
+            instrumentation.waitForIdleSync();
+            try (android.os.ParcelFileDescriptor fd = instrumentation.getUiAutomation().executeShellCommand("screencap -p /sdcard/Download/genie-app-ui.png");
+                 java.io.InputStream pipe = new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)) { while (pipe.read() != -1) { } }
+
         } finally { instrumentation.runOnMainSync(activity::finish); }
     }
 }

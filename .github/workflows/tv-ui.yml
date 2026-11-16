@@ -39,10 +39,12 @@ jobs:
             adb shell wm density 160
             gradle --no-daemon :app:connectedDebugAndroidTest
             adb pull /sdcard/Download/genie-tv-ui.png tv-ui.png
+            adb pull /sdcard/Download/genie-app-ui.png app-ui.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: TV-UI-review
           path: |
             tv-ui.png
+            app-ui.png
             app/build/reports/androidTests/connected/debug/

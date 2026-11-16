@@ -14,8 +14,11 @@ import java.io.FileNotFoundException
 class UpdateProvider : ContentProvider() {
     override fun onCreate() = true
     private fun file(uri: Uri): File {
-        if (uri.path != "/update.apk") throw FileNotFoundException()
-        return File(requireNotNull(context).cacheDir, "updates/update.apk")
+        if (uri.path == "/update.apk") return File(requireNotNull(context).cacheDir, "updates/update.apk")
+        val id = uri.path?.removePrefix("/edited/")
+        if (uri.path?.startsWith("/edited/") == true && id != null && id.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")))
+            return File(requireNotNull(context).filesDir, "edited/$id.apk")
+        throw FileNotFoundException()
     }
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         if (mode != "r") throw FileNotFoundException("Read only")
@@ -25,7 +28,7 @@ class UpdateProvider : ContentProvider() {
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor {
         val file = file(uri)
         val columns = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
-        return MatrixCursor(columns).apply { addRow(columns.map<String, Any?> { when (it) { OpenableColumns.DISPLAY_NAME -> "GenieBreaker.apk"; OpenableColumns.SIZE -> file.length(); else -> null } }.toTypedArray()) }
+        return MatrixCursor(columns).apply { addRow(columns.map<String, Any?> { when (it) { OpenableColumns.DISPLAY_NAME -> file.name; OpenableColumns.SIZE -> file.length(); else -> null } }.toTypedArray()) }
     }
     override fun insert(uri: Uri, values: ContentValues?): Uri? = throw UnsupportedOperationException()
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = throw UnsupportedOperationException()
