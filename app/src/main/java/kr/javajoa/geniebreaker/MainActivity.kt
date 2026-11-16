@@ -27,7 +27,13 @@ class MainActivity : Activity() {
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var scanExpired = false
     private var watchdogScheduled = false
-    private val nameTick = Runnable { if (registered && !preview) renderDevices() }
+    private val nameTick = object : Runnable {
+        override fun run() {
+            if (!registered || preview) return
+            rows.values.forEach { it.refreshName() }
+            if (rows.keys.any { names.isPending(it) }) uiHandler.postDelayed(this, 1_000)
+        }
+    }
     private val scanWatchdog = Runnable {
         watchdogScheduled = false; scanExpired = true; searching = false
         try { adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
@@ -128,7 +134,7 @@ class MainActivity : Activity() {
         updater = AppUpdater(this) { text, enabled -> updateButton.text = text; updateButton.isEnabled = enabled }
         if (!preview) updater.checkForUpdate(automatic = true)
         scan.requestFocus()
-        if (savedInstanceState?.getBoolean("apps_tab") == true) selectTab(true)
+        selectTab(savedInstanceState?.getBoolean("apps_tab") == true)
     }
     override fun onSaveInstanceState(out: Bundle) {
         out.putBoolean("apps_tab", appTabSelected)
@@ -261,6 +267,9 @@ class MainActivity : Activity() {
         restyle(false); setOnFocusChangeListener { _, focus -> restyle(focus) }; setOnClickListener { action() }
     }
     private inner class DeviceRow(val address: String) : LinearLayout(this@MainActivity) {
+        private var lastBond = BluetoothDevice.BOND_NONE
+        private var lastKind = "bluetooth"
+        fun refreshName() { bind(names.get(address), lastBond, lastKind) }
         val title = label("", 15, white, true)
         val detail = label("", 11)
         val symbol = SymbolView("bluetooth", accent)
@@ -281,6 +290,7 @@ class MainActivity : Activity() {
             setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) } }
         }
         fun bind(name: String?, bondState: Int, kind: String) {
+            lastBond = bondState; lastKind = kind
             val pending = name == null && names.isPending(address)
             title.text = name ?: if (pending) "이름 확인 중…" else "블루투스 기기 ${address.takeLast(5)}"
             val state = when (bondState) {
