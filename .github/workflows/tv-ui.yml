@@ -43,7 +43,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: TV-UI-review
+          name: TV-UI-review-${{ github.run_attempt }}
           path: |
             tv-ui.png
             app-ui.png
