@@ -42,7 +42,12 @@ class GenieUI extends StatelessWidget {
       return FittedBox(fit: BoxFit.contain, child: SizedBox(width: size.width, height: size.height,
         child: MediaQuery(data: MediaQuery.of(context).copyWith(size: size), child: child!)));
     }),
-    shortcuts: {...WidgetsApp.defaultShortcuts, const SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): const ActivateIntent()},
+    shortcuts: {...WidgetsApp.defaultShortcuts,
+      const SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): const ActivateIntent(),
+      const SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false): const ActivateIntent(),
+      const SingleActivator(LogicalKeyboardKey.numpadEnter, includeRepeats: false): const ActivateIntent(),
+      const SingleActivator(LogicalKeyboardKey.space, includeRepeats: false): const ActivateIntent(),
+    },
     home: const GeniePage(),
   );
 }
@@ -201,7 +206,7 @@ class _GeniePageState extends State<GeniePage> {
     if (!mounted) return;
     setState(() {
       final changed = next['pageId'] != data?['pageId'];
-      data = next; if (next['shell'] == true) shellData = next; error = null;
+      data = next; if (next['shell'] == true) { shellData = next; if (next['menu'] is Map) data = Map<String, dynamic>.from(next['menu'] as Map); } error = null;
       if (changed) { advanced = expandedPages[pageId] ?? false; working = false; }
       if (next['cloneOptions'] == true) cloneOptions = Map<String, bool>.from(next['options'] as Map);
     });

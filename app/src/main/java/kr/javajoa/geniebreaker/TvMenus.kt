@@ -41,7 +41,7 @@ internal class MenuController(private val activity: Activity, private val publis
             "cloneOptions" to (page.optionsAction != null), "options" to page.options)
     }
     private fun back() { pages.removeLastOrNull(); if (pages.isEmpty()) dismiss() else publish(snapshot()) }
-    fun republish() { if (pages.isNotEmpty()) publish(snapshot()) }
+    fun current(): Map<String, Any>? = if (pages.isEmpty()) null else snapshot()
     fun clear() { pages.clear() }
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
         if (pages.isEmpty()) return false

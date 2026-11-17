@@ -33,6 +33,7 @@ class MainActivity : FlutterActivity() {
     private var scanExpired = false
     private var watchdogScheduled = false
     private var searched = false
+    private var pendingNames = false
     private var presentedError: String? = null
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val scanWatchdog = Runnable {
@@ -44,7 +45,7 @@ class MainActivity : FlutterActivity() {
         override fun run() {
             if (!registered || preview) return
             renderDevices()
-            if (found.keys.any { names.isPending(it) }) uiHandler.postDelayed(this, 1000)
+            if (pendingNames) uiHandler.postDelayed(this, 1000)
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,7 +85,7 @@ class MainActivity : FlutterActivity() {
                 if (call.method != "ready" && menus?.handle(call, result) == true) return@setMethodCallHandler
                 if (files.handle(call, result)) return@setMethodCallHandler
                 when (call.method) {
-                    "ready" -> { result.success(snapshot()); menus?.republish(); apps.refresh() }
+                    "ready" -> { result.success(snapshot()); apps.refresh() }
                     "refreshShell" -> { refresh(); apps.refresh(); result.success(null) }
                     "scan" -> { discover(); result.success(null) }
                     "permission" -> { requestAccess(); result.success(null) }
@@ -108,6 +109,7 @@ class MainActivity : FlutterActivity() {
     private fun device(address: String) = found[address] ?: if (access()) adapter?.bondedDevices?.firstOrNull { it.address == address } else null
     private fun snapshot(): Map<String, Any> {
         val devices = mutableListOf<Map<String, Any>>()
+        pendingNames = false
         if (preview) {
             listOf("거실 헤드폰", "무선 키보드", "WH-1000XM5", "이름 확인 중", "Bluetooth Keyboard").forEachIndexed { index, name ->
                 devices += mapOf("id" to "preview-$index", "name" to name, "bonded" to (index < 2), "kind" to if (index == 1 || index == 4) "input" else "audio", "detail" to if (index < 2) "등록됨" else "페어링 가능")
@@ -116,7 +118,8 @@ class MainActivity : FlutterActivity() {
             val bonded = adapter?.bondedDevices.orEmpty()
             (bonded + found.values).distinctBy { it.address }.forEach { device ->
                 names.seed(device.address, device.name)
-                devices += mapOf("id" to device.address, "name" to (names.get(device.address) ?: "이름 확인 중"),
+                pendingNames = pendingNames || names.isPending(device.address)
+                devices += mapOf("id" to device.address, "name" to (names.get(device.address) ?: if (names.isPending(device.address)) "이름 확인 중" else "이름 없는 기기"),
                     "bonded" to (device.bondState == BluetoothDevice.BOND_BONDED),
                     "kind" to when (device.bluetoothClass?.majorDeviceClass) { BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"; BluetoothClass.Device.Major.PERIPHERAL -> "input"; else -> "bluetooth" },
                     "detail" to when { device.bondState == BluetoothDevice.BOND_BONDING -> "페어링 중"; device.address in linked -> "기기 링크 연결됨"; device.bondState == BluetoothDevice.BOND_BONDED -> "등록됨"; else -> "페어링 가능" })
@@ -126,7 +129,7 @@ class MainActivity : FlutterActivity() {
         val searching = preview || try { access() && adapter?.isDiscovering == true && !scanExpired } catch (_: SecurityException) { false }
         return mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME, "devices" to devices,
             "permission" to (preview || access()), "enabled" to enabled, "supported" to (preview || adapter != null),
-            "searching" to searching, "searched" to searched, "status" to btMessage, "apps" to apps.snapshot(), "update" to updateLabel)
+            "searching" to searching, "searched" to searched, "status" to btMessage, "apps" to apps.snapshot(), "update" to updateLabel) + (menus?.current()?.let { mapOf("menu" to it) } ?: emptyMap())
     }
     private fun publish() { if (!isFinishing && !isDestroyed && ::apps.isInitialized) channel?.invokeMethod("shell", snapshot()) }
     private fun message(text: String) {
@@ -141,13 +144,14 @@ class MainActivity : FlutterActivity() {
             if (!searching) { uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false }
         } catch (error: Exception) { Diagnostics.record(this, "Bluetooth refresh", error) }
         publish()
+        uiHandler.removeCallbacks(nameTick); if (pendingNames) uiHandler.postDelayed(nameTick, 1000)
     }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (!access()) { refresh(); return }
             try {
                 @Suppress("DEPRECATION")
-                val device = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) else intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) else intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                 device?.let {
                     if (intent.action == BluetoothDevice.ACTION_FOUND) found[it.address] = it
                     names.merge(it.address, intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: it.name)

@@ -23,9 +23,12 @@ internal class FileController(private val activity: Activity, private val change
     private var clipboard: String? = null
     private var cut = false
     private val resolver get() = activity.contentResolver
+    // Do not offer cloud-backed document trees: this explorer must never upload local data.
+    private fun isLocalTree(uri: Uri) = uri.scheme == "content" && uri.authority in setOf(
+        "com.android.externalstorage.documents", "com.android.providers.downloads.documents", "com.android.providers.media.documents")
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
         if (call.method == "pick") {
-            activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), 620)
+            activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).putExtra(Intent.EXTRA_LOCAL_ONLY, true).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), 620)
             result.success(null); return true
         }
         if (call.method !in setOf("files.list", "files.action", "open", "storage.list", "clean")) return false
@@ -92,7 +95,7 @@ internal class FileController(private val activity: Activity, private val change
                 if (kind == "local") writable.add(handle)
                 items += entry(doc, handle) + mapOf("name" to label)
             }
-            resolver.persistedUriPermissions.filter { it.isReadPermission }.forEach { permission ->
+            resolver.persistedUriPermissions.filter { it.isReadPermission && isLocalTree(it.uri) }.forEach { permission ->
                 DocumentFile.fromTreeUri(activity, permission.uri)?.let { doc ->
                     val handle = doc.uri.toString(); known[handle] = doc; roots.add(handle)
                     if (permission.isWritePermission) writable.add(handle) else writable.remove(handle)
@@ -240,7 +243,8 @@ internal class FileController(private val activity: Activity, private val change
         if (request != 620) return false
         if (result == Activity.RESULT_OK) data?.data?.let { uri ->
             try {
-                val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                require(isLocalTree(uri)) { "내부 저장소나 USB의 로컬 폴더만 연결할 수 있습니다" }
+                val flags = requireNotNull(data).flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 resolver.takePersistableUriPermission(uri, flags)
                 changed()
             } catch (error: Exception) { TvMenus.notice(activity, "폴더 권한을 저장하지 못했습니다. [${Diagnostics.record(activity, "Folder permission", error)}]") }

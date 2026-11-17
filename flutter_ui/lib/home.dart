@@ -179,6 +179,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   Widget toolbar(List<Widget> children) => Padding(padding: const EdgeInsets.only(bottom: 16), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (final child in children) Padding(padding: const EdgeInsets.only(right: 10), child: child)])));
   Widget scroll(List<Widget> children) => SingleChildScrollView(key: PageStorageKey(tab), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children));
   Widget bluetooth() {
+    if (widget.data['supported'] == false) { rows = []; return const Center(child: Text('이 기기는 블루투스를 지원하지 않습니다', style: TextStyle(color: muted))); }
     final devices = (widget.data['devices'] as List? ?? []).cast<Map>();
     final registered = devices.where((d) => d['bonded'] == true).toList();
     final nearby = devices.where((d) => d['bonded'] != true).toList();
@@ -212,7 +213,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       toolbar([button('apps:filter', appData['duals'] == true ? '모든 앱' : '내 듀얼앱', () => call('appFilter')),
         button('apps:view', '보기 설정', () => call('appView'))]),
       Text(appData['status'] as String? ?? '', style: const TextStyle(color: muted)), const SizedBox(height: 14),
-      Expanded(child: items.isEmpty ? const Center(child: Text('표시할 앱이 없습니다', style: TextStyle(color: muted))) : scroll([
+      Expanded(child: items.isEmpty ? Center(child: Text(appData['loading'] == true ? '앱 목록을 불러오는 중입니다' : '표시할 앱이 없습니다. 보기 설정을 확인하세요.', style: const TextStyle(color: muted))) : scroll([
         for (var offset = 0; offset < items.length; offset += columns) Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (final a in items.skip(offset).take(columns)) Expanded(child: Padding(padding: const EdgeInsets.only(right: 10), child: tile('app:${a['id']}', a['name'] as String,
             () => call('app', a['id']), subtitle: a['detail'] as String?, icon: Icons.android_rounded,
@@ -323,6 +324,12 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           tile('settings:diagnostics', '문제 기록', () => call('diagnostics'), subtitle: '기기 안에 저장된 오류 식별 코드', icon: Icons.info_outline_rounded),
         ]);
       }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final active = {...rows.expand((row) => row), ...tabs.map((name) => 'nav:$name')};
+        final stale = nodes.keys.where((id) => !active.contains(id) && nodes[id]?.context == null).toList();
+        for (final id in stale) { nodes.remove(id)?.dispose(); }
+      });
       return ColoredBox(color: canvas, child: Padding(padding: const EdgeInsets.all(28), child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SizedBox(width: 176, child: FocusScope(node: sidebarScope, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('GenieBreaker', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)), const SizedBox(height: 6),
