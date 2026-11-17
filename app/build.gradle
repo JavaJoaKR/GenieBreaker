@@ -40,3 +40,10 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
+
+androidComponents {
+    onVariants(selector().withBuildType('release')) { variant ->
+        // Flutter AARs bundle both targets; merged default ABI filters are additive.
+        variant.packaging.jniLibs.excludes.add('**/x86_64/**')
+    }
+}
