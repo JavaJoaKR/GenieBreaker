@@ -16,8 +16,7 @@ internal class AppManagementController(private val activity: Activity, private v
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val pm = activity.packageManager
     private val duals = DualApps(activity.applicationContext)
-    private class Status(var text: String)
-    private val status = Status("앱을 선택해 듀얼앱을 만드세요")
+    private var status = "앱을 선택해 듀얼앱을 만드세요"
     private var allApps = false
     private var onlyDuals = false
     private var busy = false
@@ -27,10 +26,10 @@ internal class AppManagementController(private val activity: Activity, private v
     private val installState = SessionInstaller.state(activity)
     private val preferences = activity.getSharedPreferences("apk_workshop", Context.MODE_PRIVATE)
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> ui {
-        status.text = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
+        status = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
     } }
     init { installState.registerOnSharedPreferenceChangeListener(installListener) }
-    fun snapshot() = mapOf("items" to entries, "status" to status.text, "busy" to busy, "loading" to loading, "duals" to onlyDuals)
+    fun snapshot() = mapOf("items" to entries, "status" to status, "busy" to busy, "loading" to loading, "duals" to onlyDuals)
     fun toggleDuals() { if (!loading && !busy) { onlyDuals = !onlyDuals; refresh() } }
     fun viewOptions() = TvMenus.show(activity, "보기 설정", listOf("실행 가능한 앱", "전체 설치 앱"), selected = if (allApps) 1 else 0) { index -> allApps = index == 1; refresh() }
     fun choose(packageName: String) { packages.firstOrNull { it.packageName == packageName }?.let(::choose) }
@@ -46,7 +45,7 @@ internal class AppManagementController(private val activity: Activity, private v
     }
     fun refresh() {
         if (loading || busy) return
-        loading = true
+        loading = true; changed()
         worker.execute {
             try {
                 val records = duals.all(); val clonePackages = records.map { it.target }.toSet()
@@ -71,10 +70,10 @@ internal class AppManagementController(private val activity: Activity, private v
                 ui {
                     entries = next
                     packages = items
-                    status.text = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
+                    status = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
                     loading = false; changed()
                 }
-            } catch (error: Exception) { ui { loading = false; status.text = "앱 목록 오류 [${Diagnostics.record(activity, "App shelf", error)}]" } }
+            } catch (error: Exception) { ui { loading = false; status = "앱 목록 오류 [${Diagnostics.record(activity, "App shelf", error)}]" } }
         }
     }
     private fun choose(pkg: PackageInfo) {
@@ -113,14 +112,14 @@ internal class AppManagementController(private val activity: Activity, private v
     private fun createWithOptions(pkg: PackageInfo, options: CloneOptions) {
         if (busy) return
         if (Build.VERSION.SDK_INT < 26) { notice("이 기기에서는 듀얼앱을 만들 수 없습니다."); return }
-        busy = true; status.text = "듀얼앱을 준비하고 있습니다"
+        busy = true; status = "듀얼앱을 준비하고 있습니다"; changed()
         worker.execute {
             try {
-                val record = duals.build(pkg, options) { progress -> ui { status.text = progress } }
+                val record = duals.build(pkg, options) { progress -> ui { status = progress } }
                 ui { busy = false; install(record.id) }
             } catch (error: Throwable) {
                 val code = Diagnostics.record(activity, "Dual app build", error)
-                ui { busy = false; status.text = "듀얼앱을 만들지 못했습니다"; notice("${error.message ?: "듀얼앱을 만들지 못했습니다"} [$code]") }
+                ui { busy = false; status = "듀얼앱을 만들지 못했습니다"; notice("${error.message ?: "듀얼앱을 만들지 못했습니다"} [$code]") }
             }
         }
     }
@@ -155,7 +154,7 @@ internal class AppManagementController(private val activity: Activity, private v
             require(file.isFile)
             val metadata = JSONObject(File(activity.filesDir, "edited/$id.json").readText())
             SessionInstaller.submit(activity, file, metadata.getString("package"))
-            status.text = "설치 확인을 기다리고 있습니다"
+            status = "설치 확인을 기다리고 있습니다"
         } catch (error: Exception) { notice("설치 화면을 열지 못했습니다: ${error.message}") }
     }
     fun resume() {

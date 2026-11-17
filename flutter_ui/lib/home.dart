@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'main.dart';
@@ -135,13 +134,13 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     if (![LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight].contains(key)) return KeyEventResult.ignored;
     if (id == null || (!onSidebar && !rows.any((r) => r.contains(id)))) { focus('nav:$tab'); return KeyEventResult.handled; }
     if (onSidebar) {
-      final index = tabs.indexOf(id!.substring(4));
+      final index = tabs.indexOf(id.substring(4));
       if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
         focus('nav:${tabs[(index + (key == LogicalKeyboardKey.arrowDown ? 1 : -1)).clamp(0, tabs.length - 1)]}');
       } else if (key == LogicalKeyboardKey.arrowRight) { select(tabs[index], enterContent: true); }
       return KeyEventResult.handled;
     }
-    if (tab == 'bluetooth' && id!.startsWith('bt:') && !['bt:scan', 'bt:power', 'bt:permission'].contains(id)) {
+    if (tab == 'bluetooth' && id.startsWith('bt:') && !['bt:scan', 'bt:power', 'bt:permission'].contains(id)) {
       final devices = (widget.data['devices'] as List? ?? []).cast<Map>();
       final deviceId = id.substring(3);
       final ownDevice = devices.where((d) => d['id'] == deviceId).firstOrNull;
@@ -162,7 +161,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       return KeyEventResult.handled;
     }
     final row = rows.indexWhere((r) => r.contains(id));
-    final col = rows[row].indexOf(id!);
+    final col = rows[row].indexOf(id);
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (col == 0) { focus('nav:$tab'); } else { focus(rows[row][col - 1]); }
     } else if (key == LogicalKeyboardKey.arrowRight) {
@@ -177,7 +176,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     key: ValueKey(id), focusNode: node(id), subtitle: subtitle, icon: icon, leading: image,
     onFocus: () { remembered[tab] = id; if (tab == 'files' && id.startsWith('file:')) folderFocus[location] = id; }, onTap: action);
   Widget button(String id, String title, VoidCallback action) => OutlinedButton(focusNode: node(id), onPressed: action, child: Text(title));
-  Widget toolbar(List<Widget> children) => Padding(padding: const EdgeInsets.only(bottom: 16), child: Wrap(spacing: 10, runSpacing: 8, children: children));
+  Widget toolbar(List<Widget> children) => Padding(padding: const EdgeInsets.only(bottom: 16), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (final child in children) Padding(padding: const EdgeInsets.only(right: 10), child: child)])));
   Widget scroll(List<Widget> children) => SingleChildScrollView(key: PageStorageKey(tab), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children));
   Widget bluetooth() {
     final devices = (widget.data['devices'] as List? ?? []).cast<Map>();

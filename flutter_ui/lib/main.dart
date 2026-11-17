@@ -213,14 +213,8 @@ class _GeniePageState extends State<GeniePage> {
   }
   Future<void> load(String path) async {
     try {
-      final previousFocus = FocusManager.instance.primaryFocus;
-      final sameLocation = path == location;
-      final next = Map<String, dynamic>.from(await bridge.invokeMethod(path.isEmpty ? 'ready' : 'list', path) as Map);
-      if (!mounted) return;
-      location = path; receive(next);
-      if (sameLocation) WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && previousFocus?.context != null && previousFocus!.canRequestFocus) previousFocus.requestFocus();
-      });
+      final next = Map<String, dynamic>.from(await bridge.invokeMethod('ready') as Map);
+      if (mounted) receive(next);
     } catch (e) { if (mounted) setState(() => error = errorText(e)); }
   }
   Future<void> perform(String method, [dynamic argument]) async {
