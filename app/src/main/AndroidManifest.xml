@@ -11,6 +11,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- App management is a primary feature; includes installed packages without launcher activities. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.software.companion_device_setup" android:required="false" />
@@ -21,6 +25,16 @@
     <application android:label="GenieBreaker" android:icon="@drawable/icon" android:banner="@drawable/banner" android:theme="@style/GenieTheme" android:allowBackup="false" android:supportsRtl="true">
         <meta-data android:name="flutterEmbedding" android:value="2" />
         <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />
+        <service android:name=".RemoteButtonService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true" android:label="@string/remote_buttons_name">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/remote_buttons_service" />
+        </service>
+        <receiver android:name=".StartupBootReceiver" android:exported="false">
+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
+        </receiver>
+        <service android:name=".StartupWakeService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Launch the television app selected by the user on wake while wake automation is explicitly enabled" />
+        </service>
         <receiver android:name=".InstallResultReceiver" android:exported="false" />
         <provider android:name=".UpdateProvider" android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape" android:hardwareAccelerated="true" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:windowSoftInputMode="adjustResize">

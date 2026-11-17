@@ -2,7 +2,7 @@ package kr.javajoa.geniebreaker
 
 import android.content.*
 import android.os.Bundle
-import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -14,6 +14,8 @@ class MainActivity : FlutterActivity() {
     private lateinit var bluetooth: BluetoothController
     private lateinit var apps: AppManagementController
     private lateinit var files: FileController
+    private lateinit var controls: TvControls
+    private val accessibilityListener = AccessibilityManager.AccessibilityStateChangeListener { controls.resume() }
     private lateinit var updater: AppUpdater
     private var updateLabel = "업데이트 확인"
     private var preview = false
@@ -26,6 +28,7 @@ class MainActivity : FlutterActivity() {
         apps = AppManagementController(this) { publish() }
         files = FileController(this) { channel?.invokeMethod("filesChanged", null) }
         updater = AppUpdater(this) { text, _ -> updateLabel = text; publish() }
+        controls = TvControls(this, { menus?.current()?.get("pageId") as? String }, ::publish)
         super.onCreate(savedInstanceState)
         window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
         fun disableNativeFocusOverlay(view: android.view.View) {
@@ -62,6 +65,14 @@ class MainActivity : FlutterActivity() {
                     "update" -> { updater.click(); result.success(null) }
                     "diagnostics" -> { showDiagnostics(); result.success(null) }
                     "appSettings" -> { openAppSettings(); result.success(null) }
+                    "accessibility" -> { controls.accessibility(); result.success(null) }
+                    "chooseButton" -> { controls.chooseButton(); result.success(null) }
+                    "editButton" -> { controls.edit((call.arguments as Number).toInt()); result.success(null) }
+                    "chooseStartup" -> { controls.chooseStartup(); result.success(null) }
+                    "startupPermission" -> { controls.startupPermission(); result.success(null) }
+                    "toggleWake" -> { controls.toggleWake(); result.success(null) }
+                    "testStartup" -> { controls.testStartup(); result.success(null) }
+                    "clearStartup" -> { controls.clearStartup(); result.success(null) }
                     "exit" -> { finish(); result.success(null) }
                     else -> result.notImplemented()
                 }
@@ -87,6 +98,7 @@ class MainActivity : FlutterActivity() {
         if (hasFocus) { ensureFlutterFocus(); channel?.invokeMethod("enter", null) }
     }
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (RemoteCapture.handle(event)) return true
         if (event.action == android.view.KeyEvent.ACTION_DOWN && event.keyCode in setOf(
                 android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
                 android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
@@ -96,7 +108,7 @@ class MainActivity : FlutterActivity() {
 
     private fun snapshot(): Map<String, Any> = bluetooth.snapshot() +
         mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME,
-            "apps" to apps.snapshot(), "update" to updateLabel) +
+            "apps" to apps.snapshot(), "update" to updateLabel, "controls" to controls.snapshot()) +
         (menus?.current()?.let { mapOf("menu" to it) } ?: emptyMap())
 
     private fun publish() { if (!isFinishing && !isDestroyed && ::apps.isInitialized) channel?.invokeMethod("shell", snapshot()) }
@@ -104,9 +116,16 @@ class MainActivity : FlutterActivity() {
     override fun onStart() { super.onStart(); bluetooth.start() }
     override fun onResume() {
         super.onResume()
+        getSystemService(AccessibilityManager::class.java).addAccessibilityStateChangeListener(accessibilityListener)
+        controls.resume()
         if (!preview) updater.resume()
         apps.resume()
         bluetooth.refresh()
+    }
+    override fun onPause() {
+        getSystemService(AccessibilityManager::class.java).removeAccessibilityStateChangeListener(accessibilityListener)
+        controls.pause()
+        super.onPause()
     }
     override fun onStop() { bluetooth.stop(); super.onStop() }
     override fun onSaveInstanceState(out: Bundle) { bluetooth.save(out); super.onSaveInstanceState(out) }
@@ -130,10 +149,7 @@ class MainActivity : FlutterActivity() {
         bluetooth.result(requestCode, resultCode)
     }
     private fun openAppSettings() {
-        for (action in listOf(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS, Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS)) {
-            try { startActivity(Intent(action)); return } catch (_: ActivityNotFoundException) { }
-        }
-        TvMenus.notice(this, "이 TV 펌웨어는 앱 목록 설정 화면을 제공하지 않습니다. [GB-UI-0001]")
+        if (!openAppsScreen(this)) TvMenus.notice(this, "이 TV에서는 앱 목록을 직접 열 수 없습니다. TV 설정에서 앱을 여세요.")
     }
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)

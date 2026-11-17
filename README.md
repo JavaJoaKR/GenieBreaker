@@ -8,6 +8,9 @@ KT GenieTV MA4000 / MARUSYS, Android 14용 블루투스·듀얼앱 관리 도구
 - **블루투스**: 기기 검색, 페어링, 등록 기기 관리. 일반 설정 앱으로 이동하지 않습니다.
 - **앱 관리**: 앱을 선택하고 ‘듀얼앱 만들기’를 누르면 이름·패키지명·서명·버전 코드를 자동으로 정합니다. 생성 후 Android 설치 확인이 이어집니다.
 - **내 듀얼앱**: 만든 앱 실행, 재생성, 재설치, 제거를 제공합니다. APK 파일 저장과 기술 정보는 ‘더 보기’에 있습니다.
+- **바로가기**에서 TV 설정의 앱 목록과 접근성을 바로 엽니다.
+- **버튼 맵핑**에서 ‘리모컨 접근성 서비스’를 켠 뒤 ‘버튼 지정’을 선택합니다. 컬러·채널·미디어 등 지원 버튼을 직접 누르거나 목록에서 선택하고, 실행할 앱이나 홈·뒤로·설정 동작을 지정하세요. 지정한 항목을 다시 열면 변경하거나 해제할 수 있습니다. 펌웨어가 직접 처리하는 버튼은 감지할 수 없습니다.
+- **시작 앱**에서 앱을 선택하면 재부팅 후 한 번 엽니다. Android 10 이상은 ‘다른 앱 위에 표시’를 허용해야 짧은 실행 안내를 보여준 뒤 앱을 열 수 있습니다. ‘대기 해제 시에도 실행’은 선택 사항이며 켜면 기기 안에서 화면 켜짐을 감지하는 서비스가 동작합니다. ‘지금 실행’으로 확인하고 ‘시작 앱 해제’로 끌 수 있습니다. 펌웨어가 권한이나 백그라운드 실행을 차단하면 자동 실행이 제한됩니다. 기존 TV 홈 버튼은 그대로 사용합니다.
 - **설정**: 업데이트 확인과 문제 기록을 제공합니다.
 
 [GitHub Releases](https://github.com/JavaJoaKR/GenieBreaker/releases)에서 APK를 받거나 앱의 설정에서 업데이트하세요.
@@ -36,7 +39,7 @@ KT GenieTV MA4000 / MARUSYS, Android 14용 블루투스·듀얼앱 관리 도구
 
 ## 개발 및 검증
 
-Kotlin, Android 기본 View, JDK 17, Gradle 8.11.1, Android SDK 35. Java/Kotlin 라이브러리만 사용하므로 armeabi-v7a에서 사용할 수 있습니다.
+Flutter UI, Kotlin, JDK 17, Gradle 8.11.1, Android SDK 35. 배포 대상은 armeabi-v7a입니다.
 
 ```sh
 base64 --decode development-keystore.base64 > release.jks
@@ -56,7 +59,7 @@ gradle :app:testDebugUnitTest :app:assembleRelease :app:lintRelease
 
 ### Flutter TV 화면과 파일탐색기
 
-- 블루투스·앱 관리·바로가기·파일탐색기·저장공간·설정과 모든 앱 팝업을 하나의 Flutter 엔진으로 표시합니다. Android 권한·페어링·설치·폴더 선택기는 시스템 화면을 사용합니다. 앱 내부 UI 크기는 기존 대비 90%이며 TV 전체 DPI는 바꾸지 않습니다.
+- 블루투스·앱 관리·바로가기·파일탐색기·저장공간·버튼 맵핑·시작 앱·설정과 모든 앱 팝업을 하나의 Flutter 엔진으로 표시합니다. Android 권한·페어링·설치·폴더 선택기는 시스템 화면을 사용합니다. 앱 내부 UI 크기는 기존 대비 90%이며 TV 전체 DPI는 바꾸지 않습니다.
 - 파일탐색기는 내 파일과 연결한 내부 저장소·USB 폴더를 탐색하고 정렬·새 폴더·복사·이동·붙여넣기·이름 변경·삭제·파일 열기·APK 설치를 제공합니다. 쓰기 권한으로 연결한 폴더와 내 파일에서만 수정하며, 앱 캐시·듀얼앱 보관함은 읽기 전용입니다. 같은 이름은 덮어쓰지 않습니다. 펌웨어에 폴더 선택기가 없으면 내 파일과 앱 보관함을 이용할 수 있습니다. 다른 앱의 비공개 데이터에는 접근하지 않습니다. 바로가기 탭에서는 TV 설정의 앱 목록을 엽니다.
 - APK 선택 시 시스템 설치 확인을 요청하며 다른 파일은 지원하는 뷰어로 엽니다. 생성 APK 정리와 캐시 정리는 별도 확인 후 실행하고 설치된 앱·듀얼앱 기록·서명 키는 유지합니다. 진행 중인 파일 작업이 있으면 정리를 거부합니다.
 - Flutter 3.35.7 모듈은 CI에서 `flutter pub get`, `flutter analyze`, `flutter test`, `flutter build aar --no-profile --target-platform android-arm,android-x64`로 빌드한 뒤 기존 Gradle 앱에 포함합니다. 배포 APK에는 MA4000용 ARM32만 포함하며 R8과 리소스 축소를 적용합니다. x86_64는 테스트 빌드에만 포함합니다. `.android`는 생성 파일이며 커밋하지 않습니다.
@@ -90,3 +93,10 @@ Flutter 메뉴는 메인 화면의 같은 엔진 안에서 중앙 팝업으로 �
 설정→문제 기록에서 짧은 오류 코드(예: `GB-BT-3A2F`)와 기기 내부 기록을 확인·복사·삭제합니다. 같은 종류의 오류는 같은 코드를 사용하며 코드만 직접 옮겨 적어 전달할 수 있습니다. 로그에는 기기 정보·IP·위치·원본 오류 메시지·파일 경로를 저장하지 않고 오류 분류와 앱 내부 호출 위치만 남깁니다. 온라인 로그 전송 기능은 없습니다. GitHub 자동 업데이트는 유지됩니다.
 
 넷플릭스 TV 실행 호환성은 이제 버전 이름·코드로 제한하지 않습니다. 원본 패키지와 실제 DEX 검사 코드가 일치해야 적용하며 확인 불가능한 APK는 생성을 중단합니다. 버전 제한 해제가 모든 버전의 재생 보장을 뜻하지는 않습니다.
+
+
+### 리모컨과 부팅 동작의 구현 참고
+
+- tvbuttonmapper의 PressEngine과 ButtonCapture에서 같은 버튼의 누름·해제와 반복 입력을 처리하는 흐름을 검토했습니다. GenieBreaker는 버튼을 뗄 때 한 번 실행하고, 취소 이벤트는 무시합니다. [tvbuttonmapper](https://github.com/john8675309/tvbuttonmapper)
+- key-mapper의 Mapper는 Android 접근성 서비스로 TV의 컬러 키와 제조사 키를 감지합니다. GenieBreaker는 같은 공개 API로 입력을 받고 버튼·실행 앱을 사용자가 기기 안에서 지정합니다. 화면 읽기와 키 입력 기록은 사용하지 않습니다. [key-mapper](https://github.com/jadeGopher/key-mapper)
+- Launch-On-Boot의 BootReceiver에서 부팅과 대기 해제 신호를 구분하는 방식을 검토했습니다. Android 10 이상에서는 사용자가 허용한 오버레이로 실행 안내를 띄운 뒤 선택한 앱을 직접 엽니다. 대기 해제는 별도의 선택 항목으로 두었습니다. [Launch-On-Boot](https://github.com/ITVlab/Launch-On-Boot) · [Android 공식 문서](https://developer.android.com/guide/components/activities/background-starts)

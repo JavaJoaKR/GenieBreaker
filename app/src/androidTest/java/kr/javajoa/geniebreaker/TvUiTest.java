@@ -67,7 +67,15 @@ public class TvUiTest {
             capture(instrumentation, "genie-storage-ui.png");
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            capture(instrumentation, "genie-mapping-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            capture(instrumentation, "genie-startup-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             capture(instrumentation, "genie-settings-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);

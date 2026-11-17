@@ -7,6 +7,7 @@ import 'remote_tile.dart';
 import 'shell_frame.dart';
 import 'storage_summary.dart';
 import 'tv_dialogs.dart';
+import 'tv_controls.dart';
 import 'tv_theme.dart';
 
 typedef _Folder = ({String path, String name});
@@ -822,17 +823,50 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
               content = explorer();
             case 'storage':
               content = storagePage();
+            case 'mapping':
+            case 'startup':
+              final state = widget.data['controls'] as Map? ?? {};
+              final mapping = tab == 'mapping';
+              final actions = mapping ? mappingActions(state) : startupActions(state);
+              rows = [
+                for (final action in actions) [action.id],
+              ];
+              content = scroll([
+                for (final action in actions)
+                  tile(
+                    action.id,
+                    action.title,
+                    () => call(action.method, action.keyCode),
+                    subtitle: action.detail,
+                    icon: action.icon,
+                  ),
+                const SizedBox(height: 8),
+                Text(
+                  mapping
+                      ? 'TV가 앱에 전달하는 버튼만 지정할 수 있습니다.'
+                      : '재부팅당 한 번 실행합니다. 리모컨으로 TV를 깨울 때도 실행하려면 대기 해제 옵션을 켜세요.',
+                  style: const TextStyle(color: muted),
+                ),
+              ]);
             case 'shortcuts':
               rows = [
                 ['shortcut:apps'],
+                ['shortcut:accessibility'],
               ];
               content = scroll([
                 tile(
                   'shortcut:apps',
-                  '앱 목록 설정',
+                  '앱 목록',
                   () => call('appSettings'),
                   subtitle: 'Android TV 설정에서 설치된 앱을 관리합니다',
-                  icon: Icons.open_in_new_rounded,
+                  icon: Icons.apps_rounded,
+                ),
+                tile(
+                  'shortcut:accessibility',
+                  '접근성',
+                  () => call('accessibility'),
+                  subtitle: '리모컨 서비스와 접근성 기능을 설정합니다',
+                  icon: Icons.accessibility_new_rounded,
                 ),
               ]);
             default:
@@ -870,6 +904,14 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           final section = TvTab.values.byName(tab);
           final contextLabel = switch (section) {
             TvTab.bluetooth when widget.data['searching'] == true => '검색 중',
+            TvTab.mapping => '${(widget.data['controls']?['bindings'] as List? ?? []).length}개 지정',
+            TvTab.startup =>
+              (widget.data['controls']?['startupName'] as String? ?? '').isEmpty
+                  ? '사용 안 함'
+                  : widget.data['controls']?['needsOverlay'] == true &&
+                        widget.data['controls']?['canStart'] != true
+                  ? '권한 필요'
+                  : '사용 중',
             TvTab.apps => '${(widget.data['apps']?['items'] as List? ?? []).length}개 앱',
             TvTab.files when files.isNotEmpty => '${(files['entries'] as List? ?? []).length}개 항목',
             _ => null,

@@ -8,6 +8,8 @@ enum TvTab {
   shortcuts('바로가기', Icons.open_in_new_rounded),
   files('파일탐색기', Icons.folder_outlined),
   storage('저장공간', Icons.storage_rounded),
+  mapping('버튼 맵핑', Icons.gamepad_outlined),
+  startup('시작 앱', Icons.power_settings_new_rounded),
   settings('설정', Icons.settings_outlined);
 
   final String title;

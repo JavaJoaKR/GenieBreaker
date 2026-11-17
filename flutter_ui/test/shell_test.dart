@@ -53,11 +53,41 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'shortcut:apps');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'appSettings');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:accessibility');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accessibility');
     await arrow(tester, LogicalKeyboardKey.arrowLeft);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'storage:refresh');
     expect(find.textContaining('전체 8 GB'), findsOneWidget);
     expect(find.text('저장소 연결'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Mapping and startup controls work with the remote on compact screens', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(640, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      calls.add(call);
+      if (call.method == 'ready') return {...shell(), 'controls': {
+        'mappingActive': true, 'bindings': [{'key': 183, 'label': '빨간색', 'action': '홈 화면'}],
+        'needsOverlay': true, 'canStart': false, 'startupName': '샘플 TV 앱',
+      }};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'mapping:service');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
+    expect(calls.last.method, 'chooseButton');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
+    expect(calls.last.method, 'editButton'); expect(calls.last.arguments, 183);
+    await arrow(tester, LogicalKeyboardKey.arrowLeft); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(find.text('권한 필요'), findsOneWidget);
+    for (final method in ['chooseStartup', 'startupPermission', 'toggleWake', 'testStartup', 'clearStartup']) {
+      await arrow(tester, LogicalKeyboardKey.select); expect(calls.last.method, method);
+      await arrow(tester, LogicalKeyboardKey.arrowDown);
+    }
     expect(tester.takeException(), isNull);
   });
   testWidgets('Folder Back restores originating row and cleanup is absent from explorer', (tester) async {
