@@ -16,9 +16,9 @@ Android permission, pairing, picker and installer screens remain system-owned.
 
 ## Design system
 
-- Canvas #0D1420; panel #172233; raised #1B293B; focus fill #2D4665.
-- Primary text #F3F6FC; secondary #AAB7C9; action accent #9DC5FF.
-- Selected: subdued whole-surface #193554 and selection icon. Focused: 2 logical
+- Canvas #0D1521, navigation #121F2F, panel #192738, raised #203044 and focus fill #304C6A.
+- Primary text #F4F6FB, secondary #B2BFD2 and action accent #AACAFF.
+- Selected: subdued whole-surface #203B58 and a trailing check. The tab icon keeps its identity. Focused: 2 logical
   pixel white full outline. No decorative left bars, glow or gradients.
 - Linear donor: three luminance layers, one accent, quiet 1px structural borders.
   Apple donor: 2px focus outline, 8px spacing base, 400/500/600 type roles,
@@ -36,6 +36,7 @@ Android permission, pairing, picker and installer screens remain system-owned.
 
 ## Layout and interaction
 
+- A compact navigation rail anchors the six screens. Its footer shows the installed version. Content headers can show a live item count or scan state.
 - Full-height fixed sidebar; independently scrollable content. Six tabs:
   Bluetooth, apps, shortcuts, files, storage, settings.
 - Up/Down in sidebar stays there. Right opens the chosen tab and restores its last
@@ -45,9 +46,14 @@ Android permission, pairing, picker and installer screens remain system-owned.
 - App grid uses stable package keys, adaptive columns and explicit directions.
 - Explorer provides connected-storage roots, folder navigation, sort, refresh,
   mkdir, copy, cut/paste, rename, delete, open/install and local details. Each row
-  has a separately focusable file-actions button. Only permitted roots are shown.
+  has a separately focusable file-actions button. Down from any toolbar action
+  enters the first file row. Up from that row returns to the initiating action.
+  The breadcrumb uses display names and keeps the current folder visible. From
+  two or more levels deep, the storage list is one action away even if the
+  parent folder is unavailable. Only permitted roots are shown.
 - Left at content's first column returns to sidebar. Back inside a nested folder
   returns to its parent and originating row; at top-level returns to sidebar.
+- Storage shows free and total capacity together above the usage bar. File information has a single Close action and only shows a known modification date.
 - Storage is a separate tab. Cleanup only affects app-owned APKs, updates and
   caches. Destructive actions default to Cancel; progress rejects duplicate work.
 - Menus stay within the same Flutter surface and exclude background focus.

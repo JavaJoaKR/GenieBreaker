@@ -7,6 +7,7 @@ on:
       - 'settings.gradle'
       - 'app/build.gradle'
       - '.github/workflows/tv-ui.yml'
+      - '.github/scripts/verify-tv-startup.sh'
   workflow_dispatch:
 permissions:
   contents: read
@@ -56,10 +57,16 @@ jobs:
             adb pull /sdcard/Download/genie-app-ui.png app-ui.png
             adb pull /sdcard/Download/genie-flutter-menu.png flutter-menu.png
             adb pull /sdcard/Download/genie-files-ui.png files-ui.png
+            adb pull /sdcard/Download/genie-file-path-ui.png file-path-ui.png
             adb pull /sdcard/Download/genie-storage-ui.png storage-ui.png
+            adb pull /sdcard/Download/genie-mapping-ui.png mapping-ui.png
+            adb pull /sdcard/Download/genie-startup-ui.png startup-ui.png
+            adb pull /sdcard/Download/genie-settings-ui.png settings-ui.png
             adb pull /sdcard/Download/genie-shortcuts-ui.png shortcuts-ui.png
             adb pull /sdcard/Download/genie-popup-depth.png popup-depth.png
             adb pull /sdcard/Download/genie-clone-options.png clone-options.png
+            adb pull /sdcard/Download/genie-per-app-options.png per-app-options.png
+            bash .github/scripts/verify-tv-startup.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -69,8 +76,13 @@ jobs:
             app-ui.png
             flutter-menu.png
             files-ui.png
+            file-path-ui.png
             storage-ui.png
+            mapping-ui.png
+            startup-ui.png
+            settings-ui.png
             shortcuts-ui.png
             popup-depth.png
             clone-options.png
+            per-app-options.png
             app/build/reports/androidTests/connected/debug/

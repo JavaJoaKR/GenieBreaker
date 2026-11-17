@@ -53,11 +53,41 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'shortcut:apps');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'appSettings');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:accessibility');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accessibility');
     await arrow(tester, LogicalKeyboardKey.arrowLeft);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'storage:refresh');
     expect(find.textContaining('전체 8 GB'), findsOneWidget);
     expect(find.text('저장소 연결'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Mapping and startup controls work with the remote on compact screens', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(640, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      calls.add(call);
+      if (call.method == 'ready') return {...shell(), 'controls': {
+        'mappingActive': true, 'bindings': [{'key': 183, 'label': '빨간색', 'action': '홈 화면'}],
+        'needsOverlay': true, 'canStart': false, 'startupName': '샘플 TV 앱',
+      }};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'mapping:service');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
+    expect(calls.last.method, 'chooseButton');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
+    expect(calls.last.method, 'editButton'); expect(calls.last.arguments, 183);
+    await arrow(tester, LogicalKeyboardKey.arrowLeft); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(find.text('권한 필요'), findsOneWidget);
+    for (final method in ['chooseStartup', 'startupPermission', 'toggleWake', 'testStartup', 'clearStartup']) {
+      await arrow(tester, LogicalKeyboardKey.select); expect(calls.last.method, method);
+      await arrow(tester, LogicalKeyboardKey.arrowDown);
+    }
     expect(tester.takeException(), isNull);
   });
   testWidgets('Folder Back restores originating row and cleanup is absent from explorer', (tester) async {
@@ -80,6 +110,104 @@ void main() {
     expect(find.text('상위 폴더'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('Every file toolbar button reaches the first entry and Up returns to the initiating button', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'files.list') return {
+        'entries': [{'path': 'local:', 'name': '내 파일', 'directory': true}],
+        'writable': false, 'clipboard': '',
+      };
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    for (final id in ['files:refresh', 'files:sort', 'files:pick']) {
+      expect(focus, id);
+      await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'file:local:');
+      await arrow(tester, LogicalKeyboardKey.arrowUp); expect(focus, id);
+      await arrow(tester, LogicalKeyboardKey.arrowRight);
+    }
+  });
+
+  testWidgets('Deep folder path survives a failed Back and jumps to an available storage root', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(640, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var disconnected = false;
+    const usb = 'content://sample/one';
+    const pictures = 'content://sample/two';
+    final requests = <String>[];
+    Map<String, dynamic> folder(String path, String name) => {'path': path, 'name': name, 'directory': true};
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method != 'files.list') return null;
+      final path = call.arguments as String;
+      requests.add(path);
+      if (disconnected && path.isNotEmpty) throw PlatformException(code: 'files', message: '저장소를 읽을 수 없습니다');
+      final entries = switch (path) {
+        '' => [folder('local:', '내 파일'), if (!disconnected) folder(usb, 'USB 저장장치')],
+        usb => [folder(pictures, '사진')],
+        _ => [],
+      };
+      return {'entries': entries, 'writable': false, 'clipboard': '', 'title': 'provider-id'};
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, 'file:$usb');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(find.text('저장소 목록'), findsNothing);
+    expect(focus, 'file:$pictures');
+    await arrow(tester, LogicalKeyboardKey.arrowUp); expect(focus, 'files:up');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'file:$pictures');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(find.text('USB 저장장치  ›  사진'), findsOneWidget);
+    expect(find.text('폴더가 비어 있습니다'), findsOneWidget);
+
+    await arrow(tester, LogicalKeyboardKey.escape);
+    expect(focus, 'file:$pictures');
+    await arrow(tester, LogicalKeyboardKey.select);
+    disconnected = true;
+    await arrow(tester, LogicalKeyboardKey.escape);
+    expect(find.text('저장소를 읽을 수 없습니다'), findsOneWidget);
+    expect(find.text('USB 저장장치  ›  사진'), findsOneWidget);
+    expect(focus, 'files:refresh');
+
+    await arrow(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focus, 'files:roots');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(requests, ['', usb, pictures, usb, pictures, usb, '']);
+    expect(focus, 'file:local:');
+    expect(find.text('저장소를 읽을 수 없습니다'), findsNothing);
+    expect(find.text('저장소 목록'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('File details have a single close action and omit unknown dates', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'files.list') return {
+        'entries': [{'path': 'local:note', 'name': '메모', 'directory': false, 'root': true}],
+        'writable': false, 'clipboard': '',
+      };
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.select);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(find.text('닫기'), findsOneWidget);
+    expect(find.textContaining('1970'), findsNothing);
+    expect(find.text('취소'), findsNothing);
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(focus, 'file:local:note');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Same-identity late names and background refresh preserve focus', (tester) async {
     await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
     await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);

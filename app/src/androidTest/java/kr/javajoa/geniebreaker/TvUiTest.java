@@ -50,6 +50,12 @@ public class TvUiTest {
             android.os.SystemClock.sleep(500);
             capture(instrumentation, "genie-clone-options.png");
             key(instrumentation, android.view.KeyEvent.KEYCODE_BACK);
+            java.util.Map<String, Boolean> special = new java.util.HashMap<>(options);
+            special.put("netflixCompatibility", false);
+            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.cloneOptions(activity, "넷플릭스 TV", special, values -> kotlin.Unit.INSTANCE));
+            android.os.SystemClock.sleep(500);
+            capture(instrumentation, "genie-per-app-options.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_BACK);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
@@ -59,12 +65,45 @@ public class TvUiTest {
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             android.os.SystemClock.sleep(500);
             capture(instrumentation, "genie-storage-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            capture(instrumentation, "genie-mapping-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            capture(instrumentation, "genie-startup-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            capture(instrumentation, "genie-settings-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             android.os.SystemClock.sleep(300);
             capture(instrumentation, "genie-shortcuts-ui.png");
+            captureFolderPath(instrumentation, activity);
         } finally { instrumentation.runOnMainSync(activity::finish); }
+    }
+    private void captureFolderPath(Instrumentation instrumentation, MainActivity activity) throws Exception {
+        File album = new File(activity.getFilesDir(), "browser/사진");
+        assertTrue("Expected a new test folder", album.mkdir());
+        File trip = new File(album, "여행");
+        try {
+            assertTrue(trip.mkdir());
+            // Start on the Shortcuts sidebar. Enter Files, My Files, then the album.
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_RIGHT);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_RIGHT);
+            capture(instrumentation, "genie-file-path-ui.png");
+        } finally {
+            trip.delete();
+            album.delete();
+        }
     }
     private void key(Instrumentation instrumentation, int code) {
         instrumentation.sendKeyDownUpSync(code);
