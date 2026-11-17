@@ -106,15 +106,19 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     final next = await call('storage.list');
     if (mounted && next is Map) setState(() => storage = Map<String, dynamic>.from(next));
   }
-  Future<bool> loadFiles(String path) async {
+  Future<bool> loadFiles(String path, {bool restoreSelection = false}) async {
     final request = ++fileRequest;
     final previous = focused;
+    final sameLocation = path == location;
     final next = await call('files.list', path);
     if (!mounted || request != fileRequest || next is! Map) return false;
     setState(() { files = Map<String, dynamic>.from(next); location = path; });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || tab != 'files' || widget.obscured || onSidebar) return;
       final candidates = rows.expand((r) => r);
+      // A refresh must not move focus back to the control that started it if the
+      // user has already moved elsewhere while the provider was answering.
+      if (sameLocation && !restoreSelection && candidates.contains(focused)) return;
       final saved = folderFocus[path];
       if (saved != null && candidates.contains(saved)) { focus(saved); }
       else if (previous != null && candidates.contains(previous)) { focus(previous); }
@@ -273,7 +277,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     setState(() => busy = true);
     final response = await call('files.action', {'action': action, 'path': path ?? location, 'parent': location, if (name != null) 'name': name});
     if (response is Map && (response['selected'] as String? ?? '').isNotEmpty) folderFocus[location] = 'file:${response['selected']}';
-    await loadFiles(location);
+    await loadFiles(location, restoreSelection: true);
     if (mounted) setState(() => busy = false);
   }
   Future<void> fileMenu(Map entry) async {

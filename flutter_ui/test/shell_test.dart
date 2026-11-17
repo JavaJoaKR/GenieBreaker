@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -157,6 +158,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(focus, 'app:first');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('A slow folder refresh never steals focus from a later user action', (tester) async {
+    final response = Completer<Map<String, dynamic>>();
+    var lists = 0;
+    final folder = <String, dynamic>{'title': '파일탐색기', 'entries': [], 'writable': false, 'clipboard': ''};
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'files.list') return ++lists == 1 ? folder : response.future;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'files:refresh');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select); await tester.pump();
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'files:sort');
+    response.complete(folder); await tester.pumpAndSettle();
+    expect(focus, 'files:sort'); expect(tester.takeException(), isNull);
   });
 
 }
