@@ -62,6 +62,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         addView(status, LayoutParams(-1, dp(36)).apply { topMargin = dp(10); bottomMargin = dp(8) })
         val shelf = FrameLayout(activity)
         addView(shelf, LayoutParams(-1, 0, 1f))
+        grid.selector = TvDesign.shape(activity, Color.TRANSPARENT, 10, TvDesign.ink); grid.setDrawSelectorOnTop(true)
         grid.numColumns = if (resources.configuration.screenWidthDp >= 1100) 4 else 3; grid.columnWidth = dp(160); grid.horizontalSpacing = dp(12); grid.verticalSpacing = dp(12)
         grid.stretchMode = GridView.STRETCH_COLUMN_WIDTH; grid.clipToPadding = false; grid.setPadding(dp(3), dp(3), dp(3), dp(3))
         if (Build.VERSION.SDK_INT >= 26) grid.setDefaultFocusHighlightEnabled(false)

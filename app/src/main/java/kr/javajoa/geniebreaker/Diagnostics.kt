@@ -26,7 +26,7 @@ internal object Diagnostics {
     @Synchronized fun install(context: Context) {
         if (installed) return
         installed = true
-        // Old logs may contain raw stack messages; discard them on the first offline run.
+        // Old logs may contain raw stack messages; discard them on the first codes-only run.
         val prefs = context.getSharedPreferences("local_diagnostics", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("codes_only", false)) { clear(context); prefs.edit().putBoolean("codes_only", true).apply() }
         val previous = Thread.getDefaultUncaughtExceptionHandler()

@@ -409,7 +409,7 @@ class MainActivity : Activity() {
     private inner class SymbolView(kind: String, color: Int) : ImageView(this@MainActivity) {
         var kind: String = kind
             set(value) { field = value; updateIcon() }
-        init { scaleType = ScaleType.FIT_CENTER; imageTintList = android.content.res.ColorStateList.valueOf(color); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO; updateIcon() }
+        init { scaleType = ImageView.ScaleType.FIT_CENTER; imageTintList = android.content.res.ColorStateList.valueOf(color); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO; updateIcon() }
         private fun updateIcon() { setImageResource(when (kind) { "audio" -> R.drawable.ic_audio; "input" -> R.drawable.ic_input; "search" -> R.drawable.ic_search; else -> R.drawable.ic_bluetooth }) }
     }
     private fun access() = if (Build.VERSION.SDK_INT >= 31) {

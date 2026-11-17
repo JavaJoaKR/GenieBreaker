@@ -93,7 +93,10 @@ class TvMenuActivity : FlutterActivity() {
                 "build" -> {
                     val values = call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()
                     val chosen = page.options.mapValues { (key, fallback) -> values[key] as? Boolean ?: fallback }
-                    page.optionsAction?.invoke(chosen)
+                    try { page.optionsAction?.invoke(chosen) } catch (error: Exception) {
+                        val code = Diagnostics.record(this@TvMenuActivity, "Clone request", error)
+                        TvMenus.notice(this@TvMenuActivity, "요청을 처리하지 못했습니다. [$code]")
+                    }
                     result.success(null)
                     if (pages.lastOrNull() === page) finish()
                 }
