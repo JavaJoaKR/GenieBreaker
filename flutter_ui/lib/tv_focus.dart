@@ -5,6 +5,8 @@ class TvFocusPolicy extends FocusTraversalPolicy {
   @override
   Iterable<FocusNode> sortDescendants(Iterable<FocusNode> descendants, FocusNode currentNode) => descendants;
   @override
+  FocusNode? findFirstFocusInDirection(FocusNode currentNode, TraversalDirection direction) => findFirstFocus(currentNode);
+  @override
   bool inDirection(FocusNode currentNode, TraversalDirection direction) {
     final origin = currentNode.rect;
     final vertical = direction == TraversalDirection.up || direction == TraversalDirection.down;
