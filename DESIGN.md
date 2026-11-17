@@ -45,7 +45,11 @@ Android permission, pairing, picker and installer screens remain system-owned.
 - App grid uses stable package keys, adaptive columns and explicit directions.
 - Explorer provides connected-storage roots, folder navigation, sort, refresh,
   mkdir, copy, cut/paste, rename, delete, open/install and local details. Each row
-  has a separately focusable file-actions button. Only permitted roots are shown.
+  has a separately focusable file-actions button. Down from any toolbar action
+  enters the first file row. Up from that row returns to the initiating action.
+  The breadcrumb uses display names and keeps the current folder visible. From
+  two or more levels deep, the storage list is one action away even if the
+  parent folder is unavailable. Only permitted roots are shown.
 - Left at content's first column returns to sidebar. Back inside a nested folder
   returns to its parent and originating row; at top-level returns to sidebar.
 - Storage is a separate tab. Cleanup only affects app-owned APKs, updates and

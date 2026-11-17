@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'main.dart';
 import 'tv_focus.dart';
 
+typedef _Folder = ({String path, String name});
+
 /// Stable focus identities and explicit arrows keep async device/app updates from stealing focus.
 class AppHome extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -17,12 +19,14 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   static const icons = [Icons.bluetooth_rounded, Icons.apps_rounded, Icons.open_in_new_rounded, Icons.folder_outlined, Icons.storage_rounded, Icons.settings_outlined];
   final nodes = <String, FocusNode>{};
   final remembered = <String, String>{};
-  final history = <String>[];
+  List<_Folder> _trail = [];
+  String? fileToolbarFocus;
+  String? listingError;
   final folderFocus = <String, String>{};
   final contentScope = FocusScopeNode(debugLabel: 'content-scope');
   final sidebarScope = FocusScopeNode(debugLabel: 'sidebar-scope');
   String tab = 'bluetooth';
-  String location = '';
+  String get location => _trail.lastOrNull?.path ?? '';
   Map<String, dynamic> files = {};
   Map<String, dynamic> storage = {};
   bool busy = false;
@@ -60,7 +64,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && !widget.obscured) {
       restore(); call('refreshShell');
-      if (tab == 'files') loadFiles(location);
+      if (tab == 'files') refreshFiles();
       if (tab == 'storage') loadStorage();
     }
   }
@@ -98,7 +102,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     focus('nav:$next');
     enteringTab = enterContent ? next : null; pendingKeys.clear();
     setState(() { tab = next; error = null; });
-    if (next == 'files') loadFiles(location);
+    if (next == 'files') refreshFiles();
     if (next == 'storage') loadStorage();
     if (next == 'apps') call('refreshShell');
     if (enterContent) WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -117,39 +121,68 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     final next = await call('storage.list');
     if (mounted && next is Map) setState(() => storage = Map<String, dynamic>.from(next));
   }
-  Future<bool> loadFiles(String path, {bool restoreSelection = false}) async {
+  void refreshFiles() {
+    if (!busy) _loadFiles();
+  }
+
+  Future<void> _loadFiles({List<_Folder>? destination, bool restoreSelection = false}) async {
     final request = ++fileRequest;
     final previous = focused;
-    final sameLocation = path == location;
-    final next = await call('files.list', path);
-    if (!mounted || request != fileRequest || next is! Map) return false;
-    setState(() { files = Map<String, dynamic>.from(next); location = path; });
+    final path = destination == null ? location : destination.lastOrNull?.path ?? '';
+    late final Map<String, dynamic> next;
+    try {
+      final response = await bridge.invokeMapMethod<String, dynamic>('files.list', path);
+      if (response == null) throw StateError('Missing listing');
+      next = response;
+    } catch (e) {
+      if (mounted && request == fileRequest) {
+        setState(() => listingError = e is PlatformException && e.message != null
+            ? e.message
+            : '폴더를 읽지 못했습니다. 새로고침해 주세요. [GB-UI-0001]');
+      }
+      return;
+    }
+    if (!mounted || request != fileRequest) return;
+    setState(() {
+      files = next;
+      listingError = null;
+      if (destination != null) _trail = destination;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || tab != 'files' || widget.obscured || onSidebar) return;
+      if (!mounted || request != fileRequest || tab != 'files' || widget.obscured || onSidebar) return;
       final candidates = rows.expand((r) => r);
       // A refresh must not move focus back to the control that started it if the
       // user has already moved elsewhere while the provider was answering.
-      if (sameLocation && !restoreSelection && candidates.contains(focused)) return;
+      if (destination == null && !restoreSelection && candidates.contains(focused)) return;
       final saved = folderFocus[path];
       if (saved != null && candidates.contains(saved)) { focus(saved); }
       else if (previous != null && candidates.contains(previous)) { focus(previous); }
       else { focus(candidates.firstWhere((id) => id.startsWith('file:'), orElse: () => 'files:refresh')); }
     });
-    return true;
   }
-  Future<void> openFolder(String path) async {
+
+  Future<void> _browseTo(List<_Folder> destination) async {
     if (busy) return;
-    final parent = location;
-    if (focused != null) folderFocus[parent] = focused!;
     setState(() => busy = true);
-    try { if (await loadFiles(path)) history.add(parent); }
-    finally { if (mounted) setState(() => busy = false); }
+    try {
+      await _loadFiles(destination: destination);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
+
+  Future<void> openFolder(Map entry, {String? opener}) async {
+    if (busy) return;
+    final path = entry['path'] as String;
+    folderFocus[location] = (opener ?? focused) == 'more:$path' ? 'more:$path' : 'file:$path';
+    await _browseTo([..._trail, (path: path, name: entry['name'] as String)]);
+  }
+
   void back() {
     if (busy) return;
-    if (tab == 'files' && !onSidebar && history.isNotEmpty) {
-      final parent = history.last; setState(() => busy = true);
-      loadFiles(parent).then((ok) { if (ok) history.removeLast(); }).whenComplete(() { if (mounted) setState(() => busy = false); }); return;
+    if (tab == 'files' && !onSidebar && _trail.isNotEmpty) {
+      _browseTo(_trail.sublist(0, _trail.length - 1));
+      return;
     }
     if (!onSidebar) { focus('nav:$tab'); return; }
     call('exit');
@@ -208,6 +241,16 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     }
     final row = rows.indexWhere((r) => r.contains(id));
     final col = rows[row].indexOf(id);
+    if (tab == 'files' && row == 0 && key == LogicalKeyboardKey.arrowDown && rows.length > 1) {
+      fileToolbarFocus = id;
+      focus(rows[1].first);
+      return KeyEventResult.handled;
+    }
+    if (tab == 'files' && row == 1 && key == LogicalKeyboardKey.arrowUp) {
+      final origin = fileToolbarFocus;
+      focus(origin != null && rows.first.contains(origin) ? origin : rows.first.first);
+      return KeyEventResult.handled;
+    }
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (col == 0) { focus('nav:$tab'); } else { focus(rows[row][col - 1]); }
     } else if (key == LogicalKeyboardKey.arrowRight) {
@@ -297,7 +340,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     setState(() => busy = true);
     final response = await call('files.action', {'action': action, 'path': path ?? location, 'parent': location, if (name != null) 'name': name});
     if (response is Map && (response['selected'] as String? ?? '').isNotEmpty) folderFocus[location] = 'file:${response['selected']}';
-    await loadFiles(location, restoreSelection: true);
+    await _loadFiles(restoreSelection: true);
     if (mounted) setState(() => busy = false);
   }
   Future<void> fileMenu(Map entry) async {
@@ -310,7 +353,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       body: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [for (var i = 0; i < actions.length; i++) RemoteTile(actions[i], autofocus: i == 0, onTap: () => Navigator.pop(ctx, actions[i]))])),
     )))));
     if (!mounted) return;
-    if (action == '열기') { if (entry['directory'] == true) { await openFolder(path); } else { await call('open', path); } }
+    if (action == '열기') { if (entry['directory'] == true) { await openFolder(entry, opener: opener); } else { await call('open', path); } }
     if (action == '복사' || action == '이동') await fileAction(action == '복사' ? 'copy' : 'cut', path: path);
     if (action == '이름 변경') { final name = await inputName('이름 변경', entry['name'] as String); if (mounted && name != null) await fileAction('rename', path: path, name: name); }
     if (action == '삭제') await dialogAction('삭제할까요?', '${entry['name']}\n폴더 안의 파일도 삭제되며 되돌릴 수 없습니다.', () => fileAction('delete', path: path));
@@ -325,20 +368,32 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       if (sort == 'date') return ((b['modified'] as num? ?? 0).compareTo(a['modified'] as num? ?? 0));
       return (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase());
     });
-    rows = [[if (history.isNotEmpty) 'files:up', 'files:refresh', 'files:sort', 'files:pick', if (files['writable'] == true) 'files:new', if (files['writable'] == true && files['clipboard'] != '') 'files:paste'],
+    rows = [[if (_trail.isNotEmpty) 'files:up', if (_trail.length > 1) 'files:roots', 'files:refresh', 'files:sort', 'files:pick', if (files['writable'] == true) 'files:new', if (files['writable'] == true && files['clipboard'] != '') 'files:paste'],
       for (final e in entries) ['file:${e['path']}', 'more:${e['path']}']];
+    final emptyMessage = files.isEmpty
+        ? '저장소 목록을 불러오는 중입니다'
+        : _trail.isEmpty ? '연결된 저장소가 없습니다' : '폴더가 비어 있습니다';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(location.isEmpty ? '내 파일 · 연결한 저장소' : '파일탐색기  ›  ${files['title'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted)), const SizedBox(height: 12),
-      toolbar([if (history.isNotEmpty) button('files:up', '상위 폴더', back), button('files:refresh', '새로고침', () => loadFiles(location)),
+      Align(alignment: Alignment.centerLeft, child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal, reverse: true,
+        child: Text(_trail.isEmpty ? '내 파일 · 연결한 저장소' : _trail.map((folder) => folder.name).join('  ›  '),
+          maxLines: 1, style: const TextStyle(color: muted)),
+      )), const SizedBox(height: 12),
+      toolbar([if (_trail.isNotEmpty) button('files:up', '상위 폴더', back),
+        if (_trail.length > 1) button('files:roots', '저장소 목록', () => _browseTo([])),
+        button('files:refresh', '새로고침', refreshFiles),
         button('files:sort', '정렬: ${sort == 'name' ? '이름' : sort == 'size' ? '크기' : '수정일'}', () => setState(() { sort = sort == 'name' ? 'size' : sort == 'size' ? 'date' : 'name'; })),
         button('files:pick', '저장소 연결', () => call('pick')),
         if (files['writable'] == true) button('files:new', '새 폴더', () async { final name = await inputName('새 폴더'); if (mounted && name != null) await fileAction('mkdir', name: name); }),
         if (files['writable'] == true && files['clipboard'] != '') button('files:paste', '붙여넣기', () => fileAction('paste'))]),
       if ((files['clipboard'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('${files['cut'] == true ? '이동' : '복사'}: ${files['clipboard']}', style: const TextStyle(color: blue))),
+      if (listingError != null) Padding(padding: const EdgeInsets.only(bottom: 8),
+        child: Text(listingError!, style: const TextStyle(color: Colors.orangeAccent))),
       if (busy) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
       if (location.isEmpty) const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('내부 저장소·USB는 저장소 연결에서 폴더 접근을 허용하세요.', style: TextStyle(color: muted, fontSize: 12))),
-      Expanded(child: entries.isEmpty ? const Center(child: Text('폴더가 비어 있습니다', style: TextStyle(color: muted))) : scroll([
-        for (final e in entries) Row(children: [Expanded(child: tile('file:${e['path']}', e['name'] as String, () { if (e['directory'] == true) { openFolder(e['path'] as String); } else { fileMenu(e); } },
+      Expanded(child: entries.isEmpty ? Center(child: listingError == null
+          ? Text(emptyMessage, style: const TextStyle(color: muted)) : null) : scroll([
+        for (final e in entries) Row(children: [Expanded(child: tile('file:${e['path']}', e['name'] as String, () { if (e['directory'] == true) { openFolder(e); } else { fileMenu(e); } },
           subtitle: e['detail'] as String?, icon: e['directory'] == true ? Icons.folder_outlined : Icons.insert_drive_file_outlined)),
           const SizedBox(width: 8), IconButton(focusNode: node('more:${e['path']}'), tooltip: '파일 작업', onPressed: () => fileMenu(e), icon: const Icon(Icons.more_horiz_rounded))]),
       ])),
@@ -393,7 +448,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       ])));
     }),
   ));
-  void filesChanged() { if (tab == 'files') loadFiles(location); }
+  void filesChanged() { if (tab == 'files') refreshFiles(); }
   @override
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(rescueFocus);
