@@ -59,6 +59,10 @@ public class TvUiTest {
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             android.os.SystemClock.sleep(500);
             capture(instrumentation, "genie-storage-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            capture(instrumentation, "genie-settings-ui.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_UP);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);

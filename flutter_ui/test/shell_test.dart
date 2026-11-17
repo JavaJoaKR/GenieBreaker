@@ -154,6 +154,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('File details have a single close action and omit unknown dates', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'files.list') return {
+        'entries': [{'path': 'local:note', 'name': '메모', 'directory': false, 'root': true}],
+        'writable': false, 'clipboard': '',
+      };
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.select);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(find.text('닫기'), findsOneWidget);
+    expect(find.textContaining('1970'), findsNothing);
+    expect(find.text('취소'), findsNothing);
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(focus, 'file:local:note');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Same-identity late names and background refresh preserve focus', (tester) async {
     await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
     await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);

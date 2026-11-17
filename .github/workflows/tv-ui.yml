@@ -58,6 +58,7 @@ jobs:
             adb pull /sdcard/Download/genie-files-ui.png files-ui.png
             adb pull /sdcard/Download/genie-file-path-ui.png file-path-ui.png
             adb pull /sdcard/Download/genie-storage-ui.png storage-ui.png
+            adb pull /sdcard/Download/genie-settings-ui.png settings-ui.png
             adb pull /sdcard/Download/genie-shortcuts-ui.png shortcuts-ui.png
             adb pull /sdcard/Download/genie-popup-depth.png popup-depth.png
             adb pull /sdcard/Download/genie-clone-options.png clone-options.png
@@ -72,6 +73,7 @@ jobs:
             files-ui.png
             file-path-ui.png
             storage-ui.png
+            settings-ui.png
             shortcuts-ui.png
             popup-depth.png
             clone-options.png
