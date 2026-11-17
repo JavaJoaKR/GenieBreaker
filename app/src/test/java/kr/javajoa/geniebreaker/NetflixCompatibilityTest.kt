@@ -15,7 +15,7 @@ import org.junit.rules.TemporaryFolder
 
 class NetflixCompatibilityTest {
     @get:Rule val folder = TemporaryFolder()
-    private fun fixture(count: Int = 1, static: Boolean = false, runnable: Boolean = true): java.io.File {
+    private fun fixture(count: Int = 1, static: Boolean = false, runnable: Boolean = true, opcodes: Opcodes = Opcodes.getDefault()): java.io.File {
         val classes = (0 until count).map { index ->
             val type = "Lfixture/Check$index;"
             val body = ImmutableMethodImplementation(1, listOf(
@@ -28,7 +28,7 @@ class NetflixCompatibilityTest {
             ImmutableClassDef(type, AccessFlags.PUBLIC.value, "Ljava/lang/Object;",
                 if (runnable) listOf("Ljava/lang/Runnable;") else emptyList(), null, emptySet(), emptyList(), listOf(target, untouched))
         }
-        return folder.newFile().also { DexPool.writeTo(it.absolutePath, ImmutableDexFile(Opcodes.getDefault(), classes)) }
+        return folder.newFile().also { DexPool.writeTo(it.absolutePath, ImmutableDexFile(opcodes, classes)) }
     }
     @Test fun roundTripReplacesOnlyUniqueRunnableAndPreservesOtherMethods() {
         val input = fixture()
@@ -42,6 +42,13 @@ class NetflixCompatibilityTest {
         assertEquals(listOf(Opcode.RETURN_VOID), result.classes.single().methods.first { it.name == "run" }.implementation!!.instructions.map { it.opcode })
         assertEquals(before.classes.single().methods.first { it.name == "other" }.implementation!!.instructions.map { it.opcode },
             result.classes.single().methods.first { it.name == "other" }.implementation!!.instructions.map { it.opcode })
+    }
+    @Test fun modernDexVersionIsRetained() {
+        val input = fixture(opcodes = Opcodes.forDexVersion(39))
+        val output = folder.newFile()
+        NetflixCompatibility.patch(input, NetflixCompatibility.candidates(NetflixCompatibility.read(input)).single(), output)
+        assertEquals(NetflixCompatibility.read(input).opcodes.api, NetflixCompatibility.read(output).opcodes.api)
+        assertEquals("dex\n039", output.readBytes().take(7).toByteArray().toString(Charsets.US_ASCII))
     }
     @Test fun absentAndAmbiguousPatternsAreRejectedWithoutOutput() {
         for (count in listOf(0, 2)) {

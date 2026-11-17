@@ -2,7 +2,6 @@ package kr.javajoa.geniebreaker
 
 import org.jf.dexlib2.AccessFlags
 import org.jf.dexlib2.Opcode
-import org.jf.dexlib2.Opcodes
 import org.jf.dexlib2.dexbacked.DexBackedDexFile
 import org.jf.dexlib2.iface.DexFile
 import org.jf.dexlib2.iface.Method
@@ -36,7 +35,7 @@ internal object NetflixCompatibility {
 
     fun read(file: File): DexFile {
         require(file.length() in 1..(48L * 1024 * 1024)) { "DEX가 비어 있거나 32비트 처리 한도(48MB)를 초과했습니다." }
-        return file.inputStream().buffered().use { DexBackedDexFile.fromInputStream(Opcodes.getDefault(), it) }
+        return file.inputStream().buffered().use { DexBackedDexFile.fromInputStream(null, it) }
     }
     private fun id(method: Method) = "${method.definingClass}->${method.name}(${method.parameterTypes.joinToString("")})${method.returnType}"
     fun candidates(dex: DexFile): List<String> = dex.classes.flatMap { type -> type.methods.filter { method ->
