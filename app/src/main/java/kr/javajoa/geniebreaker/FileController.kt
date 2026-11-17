@@ -3,7 +3,6 @@ package kr.javajoa.geniebreaker
 import android.app.Activity
 import android.content.*
 import android.net.Uri
-import android.os.StatFs
 import android.provider.DocumentsContract as Docs
 import android.provider.Settings
 import android.text.format.Formatter
@@ -38,7 +37,7 @@ internal class FileController(private val activity: Activity, private val change
             try {
                 val answer: Any? = when (call.method) {
                     "files.list" -> FileWork.reading { listing(call.arguments as? String ?: "") }
-                    "storage.list" -> storage()
+                    "storage.list" -> StorageTools.snapshot(activity)
                     "clean" -> StorageTools.clean(activity, call.arguments as String)
                     "open" -> { open(call.arguments as String); null }
                     else -> mutate(call.arguments as Map<*, *>)
@@ -212,14 +211,6 @@ internal class FileController(private val activity: Activity, private val change
             return mapOf("selected" to selected)
         } finally { FileWork.lock.writeLock().unlock() }
     }
-    private fun storage(): Map<String, Any> = FileWork.reading {
-        val stat = StatFs(activity.filesDir.path)
-        mapOf("total" to Formatter.formatFileSize(activity, stat.totalBytes), "free" to Formatter.formatFileSize(activity, stat.availableBytes),
-            "usedFraction" to (1.0 - stat.availableBytes.toDouble() / stat.totalBytes.coerceAtLeast(1)),
-            "apkSize" to Formatter.formatFileSize(activity, StorageTools.bytes(File(activity.filesDir, "edited"))),
-            "cacheSize" to Formatter.formatFileSize(activity, (StorageTools.bytes(activity.cacheDir) - StorageTools.bytes(File(activity.cacheDir, "updates")) - File(activity.cacheDir, "update.apk").length()).coerceAtLeast(0)),
-            "updateSize" to Formatter.formatFileSize(activity, StorageTools.updateBytes(activity)))
-    }
     private fun open(path: String) = FileWork.reading {
         val uri: Uri
         val type: String
@@ -266,16 +257,4 @@ internal class FileController(private val activity: Activity, private val change
         return true
     }
     fun close() { worker.shutdown() }
-}
-
-internal object BrowseFiles {
-    private data class Grant(val file: File, val expires: Long)
-    private val grants = java.util.concurrent.ConcurrentHashMap<String, Grant>()
-    fun grant(context: Context, file: File): Uri {
-        val now = System.currentTimeMillis(); grants.entries.removeIf { it.value.expires < now }
-        val id = UUID.randomUUID().toString(); grants[id] = Grant(file.canonicalFile, now + 3600000)
-        return Uri.parse("content://${context.packageName}.updates/browse/$id")
-    }
-    fun file(uri: Uri): File = grants[uri.lastPathSegment]?.takeIf { it.expires > System.currentTimeMillis() }?.file ?: throw java.io.FileNotFoundException()
-    fun type(file: File): String = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "application/octet-stream"
 }
