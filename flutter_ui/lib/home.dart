@@ -30,6 +30,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   String sort = 'name';
   int columns = 3;
   int fileRequest = 0;
+  String? enteringTab;
+  final pendingKeys = <KeyEvent>[];
   List<List<String>> rows = [];
   FocusNode node(String id) => nodes.putIfAbsent(id, () => FocusNode(debugLabel: id));
   String? get focused => FocusManager.instance.primaryFocus?.debugLabel;
@@ -83,11 +85,22 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     if (tab == next) { if (enterContent) enter(); return; }
     // Move focus before removing the old subtree; no detached focus target survives a tab switch.
     focus('nav:$next');
+    enteringTab = enterContent ? next : null; pendingKeys.clear();
     setState(() { tab = next; error = null; });
     if (next == 'files') loadFiles(location);
     if (next == 'storage') loadStorage();
     if (next == 'apps') call('refreshShell');
-    if (enterContent) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && tab == next) enter(); });
+    if (enterContent) WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || tab != next || enteringTab != next) return;
+      enteringTab = null;
+      final queued = List<KeyEvent>.from(pendingKeys); pendingKeys.clear();
+      if (widget.obscured) return;
+      enter();
+      // Focus changes normally settle in a microtask. Settle them before replaying
+      // keys that arrived while the new tab's first frame was being built.
+      FocusManager.instance.applyFocusChangesIfNeeded();
+      for (final event in queued) { key(contentScope, event); FocusManager.instance.applyFocusChangesIfNeeded(); }
+    });
   }
   Future<void> loadStorage() async {
     final next = await call('storage.list');
@@ -130,6 +143,15 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     if (widget.obscured || (event is! KeyDownEvent && event is! KeyRepeatEvent)) return KeyEventResult.ignored;
     final key = event.logicalKey;
     final id = focused;
+    if (enteringTab != null) {
+      if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+        enteringTab = null; pendingKeys.clear(); focus('nav:$tab'); return KeyEventResult.handled;
+      }
+      if ([LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight].contains(key)) {
+        if (pendingKeys.length < 8) pendingKeys.add(event);
+        return KeyEventResult.handled;
+      }
+    }
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) { back(); return KeyEventResult.handled; }
     if (![LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight].contains(key)) return KeyEventResult.ignored;
     if (id == null || (!onSidebar && !rows.any((r) => r.contains(id)))) { focus('nav:$tab'); return KeyEventResult.handled; }

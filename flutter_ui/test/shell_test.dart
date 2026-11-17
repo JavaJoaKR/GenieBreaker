@@ -145,4 +145,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Rapid arrows during a tab transition stay in the requested content', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell(apps: [{'id': 'first', 'name': 'TV 앱'}]);
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(focus, 'app:first');
+    expect(tester.takeException(), isNull);
+  });
+
 }
