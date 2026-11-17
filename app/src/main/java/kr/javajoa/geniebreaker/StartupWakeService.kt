@@ -14,13 +14,16 @@ import android.os.PowerManager
 
 /** Optional ongoing service for TVs where the power button enters standby instead of rebooting. */
 class StartupWakeService : Service() {
+    private var pendingBoot = false
     private var waitingForWake = false
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_SCREEN_OFF -> waitingForWake = true
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
-                    if (waitingForWake && !getSystemService(KeyguardManager::class.java).isDeviceLocked) {
+                    if (getSystemService(KeyguardManager::class.java).isDeviceLocked) return
+                    if (pendingBoot) finishBoot()
+                    else if (waitingForWake && configured(this@StartupWakeService)) {
                         waitingForWake = false
                         StartupApps.present(this@StartupWakeService, true)
                     }
@@ -42,9 +45,17 @@ class StartupWakeService : Service() {
         })
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.getBooleanExtra("awaitUnlock", false) == true) pendingBoot = true
+        if (pendingBoot && !getSystemService(KeyguardManager::class.java).isDeviceLocked) finishBoot()
         if (configured(this)) return START_STICKY
+        if (pendingBoot) return START_REDELIVER_INTENT
         stopSelf()
         return START_NOT_STICKY
+    }
+    private fun finishBoot() {
+        pendingBoot = false
+        waitingForWake = false
+        StartupApps.present(this, false) { if (!configured(this)) stopSelf() }
     }
     override fun onDestroy() { unregisterReceiver(receiver); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
@@ -53,9 +64,9 @@ class StartupWakeService : Service() {
         private fun configured(context: Context) = tvPreferences(context).let {
             it.contains("startup") && it.getBoolean("wake", false) && StartupApps.allowed(context)
         }
-        fun restore(context: Context): Boolean {
-            if (!configured(context)) return false
-            return try { context.startForegroundService(Intent(context, StartupWakeService::class.java)); true }
+        fun restore(context: Context, awaitUnlock: Boolean = false): Boolean {
+            if (!awaitUnlock && !configured(context)) return false
+            return try { context.startForegroundService(Intent(context, StartupWakeService::class.java).putExtra("awaitUnlock", awaitUnlock)); true }
             catch (_: IllegalStateException) { false } catch (_: SecurityException) { false }
         }
     }

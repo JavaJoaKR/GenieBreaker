@@ -89,7 +89,10 @@ internal object StartupApps {
 class StartupBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-        StartupWakeService.restore(context)
+        val locked = context.getSystemService(KeyguardManager::class.java).isDeviceLocked
+        val awaitUnlock = locked && StartupApps.allowed(context) && StartupApps.due(context, StartupApps.boot(context), false)
+        StartupWakeService.restore(context, awaitUnlock)
+        if (awaitUnlock) return
         val result = goAsync()
         StartupApps.present(context, false) { result?.finish() }
     }
