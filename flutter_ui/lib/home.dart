@@ -31,6 +31,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   int columns = 3;
   int fileRequest = 0;
   String? enteringTab;
+  String? lastSurfaceFocus;
+  String? modalOpener;
   final pendingKeys = <KeyEvent>[];
   List<List<String>> rows = [];
   FocusNode node(String id) => nodes.putIfAbsent(id, () => FocusNode(debugLabel: id));
@@ -44,7 +46,9 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant AppHome oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.obscured && !widget.obscured) restore();
+    // The shell bridge restores the exact opener. A second recovery callback
+    // here would override that pending focus with the first content control.
+    if (oldWidget.obscured && !widget.obscured) return;
     if (!widget.obscured) WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || widget.obscured) return;
       final current = FocusManager.instance.primaryFocus;
@@ -63,15 +67,21 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     final target = nodes[id];
     if (target?.context == null || !target!.canRequestFocus) return;
     target.requestFocus();
+    lastSurfaceFocus = id;
     if (!id.startsWith('nav:')) remembered[tab] = id;
     final context = target.context;
     if (context != null) Scrollable.ensureVisible(context, alignment: .5, duration: Duration.zero);
   }
-  void restore() => WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!mounted || widget.obscured) return;
-    final id = remembered[tab];
-    if (id != null && nodes[id]?.context != null) { focus(id); } else { focus('nav:$tab'); }
-  });
+  void saveModalOpener() { modalOpener = focused; }
+  void restoreModalOpener() { final opener = modalOpener; modalOpener = null; restore(target: opener); }
+  void restore({String? target}) {
+    final wanted = target ?? lastSurfaceFocus ?? remembered[tab];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.obscured) return;
+      if (wanted != null && nodes[wanted]?.context != null) { focus(wanted); } else { focus('nav:$tab'); }
+      FocusManager.instance.applyFocusChangesIfNeeded();
+    });
+  }
   void enter() {
     final ids = rows.expand((r) => r).toList();
     final id = remembered[tab];
@@ -200,8 +210,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
   Widget tile(String id, String title, VoidCallback action, {String? subtitle, IconData icon = Icons.chevron_right_rounded, Widget? image}) => RemoteTile(title,
     key: ValueKey(id), focusNode: node(id), subtitle: subtitle, icon: icon, leading: image,
-    onFocus: () { remembered[tab] = id; if (tab == 'files' && id.startsWith('file:')) folderFocus[location] = id; }, onTap: action);
-  Widget button(String id, String title, VoidCallback action) => OutlinedButton(focusNode: node(id), onPressed: action, child: Text(title));
+    onFocus: () { lastSurfaceFocus = id; remembered[tab] = id; if (tab == 'files' && id.startsWith('file:')) folderFocus[location] = id; }, onTap: action);
+  Widget button(String id, String title, VoidCallback action) => OutlinedButton(focusNode: node(id), onFocusChange: (value) { if (value) { lastSurfaceFocus = id; remembered[tab] = id; } }, onPressed: action, child: Text(title));
   Widget toolbar(List<Widget> children) => Padding(padding: const EdgeInsets.only(bottom: 16), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (final child in children) Padding(padding: const EdgeInsets.only(right: 10), child: child)])));
   Widget scroll(List<Widget> children) => SingleChildScrollView(key: PageStorageKey(tab), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children));
   Widget bluetooth() {
@@ -362,7 +372,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           const Text('GenieBreaker', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)), const SizedBox(height: 6),
           Text('v${widget.data['version'] ?? ''}', style: const TextStyle(color: muted, fontSize: 11)), const SizedBox(height: 24),
           Expanded(child: SingleChildScrollView(child: Column(children: [for (var i = 0; i < tabs.length; i++) RemoteTile(titles[i],
-            key: ValueKey('nav:${tabs[i]}'), focusNode: node('nav:${tabs[i]}'), selected: tab == tabs[i], icon: icons[i], onTap: () => select(tabs[i]))]))),
+            key: ValueKey('nav:${tabs[i]}'), focusNode: node('nav:${tabs[i]}'), selected: tab == tabs[i], icon: icons[i], onFocus: () => lastSurfaceFocus = 'nav:${tabs[i]}', onTap: () => select(tabs[i]))]))),
         ]))),
         const SizedBox(width: 20), const VerticalDivider(width: 1, color: Color(0xff304057)), const SizedBox(width: 24),
         Expanded(child: FocusScope(node: contentScope, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

@@ -192,7 +192,7 @@ class _GeniePageState extends State<GeniePage> {
         final next = Map<String, dynamic>.from(call.arguments as Map);
         setState(() { shellData = next; if (data?['shell'] == true) data = next; });
       }
-      if (call.method == 'dismiss') { setState(() => data = shellData); homeKey.currentState?.restore(); }
+      if (call.method == 'dismiss') { setState(() => data = shellData); homeKey.currentState?.restoreModalOpener(); }
       if (call.method == 'filesChanged') homeKey.currentState?.filesChanged();
       if (call.method == 'back') back();
       if (call.method == 'enter') restoreFocus();
@@ -204,6 +204,7 @@ class _GeniePageState extends State<GeniePage> {
   void dispose() { bridge.setMethodCallHandler(null); for (final node in focusNodes.values) { node.dispose(); } super.dispose(); }
   void receive(Map<String, dynamic> next) {
     if (!mounted) return;
+    if (next['shell'] != true && data?['shell'] == true) homeKey.currentState?.saveModalOpener();
     setState(() {
       final changed = next['pageId'] != data?['pageId'];
       data = next; if (next['shell'] == true) { shellData = next; if (next['menu'] is Map) data = Map<String, dynamic>.from(next['menu'] as Map); } error = null;

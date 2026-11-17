@@ -179,4 +179,17 @@ void main() {
     expect(focus, 'files:sort'); expect(tester.takeException(), isNull);
   });
 
+  testWidgets('A popup opened from the sidebar restores the sidebar, never a content header', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
+    expect(focus, 'nav:apps');
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(
+      const MethodCall('page', {'title': '보기 설정', 'pageId': 'sidebar-popup', 'items': ['닫기'], 'focus': 0})), (_) {});
+    await tester.pumpAndSettle();
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(const MethodCall('dismiss')), (_) {});
+    await tester.pumpAndSettle(); expect(focus, 'nav:apps');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'nav:shortcuts');
+    expect(tester.takeException(), isNull);
+  });
+
 }
