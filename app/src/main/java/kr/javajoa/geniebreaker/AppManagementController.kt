@@ -23,30 +23,19 @@ internal class AppManagementController(private val activity: Activity, private v
     private var loading = false
     private var packages = emptyList<PackageInfo>()
     private var entries = emptyList<Map<String, Any>>()
-    private val icons = android.util.LruCache<String, ByteArray>(128)
+    private val catalog = AppCatalog(activity.applicationContext, duals)
     private var refreshAgain = false
     private val installState = SessionInstaller.state(activity)
     private val preferences = activity.getSharedPreferences("apk_workshop", Context.MODE_PRIVATE)
+    private fun installStatus() = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> ui {
-        status = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
+        status = installStatus()
     } }
     init { installState.registerOnSharedPreferenceChangeListener(installListener) }
     fun snapshot() = mapOf("items" to entries, "status" to status, "busy" to busy, "loading" to loading, "duals" to onlyDuals)
     fun toggleDuals() { if (!loading && !busy) { onlyDuals = !onlyDuals; refresh() } }
     fun viewOptions() = TvMenus.show(activity, "보기 설정", listOf("실행 가능한 앱", "전체 설치 앱"), selected = if (allApps) 1 else 0) { index -> allApps = index == 1; refresh() }
     fun choose(packageName: String) { packages.firstOrNull { it.packageName == packageName }?.let(::choose) }
-    private fun icon(info: ApplicationInfo?, version: Long): ByteArray {
-        if (info == null) return byteArrayOf()
-        val key = "${info.packageName}:$version"
-        icons.get(key)?.let { return it }
-        return try {
-            val drawable = info.loadIcon(pm)
-            val bitmap = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
-            drawable.setBounds(0, 0, 64, 64); drawable.draw(android.graphics.Canvas(bitmap))
-            val bytes = java.io.ByteArrayOutputStream().use { output -> bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
-            bitmap.recycle(); icons.put(key, bytes); bytes
-        } catch (_: Exception) { byteArrayOf() }
-    }
     fun refresh() {
         if (loading) { refreshAgain = true; return }
         if (busy) return
@@ -55,29 +44,11 @@ internal class AppManagementController(private val activity: Activity, private v
         val allFilter = allApps
         worker.execute {
             try {
-                val records = duals.all(); val clonePackages = records.map { it.target }.toSet()
-                val items = if (dualFilter) records.mapNotNull { record ->
-                    val installed = try { pm.getPackageInfo(record.source, 0) } catch (_: PackageManager.NameNotFoundException) {
-                        try { pm.getPackageInfo(record.target, 0) } catch (_: PackageManager.NameNotFoundException) { null }
-                    }
-                    installed ?: pm.getPackageArchiveInfo(duals.file(record).absolutePath, 0)?.apply {
-                        applicationInfo?.sourceDir = duals.file(record).absolutePath
-                        applicationInfo?.publicSourceDir = duals.file(record).absolutePath
-                    }
-                }.sortedBy { it.applicationInfo?.loadLabel(pm).toString().lowercase() }
-                else pm.getInstalledPackages(0).filter { pkg ->
-                    pkg.packageName != activity.packageName && pkg.packageName !in clonePackages && pkg.applicationInfo != null &&
-                        (allFilter || pm.getLeanbackLaunchIntentForPackage(pkg.packageName) != null || pm.getLaunchIntentForPackage(pkg.packageName) != null)
-                }.sortedBy { it.applicationInfo!!.loadLabel(pm).toString().lowercase() }
-                val next = items.map { pkg ->
-                    val record = duals.record(pkg.packageName) ?: records.firstOrNull { it.target == pkg.packageName }
-                    mapOf<String, Any>("id" to pkg.packageName, "name" to (pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "앱"), "icon" to icon(pkg.applicationInfo, pkg.lastUpdateTime),
-                        "detail" to when { record == null -> ""; duals.isInstalled(record.target) -> "듀얼앱 사용 중"; else -> "설치 준비됨" })
-                }
+                val listing = catalog.list(dualFilter, allFilter)
                 ui {
-                    entries = next
-                    packages = items
-                    status = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
+                    entries = listing.entries
+                    packages = listing.packages
+                    status = installStatus()
                     loading = false; changed()
                     if (refreshAgain) { refreshAgain = false; refresh() }
                 }
@@ -188,5 +159,5 @@ internal class AppManagementController(private val activity: Activity, private v
     }
     private fun notice(message: String) { if (!activity.isDestroyed && !activity.isFinishing) TvMenus.notice(activity, message) }
     private fun ui(action: () -> Unit) { main.post { if (!activity.isDestroyed && !activity.isFinishing) { action(); changed() } } }
-    fun close() { installState.unregisterOnSharedPreferenceChangeListener(installListener); worker.shutdownNow(); icons.evictAll(); main.removeCallbacksAndMessages(null) }
+    fun close() { installState.unregisterOnSharedPreferenceChangeListener(installListener); worker.shutdownNow(); catalog.clear(); main.removeCallbacksAndMessages(null) }
 }

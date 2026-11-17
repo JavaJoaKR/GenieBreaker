@@ -1,6 +1,8 @@
 package kr.javajoa.geniebreaker
 
 import android.content.Context
+import android.os.StatFs
+import android.text.format.Formatter
 import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -14,6 +16,22 @@ internal object StorageTools {
     fun bytes(root: File): Long = if (root.exists()) root.walkTopDown().filter { it.isFile }.sumOf { it.length() } else 0L
     fun updateRoots(context: Context) = listOf(File(context.cacheDir, "updates"), File(context.filesDir, "updates"), File(context.cacheDir, "update.apk"), File(context.filesDir, "update.apk"))
     fun updateBytes(context: Context) = updateRoots(context).sumOf(::bytes)
+    private fun cleanupTargets(context: Context, kind: String): List<File> = when (kind) {
+        "apks" -> File(context.filesDir, "edited").listFiles().orEmpty().filter { it.extension in setOf("apk", "json") }
+        "cache" -> context.cacheDir.listFiles().orEmpty().filter { it.name != "updates" && it.name != "update.apk" }
+        "updates" -> updateRoots(context).filter { it.exists() }
+        else -> throw IllegalArgumentException("지원하지 않는 저장공간 종류")
+    }
+
+    fun snapshot(context: Context): Map<String, Any> = FileWork.reading {
+        val disk = StatFs(context.filesDir.path)
+        fun size(bytes: Long) = Formatter.formatFileSize(context, bytes)
+        fun cleanable(kind: String) = size(cleanupTargets(context, kind).sumOf(::bytes))
+        mapOf("total" to size(disk.totalBytes), "free" to size(disk.availableBytes),
+            "usedFraction" to (1.0 - disk.availableBytes.toDouble() / disk.totalBytes.coerceAtLeast(1)),
+            "apkSize" to cleanable("apks"), "cacheSize" to cleanable("cache"), "updateSize" to cleanable("updates"))
+    }
+
     fun pruneUpdates(context: Context) {
         if (!FileWork.lock.writeLock().tryLock()) return
         try {
@@ -36,10 +54,7 @@ internal object StorageTools {
         if (!FileWork.lock.writeLock().tryLock()) error("파일 작업 중입니다. 작업이 끝난 뒤 다시 정리하세요.")
         try {
             check(FileWork.pending.get() == 0) { "설치 파일을 준비하고 있습니다. 잠시 후 다시 정리하세요." }
-            val root = if (kind == "apks") File(context.filesDir, "edited") else context.cacheDir
-            val files = if (kind == "updates") updateRoots(context).filter { it.exists() }
-                else root.listFiles().orEmpty().filter { (kind == "cache" && it.name !in setOf("updates", "update.apk")) || (kind == "apks" && it.extension in listOf("apk", "json")) }.toList()
-            val failed = files.count { !it.deleteRecursively() }
+            val failed = cleanupTargets(context, kind).count { !it.deleteRecursively() }
             if (failed > 0) error("일부 파일을 정리하지 못했습니다. 다시 시도하세요.")
             return "정리했습니다. 설치된 앱과 서명 키는 유지됩니다."
         } finally { FileWork.lock.writeLock().unlock() }
