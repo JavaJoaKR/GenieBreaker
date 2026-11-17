@@ -6,12 +6,13 @@ internal data class CloneOptions(
     val renameLaunchers: Boolean = true,
     val renameResources: Boolean = true,
     val isolateTasks: Boolean = true,
-    val extractLibraries: Boolean = true
+    val extractLibraries: Boolean = true,
+    val netflixCompatibility: Boolean = false
 ) {
     fun values() = mapOf("renameApp" to renameApp, "renameLaunchers" to renameLaunchers,
-        "renameResources" to renameResources, "isolateTasks" to isolateTasks, "extractLibraries" to extractLibraries)
+        "renameResources" to renameResources, "isolateTasks" to isolateTasks, "extractLibraries" to extractLibraries, "netflixCompatibility" to netflixCompatibility)
     companion object {
         fun from(values: Map<String, Boolean>) = CloneOptions(values["renameApp"] ?: true, values["renameLaunchers"] ?: true,
-            values["renameResources"] ?: true, values["isolateTasks"] ?: true, values["extractLibraries"] ?: true)
+            values["renameResources"] ?: true, values["isolateTasks"] ?: true, values["extractLibraries"] ?: true, values["netflixCompatibility"] ?: false)
     }
 }

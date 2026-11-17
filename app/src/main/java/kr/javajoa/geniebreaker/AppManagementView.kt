@@ -162,9 +162,18 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     }
     private fun create(pkg: PackageInfo) {
         if (busy) return
+        val netflix = pkg.packageName == NetflixCompatibility.PACKAGE
+        @Suppress("DEPRECATION")
+        val code = if (Build.VERSION.SDK_INT >= 28) pkg.longVersionCode else pkg.versionCode.toLong()
+        val supported = NetflixCompatibility.supported(pkg.packageName, pkg.versionName, code)
+        val defaults = CloneOptions(netflixCompatibility = supported).values().filterKeys { netflix || it != "netflixCompatibility" }
         val saved = preferences.getString("options_${pkg.packageName}", null)
-        val values = try { val json = JSONObject(saved ?: "{}"); CloneOptions().values().mapValues { (key, fallback) -> json.optBoolean(key, fallback) } } catch (_: Exception) { CloneOptions().values() }
-        TvMenus.cloneOptions(activity, pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "듀얼앱", values) { chosen ->
+        val values = try { val json = JSONObject(saved ?: "{}"); defaults.mapValues { (key, fallback) -> json.optBoolean(key, fallback) } } catch (_: Exception) { defaults }
+        val label = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "듀얼앱"
+        val description = if (!netflix) label else "$label · ${pkg.versionName}\n" +
+            (if (supported) "실행 호환성 실험 기능 · 원본 앱을 설치·사용 설정 상태로 유지하세요. 실제 재생은 기기에서 확인해야 합니다."
+            else "이 버전은 실행 호환성 미지원입니다. 옵션을 켜면 생성을 중단합니다. 권장: 13.0.1 build 25028.")
+        TvMenus.cloneOptions(activity, description, values) { chosen ->
             preferences.edit().putString("options_${pkg.packageName}", JSONObject(chosen).toString()).apply()
             createWithOptions(pkg, CloneOptions.from(chosen))
         }
@@ -179,7 +188,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                 ui { busy = false; grid.isEnabled = true; grid.invalidateViews(); install(record.id) }
             } catch (error: Throwable) {
                 Diagnostics.record(activity, "Dual app build", error)
-                ui { busy = false; grid.isEnabled = true; status.text = "듀얼앱을 만들지 못했습니다"; notice("이 앱의 듀얼앱을 만들지 못했습니다. 설정의 문제 기록에서 원인을 확인할 수 있습니다.") }
+                ui { busy = false; grid.isEnabled = true; status.text = "듀얼앱을 만들지 못했습니다"; notice(error.message ?: "이 앱의 듀얼앱을 만들지 못했습니다. 설정의 문제 기록에서 원인을 확인할 수 있습니다.") }
             }
         }
     }

@@ -10,6 +10,7 @@ import com.android.apksig.ApkSigner
 import com.android.apksig.ApkVerifier
 import com.reandroid.apk.ApkBundle
 import com.reandroid.apk.ApkModule
+import com.reandroid.archive.FileInputSource
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.chunk.xml.ResXmlAttribute
 import com.reandroid.arsc.value.ValueType
@@ -37,6 +38,14 @@ internal class ApkWorkshop(private val context: Context) {
         val existingTarget = if (spec.packageName != source.packageName) try {
             context.packageManager.getPackageInfo(spec.packageName, if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES)
         } catch (_: PackageManager.NameNotFoundException) { null } else null
+        val options = NetflixCompatibility.effective(spec.options)
+        if (options.netflixCompatibility) {
+            val installed = context.packageManager.getPackageInfo(source.packageName, 0)
+            @Suppress("DEPRECATION")
+            val code = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
+            NetflixCompatibility.validate(source.packageName, installed.versionName, code)
+            require(source.enabled && installed.applicationInfo?.enabled == true) { "넷플릭스 원본 앱을 사용 설정한 뒤 다시 만드세요. 원본 앱은 계속 설치되어 있어야 합니다." }
+        }
         val paths = listOf(source.sourceDir) + (source.splitSourceDirs?.toList() ?: emptyList())
         val sourceBytes = paths.sumOf { File(it).length() }
         require(context.filesDir.usableSpace > sourceBytes * 3 + 16L * 1024 * 1024) { "APK 작업을 위한 저장 공간이 부족합니다." }
@@ -82,7 +91,7 @@ internal class ApkWorkshop(private val context: Context) {
                         val attribute = attributes.next()
                         val name = attribute.getName(false)
                         // Labels are commonly TYPE_REFERENCE, so rewrite before reading a string.
-                        if (name == "label" && ((tag == "application" && spec.options.renameApp) || (tag in setOf("activity", "activity-alias") && spec.options.renameLaunchers))) {
+                        if (name == "label" && ((tag == "application" && options.renameApp) || (tag in setOf("activity", "activity-alias") && options.renameLaunchers))) {
                             attribute.setValueAsString(spec.label)
                             continue
                         }
@@ -101,21 +110,57 @@ internal class ApkWorkshop(private val context: Context) {
                                 attribute.setValueAsString(declarations.getValue(value))
                             name in setOf("permission", "readPermission", "writePermission", "permissionGroup") && declarations.containsKey(value) ->
                                 attribute.setValueAsString(declarations.getValue(value))
-                            spec.options.isolateTasks && name == "taskAffinity" && (value == original || value.startsWith("$original.")) ->
+                            options.isolateTasks && name == "taskAffinity" && (value == original || value.startsWith("$original.")) ->
                                 attribute.setValueAsString(spec.packageName + value.removePrefix(original))
                         }
                     }
                 }
-                if (spec.options.renameResources) module.setPackageName(spec.packageName) else manifest.setPackageName(spec.packageName)
-                if (spec.options.renameApp) manifest.setApplicationLabel(spec.label)
+                if (options.renameResources) module.setPackageName(spec.packageName) else manifest.setPackageName(spec.packageName)
+                if (options.renameApp) manifest.setApplicationLabel(spec.label)
                 manifest.setVersionCode(spec.versionCode)
-                if (spec.options.extractLibraries) manifest.setExtractNativeLibs(true)
+                if (options.extractLibraries) manifest.setExtractNativeLibs(true)
                 module.setApkSignatureBlock(null)
                 paths.forEach { path -> java.util.zip.ZipFile(path).use { zip ->
                     zip.entries().asSequence().map { it.name }.filter { name ->
                         name.equals("META-INF/MANIFEST.MF", true) || name.matches(Regex("META-INF/[^/]+\\.(SF|RSA|DSA|EC)", RegexOption.IGNORE_CASE))
                     }.forEach { module.removeInputSource(it) }
                 } }
+                var compatibilityMethod: String? = null
+                if (options.netflixCompatibility) {
+                    progress("넷플릭스 실행 호환성을 검사하고 있습니다")
+                    val queries = root.getOrCreateElement("queries")
+                    val alreadyVisible = queries.getElements("package").asSequence().any {
+                        it.searchAttributeByName("name")?.valueAsString == NetflixCompatibility.PACKAGE
+                    }
+                    if (!alreadyVisible) queries.newElement("package").getOrCreateAttribute(
+                        "http://schemas.android.com/apk/res/android", "android", "name", 0x01010003
+                    ).setValueAsString(NetflixCompatibility.PACKAGE)
+                    // Scan merged module sources one DEX at a time; keep ARSCLib's APK alignment writer.
+                    val matches = mutableListOf<Triple<String, File, String>>()
+                    module.listInputSources().filter { it.alias.matches(Regex("classes([2-9][0-9]*|1[0-9]+)?\\.dex")) }.forEach { entry ->
+                        val file = File(work, entry.alias)
+                        entry.openStream().use { input -> file.outputStream().use { outputStream ->
+                            val buffer = ByteArray(16 * 1024)
+                            var copied = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                copied += count
+                                require(copied <= 48L * 1024 * 1024) { "DEX가 32비트 처리 한도를 초과했습니다." }
+                                outputStream.write(buffer, 0, count)
+                            }
+                        } }
+                        NetflixCompatibility.candidates(NetflixCompatibility.read(file)).forEach { method -> matches += Triple(entry.alias, file, method) }
+                        if (matches.none { it.second == file }) file.delete()
+                    }
+                    require(matches.size == 1) { "넷플릭스 검사 코드를 한 곳으로 확인하지 못했습니다(${matches.size}곳). 이 APK에는 실행 호환성을 적용할 수 없습니다." }
+                    val (name, originalDex, method) = matches.single()
+                    val patchedDex = File(work, "patched.dex")
+                    NetflixCompatibility.patch(originalDex, method, patchedDex)
+                    module.removeInputSource(name)
+                    module.zipEntryMap.add(FileInputSource(patchedDex, name))
+                    compatibilityMethod = method
+                }
                 module.refreshManifest(); module.refreshTable()
                 val unsigned = File(work, "unsigned.apk")
                 module.writeApk(unsigned)
@@ -159,7 +204,7 @@ internal class ApkWorkshop(private val context: Context) {
                     require(owner == null || owner == spec.packageName) { "Provider 충돌: $authority (사용 중인 앱: $owner)" }
                 } }
                 val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.encoded).joinToString(":") { "%02X".format(it) }
-                File(output.parentFile, "$id.json").writeText(org.json.JSONObject().put("source", source.packageName).put("package", spec.packageName).put("label", spec.label).put("certificate", fingerprint).put("options", org.json.JSONObject(spec.options.values())).toString())
+                File(output.parentFile, "$id.json").writeText(org.json.JSONObject().put("source", source.packageName).put("package", spec.packageName).put("label", spec.label).put("certificate", fingerprint).put("options", org.json.JSONObject(options.values())).put("compatibilityMethod", compatibilityMethod).put("playbackVerified", false).toString())
                 return EditedApk(id, output, spec.packageName, fingerprint)
             } finally {
                 apk?.close(); bundle.close()

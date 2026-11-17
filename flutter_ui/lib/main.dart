@@ -235,15 +235,22 @@ class _GeniePageState extends State<GeniePage> {
         : messageBox(data!['message'] as String),
       if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
       if (configure) ...[
+        if (cloneOptions.containsKey('netflixCompatibility'))
+          RemoteTile('넷플릭스 실행 호환성', key: const ValueKey('netflixCompatibility'),
+            subtitle: '원본 앱 조회 허용 · 재서명 후 시작 검사 처리', toggle: cloneOptions['netflixCompatibility'] ?? false,
+            onTap: () => toggleOption('netflixCompatibility')),
         for (final key in ['renameApp', 'renameLaunchers']) RemoteTile(labels[key]![0], key: ValueKey(key),
           autofocus: key == 'renameApp', subtitle: labels[key]![1], toggle: cloneOptions[key] ?? true, onTap: () => toggleOption(key)),
         RemoteTile('호환성 옵션', subtitle: advanced ? '접기' : '필요할 때만 변경', icon: advanced ? Icons.expand_less : Icons.tune_rounded,
           onTap: () => setState(() => advanced = !advanced)),
         if (advanced) ...[
           const Padding(padding: EdgeInsets.fromLTRB(4, 6, 4, 12), child: Text('패키지·공급자 주소·충돌 권한·서명은 별도 설치를 위해 변경됩니다. 호환성 옵션은 앱 실행을 보장하지 않습니다.', style: TextStyle(color: muted, fontSize: 12, height: 1.5))),
+          if (cloneOptions['netflixCompatibility'] == true)
+            const Padding(padding: EdgeInsets.all(4), child: Text('넷플릭스 프로필: 원본 리소스·작업 그룹 유지, 라이브러리 추출을 적용합니다.', style: TextStyle(color: muted, fontSize: 12))),
+          if (cloneOptions['netflixCompatibility'] != true)
           for (final key in ['renameResources', 'isolateTasks', 'extractLibraries']) RemoteTile(labels[key]![0], key: ValueKey(key),
             subtitle: labels[key]![1], toggle: cloneOptions[key] ?? true, onTap: () => toggleOption(key)),
-          TextButton(onPressed: () { setState(() => cloneOptions.updateAll((key, value) => true)); bridge.invokeMethod<void>('options', cloneOptions); }, child: const Text('기본값 복원')),
+          TextButton(onPressed: () { setState(() => cloneOptions.updateAll((key, value) => key == 'netflixCompatibility' ? value : true)); bridge.invokeMethod<void>('options', cloneOptions); }, child: const Text('기본값 복원')),
         ],
       ] else if (!confirmation) ...[
         for (var i = 0; i < items.length; i++) RemoteTile(items[i], key: ValueKey('${data?['pageId'] ?? 'root'}-$i'),

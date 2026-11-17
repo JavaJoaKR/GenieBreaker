@@ -86,6 +86,24 @@ void main() {
     expect(submitted?['renameApp'], false);
     expect(submitted?['renameResources'], true);
   });
+  testWidgets('Netflix profile is explicit and submits the chosen state', (tester) async {
+    Map? submitted;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'title': '듀얼앱 옵션', 'cloneOptions': true,
+        'options': {'renameApp': true, 'renameLaunchers': true, 'renameResources': true, 'isolateTasks': true, 'extractLibraries': true, 'netflixCompatibility': true}};
+      if (call.method == 'build') submitted = call.arguments as Map;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    expect(find.text('넷플릭스 실행 호환성'), findsOneWidget);
+    await tester.tap(find.text('넷플릭스 실행 호환성'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('듀얼앱 만들기'));
+    await tester.pumpAndSettle();
+    expect(submitted?['netflixCompatibility'], false);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Remote selection returns the focused menu item', (tester) async {
     Object? choice;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
