@@ -32,7 +32,7 @@ internal class FilePane(private val activity: Activity, private val sidebar: () 
                 "pick" -> try {
                     activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), 620)
                     result.success(null)
-                } catch (_: Exception) { result.error("picker", "이 기기에는 폴더 선택 화면이 없습니다. 앱 내부 파일은 계속 사용할 수 있습니다.", null) }
+                } catch (error: Exception) { val code = Diagnostics.record(activity, "File picker", error); result.error("picker", "폴더 선택 화면을 열지 못했습니다. [$code]", null) }
                 "close", "sidebar" -> { sidebar(); result.success(null) }
                 "ready", "list", "clean", "open" -> worker.execute {
                     try {
@@ -43,7 +43,7 @@ internal class FilePane(private val activity: Activity, private val sidebar: () 
                             else -> { open(call.arguments as String); null }
                         }
                         activity.runOnUiThread { result.success(answer) }
-                    } catch (e: Exception) { activity.runOnUiThread { result.error("files", e.message ?: "파일 요청 실패", null) } }
+                    } catch (e: Exception) { val code = Diagnostics.record(activity, "File request", e); activity.runOnUiThread { result.error("files", "${e.message ?: "파일 요청 실패"} [$code]", null) } }
                 }
                 else -> result.notImplemented()
             }
@@ -55,6 +55,7 @@ internal class FilePane(private val activity: Activity, private val sidebar: () 
         flutterView?.requestFocus()
         flutter.lifecycleChannel.appIsResumed()
     }
+    fun enter() { show(); flutterView?.requestFocus(); channel?.invokeMethod("enter", null) }
     private fun entry(name: String, path: String, directory: Boolean, bytes: Long = 0L) = mapOf(
         "name" to name, "path" to path, "directory" to directory,
         "detail" to if (directory) "폴더" else Formatter.formatFileSize(activity, bytes))
@@ -99,7 +100,8 @@ internal class FilePane(private val activity: Activity, private val sidebar: () 
         }
         return mapOf("files" to true, "title" to title, "entries" to entries,
             "apkSize" to Formatter.formatFileSize(activity, StorageTools.bytes(File(activity.filesDir, "edited"))),
-            "cacheSize" to Formatter.formatFileSize(activity, StorageTools.bytes(activity.cacheDir)))
+            "cacheSize" to Formatter.formatFileSize(activity, (StorageTools.bytes(activity.cacheDir) - StorageTools.bytes(File(activity.cacheDir, "updates")) - File(activity.cacheDir, "update.apk").length()).coerceAtLeast(0)),
+            "updateSize" to Formatter.formatFileSize(activity, StorageTools.updateBytes(activity)))
     }
     private fun open(path: String) = FileWork.reading {
         val uri: Uri

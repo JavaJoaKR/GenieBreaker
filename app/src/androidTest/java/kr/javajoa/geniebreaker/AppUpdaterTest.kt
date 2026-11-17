@@ -47,4 +47,12 @@ class AppUpdaterTest {
             preferences.edit().putLong("last_check", old).commit()
         }
     }
+    @Test fun logsContainCodesAndNeverRawDeviceMessages() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        Diagnostics.clear(context)
+        val code = Diagnostics.record(context, "Launch 192.168.1.10 secret-device", IllegalStateException("AA:BB:CC:DD:EE:FF /storage/private secret"))
+        val text = Diagnostics.read(context)
+        assertTrue(text.contains(code)); assertTrue(text.contains("IllegalStateException"))
+        for (value in listOf("192.168", "secret", "AA:BB", "/storage/")) assertFalse(text.contains(value))
+    }
 }

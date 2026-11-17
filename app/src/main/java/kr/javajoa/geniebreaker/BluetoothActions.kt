@@ -8,7 +8,11 @@ import java.util.concurrent.Executors
 /** Best-effort vendor compatibility. Reflection cannot grant a denied system permission. */
 internal class BluetoothActions(private val activity: Activity, private val report: (String) -> Unit) {
     private val worker = Executors.newSingleThreadExecutor()
-    private fun result(text: String) = activity.runOnUiThread { if (!activity.isDestroyed && !activity.isFinishing) report(text) }
+    private fun result(text: String) {
+        val code = Diagnostics.record(activity, "Bluetooth: $text")
+        val visible = if (ErrorCodes.isError(text) && !text.contains("[GB-")) "$text [$code]" else text
+        activity.runOnUiThread { if (!activity.isDestroyed && !activity.isFinishing) report(visible) }
+    }
     fun bond(device: BluetoothDevice) {
         result("페어링 요청 중…")
         worker.execute {
@@ -51,13 +55,13 @@ internal class BluetoothActions(private val activity: Activity, private val repo
     }
     private fun failure(operation: String, caught: Exception) {
         val error = if (caught is InvocationTargetException) caught.targetException else caught
-        Diagnostics.record(activity, operation, error)
+        val code = Diagnostics.record(activity, operation, error)
         val reason = when (error) {
             is SecurityException -> "시스템 권한이 필요하여 펌웨어에서 차단했습니다."
             is NoSuchMethodException, is IllegalAccessException -> "이 펌웨어는 앱의 직접 제어를 허용하지 않습니다."
             else -> "${error.javaClass.simpleName}: ${error.message?.take(140) ?: "응답 없음"}"
         }
-        result("$operation 실패. $reason 오류 기록에 세부 내용을 저장했습니다.")
+        result("$operation 실패 [$code]. $reason")
     }
     fun close() { worker.shutdownNow() }
 }

@@ -21,14 +21,10 @@ import java.io.File
 internal object NetflixCompatibility {
     const val PACKAGE = "com.netflix.ninja"
     const val MARKER = "CertCheck failed, crash!!!"
-    private val versions = mapOf("13.0.1 build 25028" to 25028L,
-        "13.2.1 build 27207" to 27207L, "13.2.2 build 27250" to 27250L)
-    fun supported(packageName: String, version: String?, code: Long) =
-        packageName == PACKAGE && versions[version] == code
-    fun validate(packageName: String, version: String?, code: Long) {
-        require(supported(packageName, version, code)) {
-            "넷플릭스 실행 호환성 미지원 버전: $packageName / $version ($code). 지원: 13.0.1 build 25028, 13.2.1 build 27207, 13.2.2 build 27250."
-        }
+    // Version names are obfuscated/vendor dependent; the DEX fingerprint is the gate.
+    fun supported(packageName: String, @Suppress("UNUSED_PARAMETER") version: String?, @Suppress("UNUSED_PARAMETER") code: Long) = packageName == PACKAGE
+    fun validate(packageName: String, @Suppress("UNUSED_PARAMETER") version: String?, @Suppress("UNUSED_PARAMETER") code: Long) {
+        require(packageName == PACKAGE) { "넷플릭스 TV 원본 앱에서만 실행 호환성을 사용할 수 있습니다." }
     }
     fun effective(options: CloneOptions) = if (options.netflixCompatibility)
         options.copy(renameResources = false, isolateTasks = false, extractLibraries = true) else options

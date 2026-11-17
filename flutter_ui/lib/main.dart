@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'tv_focus.dart';
 
 const bridge = MethodChannel('genie/ui');
-const ink = Color(0xffeff4ff);
-const muted = Color(0xff9eafc7);
-const blue = Color(0xff85b5ff);
-const canvas = Color(0xff0b1220);
-const panel = Color(0xff101e32);
+const ink = Color(0xfff3f6fc);
+const muted = Color(0xffaab7c9);
+const blue = Color(0xff9dc5ff);
+const canvas = Color(0xff0d1420);
+const panel = Color(0xff172233);
 void main() => runApp(const GenieUI());
 
 class GenieUI extends StatelessWidget {
@@ -18,6 +19,10 @@ class GenieUI extends StatelessWidget {
       scaffoldBackgroundColor: Colors.transparent,
       colorScheme: const ColorScheme.dark(primary: blue, surface: panel, surfaceTint: Colors.transparent),
       textTheme: ThemeData.dark().textTheme.apply(bodyColor: ink, displayColor: ink),
+      iconButtonTheme: IconButtonThemeData(style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused) ? const Color(0xff2d4665) : Colors.transparent),
+        side: WidgetStateProperty.resolveWith((states) => BorderSide(color: states.contains(WidgetState.focused) ? ink : Colors.transparent, width: 2)),
+      )),
       filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
         backgroundColor: blue, foregroundColor: canvas, minimumSize: const Size(110, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -27,7 +32,7 @@ class GenieUI extends StatelessWidget {
         foregroundColor: ink, minimumSize: const Size(92, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))).copyWith(
           side: WidgetStateProperty.resolveWith((states) => BorderSide(color: states.contains(WidgetState.focused) ? blue : const Color(0xff344c6b), width: 2)),
-          backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused) ? const Color(0xff213e63) : Colors.transparent))),
+          backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused) ? const Color(0xff2d4665) : Colors.transparent))),
     ),
     shortcuts: {...WidgetsApp.defaultShortcuts, const SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): const ActivateIntent()},
     home: const GeniePage(),
@@ -38,6 +43,7 @@ class RemoteTile extends StatefulWidget {
   final String title;
   final String? subtitle;
   final IconData icon;
+  final FocusNode? focusNode;
   final bool autofocus;
   final bool selected;
   final bool? toggle;
@@ -45,7 +51,7 @@ class RemoteTile extends StatefulWidget {
   final VoidCallback? onFocus;
   final VoidCallback onTap;
   const RemoteTile(this.title, {super.key, this.subtitle, this.icon = Icons.chevron_right_rounded,
-    this.autofocus = false, this.selected = false, this.toggle, this.danger = false, this.onFocus, required this.onTap});
+    this.focusNode, this.autofocus = false, this.selected = false, this.toggle, this.danger = false, this.onFocus, required this.onTap});
   @override
   State<RemoteTile> createState() => _RemoteTileState();
 }
@@ -55,12 +61,12 @@ class _RemoteTileState extends State<RemoteTile> {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: FocusableActionDetector(
-      autofocus: widget.autofocus,
+      focusNode: widget.focusNode, autofocus: widget.autofocus,
       onFocusChange: (value) {
         if (mounted) setState(() => focused = value);
         if (value) {
           widget.onFocus?.call();
-          Scrollable.ensureVisible(context, alignment: .5, duration: const Duration(milliseconds: 130));
+          Scrollable.ensureVisible(context, alignment: .5, duration: Duration.zero);
         }
       },
       shortcuts: const {
@@ -71,20 +77,20 @@ class _RemoteTileState extends State<RemoteTile> {
       actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) { widget.onTap(); return null; })},
       child: Semantics(button: true, selected: widget.selected, toggled: widget.toggle, label: widget.title,
         child: GestureDetector(onTap: widget.onTap, child: AnimatedContainer(
-          duration: const Duration(milliseconds: 110),
-          constraints: const BoxConstraints(minHeight: 54),
+          duration: Duration.zero,
+          constraints: const BoxConstraints(minHeight: 56),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(color: focused ? const Color(0xff213e63) : const Color(0xff15263e),
-            borderRadius: BorderRadius.circular(12), border: Border.all(color: focused ? blue : const Color(0xff263b55), width: 2)),
+          decoration: BoxDecoration(color: focused ? const Color(0xff2d4665) : const Color(0xff1b293b),
+            borderRadius: BorderRadius.circular(10), border: Border.all(color: focused ? ink : Colors.transparent, width: 2)),
           child: Row(children: [
             if (widget.toggle == null) ...[Container(width: 34, height: 34, alignment: Alignment.center,
               decoration: BoxDecoration(color: widget.danger ? const Color(0xff40292e) : const Color(0xff1c3453), borderRadius: BorderRadius.circular(9)),
               child: Icon(widget.selected ? Icons.check_circle_rounded : widget.icon,
                 color: widget.danger ? const Color(0xffffa4a4) : blue, size: 20)), const SizedBox(width: 12)],
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500,
+              Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500,
                 color: widget.danger ? const Color(0xffffb6b6) : ink)),
-              if (widget.subtitle != null) ...[const SizedBox(height: 4), Text(widget.subtitle!, style: const TextStyle(color: muted, fontSize: 12, height: 1.35))],
+              if (widget.subtitle != null) ...[const SizedBox(height: 4), Text(widget.subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 13, height: 1.45))],
             ])),
             if (widget.toggle != null) ...[const SizedBox(width: 16), Icon(widget.toggle! ? Icons.toggle_on_rounded : Icons.toggle_off_outlined,
               size: 36, color: widget.toggle! ? blue : muted)],
@@ -110,8 +116,8 @@ class PopupPanel extends StatelessWidget {
   Widget build(BuildContext context) => ConstrainedBox(
     constraints: BoxConstraints(maxWidth: wide ? 660 : 490, maxHeight: MediaQuery.sizeOf(context).height - 64),
     child: Material(key: const ValueKey('popup-surface'), color: panel, surfaceTintColor: Colors.transparent,
-      elevation: 24, shadowColor: Colors.black54, borderRadius: BorderRadius.circular(24), clipBehavior: Clip.antiAlias,
-      child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: const Color(0xff30435e)), borderRadius: BorderRadius.circular(24)),
+      elevation: 24, shadowColor: Colors.black54, borderRadius: BorderRadius.circular(18), clipBehavior: Clip.antiAlias,
+      child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: const Color(0xff30435e)), borderRadius: BorderRadius.circular(18)),
         child: Padding(padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (breadcrumbs.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4, bottom: 6),
@@ -148,6 +154,29 @@ class _GeniePageState extends State<GeniePage> {
   bool storageFocused = false;
   bool storageOnRight = false;
   Map<String, bool> cloneOptions = {};
+  final Map<String, FocusNode> focusNodes = {};
+  final Map<String, bool> expandedPages = {};
+  final Map<String, String> fileFocus = {};
+  FocusNode node(String key) => focusNodes.putIfAbsent(key, () => FocusNode(debugLabel: key));
+  String get pageId => '${data?['pageId'] ?? 'root'}';
+  FocusNode menuNode(String key) => node('$pageId:$key');
+  void remember(String key) => bridge.invokeMethod<void>('focus', key);
+  void restoreFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusNode? target;
+      if (data?['files'] == true) {
+        final entries = (data?['entries'] as List? ?? []).cast<Map>();
+        final key = fileFocus[location] ?? (location.isNotEmpty ? 'parent' : entries.isEmpty ? 'pick' : entries.first['path'] as String);
+        target = focusNodes['file:$location:$key'];
+      } else {
+        final key = data?['focusKey'] as String?;
+        final initial = data?['cloneOptions'] == true ? (cloneOptions.containsKey('netflixCompatibility') ? 'netflixCompatibility' : 'renameApp') : 'item-${data?['focus'] ?? 0}';
+        target = focusNodes['$pageId:${key?.isNotEmpty == true ? key : initial}'];
+      }
+      if (target?.context != null && target!.canRequestFocus) target.requestFocus();
+    });
+  }
   @override
   void initState() {
     super.initState();
@@ -155,27 +184,38 @@ class _GeniePageState extends State<GeniePage> {
       if (!mounted) return;
       if (call.method == 'refresh') await load(location);
       if (call.method == 'back') back();
+      if (call.method == 'enter') restoreFocus();
       if (call.method == 'page') receive(Map<String, dynamic>.from(call.arguments as Map));
     });
     load('');
   }
   @override
-  void dispose() { bridge.setMethodCallHandler(null); super.dispose(); }
+  void dispose() { bridge.setMethodCallHandler(null); for (final node in focusNodes.values) { node.dispose(); } super.dispose(); }
   void receive(Map<String, dynamic> next) {
     if (!mounted) return;
     setState(() {
       final changed = next['pageId'] != data?['pageId'];
       data = next; error = null;
-      if (changed) { advanced = false; working = false; }
+      if (changed) { advanced = expandedPages[pageId] ?? false; working = false; }
       if (next['cloneOptions'] == true) cloneOptions = Map<String, bool>.from(next['options'] as Map);
     });
+    restoreFocus();
+  }
+  String errorText(Object e) {
+    final text = e is PlatformException ? e.message ?? '요청 실패' : '요청 실패';
+    return text.contains('[GB-') ? text : '$text [GB-UI-0001]';
   }
   Future<void> load(String path) async {
     try {
+      final previousFocus = FocusManager.instance.primaryFocus;
+      final sameLocation = path == location;
       final next = Map<String, dynamic>.from(await bridge.invokeMethod(path.isEmpty ? 'ready' : 'list', path) as Map);
       if (!mounted) return;
       location = path; receive(next);
-    } catch (e) { if (mounted) setState(() => error = e is PlatformException ? e.message : '$e'); }
+      if (sameLocation) WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && previousFocus?.context != null && previousFocus!.canRequestFocus) previousFocus.requestFocus();
+      });
+    } catch (e) { if (mounted) setState(() => error = errorText(e)); }
   }
   Future<void> perform(String method, [dynamic argument]) async {
     if (working) return;
@@ -185,15 +225,15 @@ class _GeniePageState extends State<GeniePage> {
       if (mounted && message is String) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       if (data?['files'] == true) await load(location);
     } catch (e) {
-      if (mounted) setState(() => error = e is PlatformException ? e.message ?? '요청 실패' : '$e');
+      if (mounted) setState(() => error = errorText(e));
     } finally { if (mounted) setState(() => working = false); }
   }
   Future<void> cleanup(String kind) async {
     final accepted = await showDialog<bool>(context: context, barrierColor: const Color(0x99050b14), builder: (ctx) => Center(
       child: Padding(padding: const EdgeInsets.all(24), child: PopupPanel(
-        title: kind == 'apks' ? '듀얼앱 설치파일 정리' : '캐시 정리',
+        title: kind == 'apks' ? '듀얼앱 설치파일 정리' : kind == 'updates' ? '업데이트 파일 정리' : '캐시 정리',
         onBack: () => Navigator.pop(ctx, false), onClose: () => Navigator.pop(ctx, false),
-        body: const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('설치된 앱과 서명 키는 유지됩니다.\n생성한 파일은 다시 만들 수 있습니다.', style: TextStyle(color: muted, fontSize: 16, height: 1.6))),
+        body: const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('설치된 앱과 서명 키는 유지됩니다.\n다운로드와 파일 작업 중에는 정리할 수 없습니다.', style: TextStyle(color: muted, fontSize: 16, height: 1.6))),
         footer: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           OutlinedButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
           const SizedBox(width: 12), FilledButton(style: FilledButton.styleFrom(backgroundColor: const Color(0xffffb4ab)),
@@ -216,7 +256,7 @@ class _GeniePageState extends State<GeniePage> {
     margin: const EdgeInsets.only(bottom: 14), padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(color: canvas, borderRadius: BorderRadius.circular(12)),
     constraints: const BoxConstraints(maxHeight: 180),
-    child: SingleChildScrollView(child: SelectableText(message, style: const TextStyle(color: muted, fontSize: 15, height: 1.5))),
+    child: SingleChildScrollView(child: Text(message, style: const TextStyle(color: muted, fontSize: 15, height: 1.5))),
   );
   Widget menuBody() {
     final configure = data?['cloneOptions'] == true;
@@ -237,24 +277,25 @@ class _GeniePageState extends State<GeniePage> {
       if (configure) ...[
         if (cloneOptions.containsKey('netflixCompatibility'))
           RemoteTile('넷플릭스 실행 호환성', key: const ValueKey('netflixCompatibility'),
-            subtitle: '원본 앱 조회 허용 · 재서명 후 시작 검사 처리', toggle: cloneOptions['netflixCompatibility'] ?? false,
+            focusNode: menuNode('netflixCompatibility'), onFocus: () => remember('netflixCompatibility'),
+            subtitle: '버전 제한 없이 실행 코드 검사', toggle: cloneOptions['netflixCompatibility'] ?? false,
             onTap: () => toggleOption('netflixCompatibility')),
         for (final key in ['renameApp', 'renameLaunchers']) RemoteTile(labels[key]![0], key: ValueKey(key),
-          autofocus: key == 'renameApp', subtitle: labels[key]![1], toggle: cloneOptions[key] ?? true, onTap: () => toggleOption(key)),
-        RemoteTile('호환성 옵션', subtitle: advanced ? '접기' : '필요할 때만 변경', icon: advanced ? Icons.expand_less : Icons.tune_rounded,
-          onTap: () => setState(() => advanced = !advanced)),
+          focusNode: menuNode(key), onFocus: () => remember(key), autofocus: key == 'renameApp', subtitle: labels[key]![1], toggle: cloneOptions[key] ?? true, onTap: () => toggleOption(key)),
+        RemoteTile('호환성 옵션', focusNode: menuNode('advanced'), onFocus: () => remember('advanced'), subtitle: advanced ? '접기' : '필요할 때만 변경', icon: advanced ? Icons.expand_less : Icons.tune_rounded,
+          onTap: () => setState(() { advanced = !advanced; expandedPages[pageId] = advanced; })),
         if (advanced) ...[
           const Padding(padding: EdgeInsets.fromLTRB(4, 6, 4, 12), child: Text('패키지·공급자 주소·충돌 권한·서명은 별도 설치를 위해 변경됩니다. 호환성 옵션은 앱 실행을 보장하지 않습니다.', style: TextStyle(color: muted, fontSize: 12, height: 1.5))),
           if (cloneOptions['netflixCompatibility'] == true)
             const Padding(padding: EdgeInsets.all(4), child: Text('넷플릭스 프로필: 원본 리소스·작업 그룹 유지, 라이브러리 추출을 적용합니다.', style: TextStyle(color: muted, fontSize: 12))),
           if (cloneOptions['netflixCompatibility'] != true)
           for (final key in ['renameResources', 'isolateTasks', 'extractLibraries']) RemoteTile(labels[key]![0], key: ValueKey(key),
-            subtitle: labels[key]![1], toggle: cloneOptions[key] ?? true, onTap: () => toggleOption(key)),
+            focusNode: menuNode(key), onFocus: () => remember(key), subtitle: labels[key]![1], toggle: cloneOptions[key] ?? true, onTap: () => toggleOption(key)),
           TextButton(onPressed: () { setState(() => cloneOptions.updateAll((key, value) => key == 'netflixCompatibility' ? value : true)); bridge.invokeMethod<void>('options', cloneOptions); }, child: const Text('기본값 복원')),
         ],
       ] else if (!confirmation) ...[
         for (var i = 0; i < items.length; i++) RemoteTile(items[i], key: ValueKey('${data?['pageId'] ?? 'root'}-$i'),
-          autofocus: i == (data?['focus'] ?? 0), selected: data?['selected'] == i,
+          focusNode: menuNode('item-$i'), autofocus: i == (data?['focus'] ?? 0), selected: data?['selected'] == i,
           danger: RegExp('제거|삭제|지우기').hasMatch(items[i]),
           icon: data?['selected'] != null && data?['selected'] != -1 ? Icons.radio_button_unchecked : actionIcon(items[i]),
           onFocus: () => bridge.invokeMethod<void>('focus', i), onTap: () => perform('choose', i)),
@@ -299,12 +340,12 @@ class _GeniePageState extends State<GeniePage> {
         child: const ColoredBox(color: Color(0x99050b14)))),
       SafeArea(child: Center(child: Padding(padding: const EdgeInsets.all(24), child: FocusScope(
         key: ValueKey(data == null ? 'loading' : data?['pageId'] ?? 'root'),
-        child: PopupPanel(title: data?['title'] as String? ?? '불러오는 중',
+        child: FocusTraversalGroup(policy: TvFocusPolicy(), child: PopupPanel(title: data?['title'] as String? ?? '불러오는 중',
           wide: configure || (data?['message'] as String? ?? '').length > 180,
           breadcrumbs: (data?['breadcrumbs'] as List? ?? []).cast<String>(), onBack: back, onClose: () => perform('close'),
-          body: data == null && error == null ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())) : menuBody(),
+          body: data == null ? (error == null ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())) : RemoteTile('다시 시도', autofocus: true, subtitle: error, onTap: () => load(location))) : menuBody(),
           footer: menuFooter(configure),
-        ),
+        )),
       )))),
     ]);
   }
@@ -317,9 +358,9 @@ class _GeniePageState extends State<GeniePage> {
         Text('${entries.length}개', style: const TextStyle(color: muted, fontSize: 12)),
       ])),
       Expanded(child: ListView(children: [
-        if (!root) RemoteTile('상위 폴더', autofocus: true, icon: Icons.arrow_back, onTap: back),
+        if (!root) RemoteTile('상위 폴더', focusNode: node('file:$location:parent'), onFocus: () => fileFocus[location] = 'parent', autofocus: true, icon: Icons.arrow_back, onTap: back),
         for (var i = 0; i < entries.length; i++) RemoteTile(entries[i]['name'] as String, key: ValueKey(entries[i]['path']),
-          autofocus: root && i == 0, subtitle: entries[i]['detail'] as String?,
+          focusNode: node('file:$location:${entries[i]['path']}'), onFocus: () => fileFocus[location] = entries[i]['path'] as String, autofocus: root && i == 0, subtitle: entries[i]['detail'] as String?,
           icon: entries[i]['directory'] == true ? Icons.folder_outlined : (entries[i]['path'] as String).endsWith('.apk') ? Icons.android_rounded : Icons.insert_drive_file_outlined,
           onTap: () { final path = entries[i]['path'] as String; if (entries[i]['directory'] == true) { parents.add(location); load(path); } else { perform('open', path); } }),
         if (entries.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 48), child: Column(children: [
@@ -328,13 +369,15 @@ class _GeniePageState extends State<GeniePage> {
       ])),
     ]);
     final storage = Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(
-      color: panel, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xff263b55))),
+      color: panel, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xff304057))),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Text('저장공간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)), const SizedBox(height: 16),
         Text('듀얼앱 설치파일  ${data?['apkSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
-        OutlinedButton.icon(onPressed: () => cleanup('apks'), icon: const Icon(Icons.delete_outline, size: 18), label: const Text('설치파일 정리')),
-        const SizedBox(height: 12), Text('캐시  ${data?['cacheSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
-        OutlinedButton.icon(onPressed: () => cleanup('cache'), icon: const Icon(Icons.cleaning_services_outlined, size: 18), label: const Text('캐시 정리')),
+        OutlinedButton.icon(focusNode: node('storage:apks'), onPressed: () => cleanup('apks'), icon: const Icon(Icons.delete_outline, size: 18), label: const Text('설치파일 정리')),
+        const SizedBox(height: 12), Text('업데이트 다운로드  ${data?['updateSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
+        OutlinedButton.icon(focusNode: node('storage:updates'), onPressed: () => cleanup('updates'), icon: const Icon(Icons.downloading_rounded, size: 18), label: const Text('업데이트 파일 정리')),
+        const SizedBox(height: 12), Text('임시 캐시  ${data?['cacheSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
+        OutlinedButton.icon(focusNode: node('storage:cache'), onPressed: () => cleanup('cache'), icon: const Icon(Icons.cleaning_services_outlined, size: 18), label: const Text('캐시 정리')),
         const SizedBox(height: 8), const Text('설치된 앱과 서명 키는 유지됩니다.', style: TextStyle(color: muted, fontSize: 11, height: 1.5)),
       ]),
     );
@@ -343,7 +386,7 @@ class _GeniePageState extends State<GeniePage> {
         Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(data?['title'] as String? ?? '파일탐색기', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6), Text(root ? '기기 폴더와 설치파일을 한곳에서' : '파일탐색기  ›  ${data?['title'] ?? ''}', style: const TextStyle(color: muted, fontSize: 12)),
-        ])), if (root) ...[const SizedBox(width: 12), OutlinedButton.icon(onPressed: () => perform('pick'), icon: const Icon(Icons.add_rounded, size: 19), label: const Text('폴더 연결'))]]),
+        ])), if (root) ...[const SizedBox(width: 12), OutlinedButton.icon(focusNode: node('file:$location:pick'), onPressed: () => perform('pick'), icon: const Icon(Icons.add_rounded, size: 19), label: const Text('폴더 연결'))]]),
         const SizedBox(height: 24),
         if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
         Expanded(child: LayoutBuilder(builder: (context, constraints) {
@@ -362,10 +405,10 @@ class _GeniePageState extends State<GeniePage> {
     return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) { if (!didPop) back(); },
       child: Focus(onKeyEvent: (_, event) {
         if (files && event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.arrowLeft && !(storageOnRight && storageFocused)) {
-          bridge.invokeMethod<void>('sidebar'); return KeyEventResult.handled;
+          back(); return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
-      }, child: Scaffold(backgroundColor: Colors.transparent, body: files ? filesPage() : menuOverlay())),
+      }, child: Scaffold(backgroundColor: Colors.transparent, body: files ? FocusTraversalGroup(policy: TvFocusPolicy(), child: filesPage()) : menuOverlay())),
     );
   }
 }

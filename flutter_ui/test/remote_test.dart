@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:genie_ui/main.dart';
+import 'package:genie_ui/tv_focus.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -103,6 +104,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(submitted?['netflixCompatibility'], false);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('TV focus clamps edges and never jumps diagonally', (tester) async {
+    final a = FocusNode(); final b = FocusNode(); final c = FocusNode();
+    await tester.pumpWidget(MaterialApp(home: FocusTraversalGroup(policy: TvFocusPolicy(), child: Scaffold(body: Column(children: [
+      Row(children: [SizedBox(width: 180, child: RemoteTile('A', focusNode: a, autofocus: true, onTap: () {})),
+        const SizedBox(width: 20), SizedBox(width: 180, child: RemoteTile('B', focusNode: b, onTap: () {}))]),
+      Align(alignment: Alignment.centerLeft, child: SizedBox(width: 180, child: RemoteTile('C', focusNode: c, onTap: () {}))),
+    ])))));
+    await tester.pumpAndSettle();
+    expect(a.hasFocus, true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight); await tester.pumpAndSettle(); expect(b.hasFocus, true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); await tester.pumpAndSettle(); expect(b.hasFocus, true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft); await tester.pumpAndSettle(); expect(a.hasFocus, true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); await tester.pumpAndSettle(); expect(c.hasFocus, true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); await tester.pumpAndSettle(); expect(c.hasFocus, true);
+    await tester.pumpWidget(const SizedBox()); a.dispose(); b.dispose(); c.dispose();
+  });
+  testWidgets('Nested folder Left returns to parent and restores the originating row', (tester) async {
+    var sidebar = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'files': true, 'title': '파일탐색기', 'entries': [{'name': '설치파일', 'path': 'apks:', 'directory': true}]};
+      if (call.method == 'list') return {'files': true, 'title': '설치파일', 'entries': []};
+      if (call.method == 'sidebar') sidebar++;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select); await tester.pumpAndSettle();
+    expect(find.text('상위 폴더'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft); await tester.pumpAndSettle();
+    expect(sidebar, 0); expect(find.text('상위 폴더'), findsNothing);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'file::apks:');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft); await tester.pumpAndSettle(); expect(sidebar, 1);
   });
   testWidgets('Remote selection returns the focused menu item', (tester) async {
     Object? choice;

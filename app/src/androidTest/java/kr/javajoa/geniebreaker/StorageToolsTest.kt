@@ -24,6 +24,25 @@ class StorageToolsTest {
             assertEquals("preserve", registry.getString("cleanup_probe", null))
         } finally { kept.delete(); registry.edit().remove("cleanup_probe").commit() }
     }
+    @Test fun updateCleanupAndStartupPrunePreserveUnrelatedFiles() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val update = File(context.cacheDir, "updates/update.apk").apply { parentFile!!.mkdirs(); writeText("old-invalid") }
+        val partial = File(context.cacheDir, "updates/download-old.apk").apply { writeText("partial") }
+        val kept = File(context.cacheDir, "other-cache.tmp").apply { writeText("keep") }
+        try {
+            assertTrue(StorageTools.updateBytes(context) > 0)
+            StorageTools.pruneUpdates(context)
+            assertFalse(update.exists()); assertFalse(partial.exists()); assertTrue(kept.exists())
+            update.parentFile!!.mkdirs(); update.writeText("download")
+            FileWork.pending.incrementAndGet()
+            try { assertThrows(IllegalStateException::class.java) { StorageTools.clean(context, "updates") }; assertTrue(update.exists()) }
+            finally { FileWork.pending.decrementAndGet() }
+            StorageTools.clean(context, "cache")
+            assertTrue(update.exists()); assertFalse(kept.exists())
+            StorageTools.clean(context, "updates")
+            assertFalse(update.exists())
+        } finally { update.delete(); partial.delete(); kept.delete() }
+    }
     @Test fun cleanupRefusesActiveFileWork() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         FileWork.reading {

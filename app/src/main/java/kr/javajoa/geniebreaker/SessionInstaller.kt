@@ -43,8 +43,8 @@ internal object SessionInstaller {
                     session.commit(pending.intentSender); committed = true
                 }
             } catch (error: Exception) {
-                Diagnostics.record(app, "Install $expectedPackage", error)
-                state(app).edit().remove("progress").putString("result", "설치 요청 실패\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}").apply()
+                val code = Diagnostics.record(app, "Install", error)
+                state(app).edit().remove("progress").putString("result", "설치 요청 실패 [$code]\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}").apply()
             } finally {
                 if (id >= 0 && !committed) try { app.packageManager.packageInstaller.abandonSession(id) } catch (_: Exception) { }
                 FileWork.pending.decrementAndGet()
@@ -67,8 +67,8 @@ class InstallResultReceiver : BroadcastReceiver() {
                 requireNotNull(confirmation) { "설치 확인 화면을 받지 못했습니다" }
                 context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (error: Exception) {
-                Diagnostics.record(context, "Installer confirmation", error)
-                SessionInstaller.state(context).edit().remove("progress").putString("result", "설치 확인 화면을 열지 못했습니다\n${error.message}").apply()
+                val code = Diagnostics.record(context, "Installer confirmation", error)
+                SessionInstaller.state(context).edit().remove("progress").putString("result", "설치 확인 화면을 열지 못했습니다 [$code]\n${error.message}").apply()
             }
             return
         }
@@ -85,7 +85,7 @@ class InstallResultReceiver : BroadcastReceiver() {
             else -> "설치 실패"
         }
         val result = "$explanation\n대상: $expected\n상태: $status / $legacy\n${if (other != null) "충돌 앱: $other\n" else ""}$message"
-        Diagnostics.record(context, result)
-        SessionInstaller.state(context).edit().remove("progress").putString("result", result).apply()
+        val code = Diagnostics.record(context, "Install", if (status == PackageInstaller.STATUS_SUCCESS) null else IllegalStateException())
+        SessionInstaller.state(context).edit().remove("progress").putString("result", if (status == PackageInstaller.STATUS_SUCCESS) result else "$result\n[$code]").apply()
     }
 }

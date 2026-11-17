@@ -1,3 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="20dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:pathData="M8,6 L17,15 L12,20 L12,4 L17,9 L8,18" android:fillColor="@android:color/transparent" android:strokeColor="#9eafc7" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round" />
+<!-- Lucide, ISC license. Source: docs/assets/lucide/bluetooth.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="22dp" android:height="22dp" android:viewportWidth="24" android:viewportHeight="24">
+<path android:pathData="m7 7 10 10-5 5V2l5 5L7 17" android:fillColor="@android:color/transparent" android:strokeColor="#9DC5FF" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" />
 </vector>

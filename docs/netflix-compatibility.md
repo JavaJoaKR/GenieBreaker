@@ -1,7 +1,7 @@
 # Netflix TV clone startup profile
 
 The app-management clone popup exposes an experimental Netflix option only for
-`com.netflix.ninja`. It defaults on for these exact versionName/versionCode pairs:
+`com.netflix.ninja`. It defaults on for Netflix TV regardless of version. These are research reference versions, not an allowlist:
 
 | versionName | versionCode | Status |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ preserved and native-library extraction is enabled. The clone declares package
 visibility for the installed, enabled original app, which must remain installed.
 A DEX scan requires exactly one public, non-static, no-argument Runnable.run():void
 method containing the exact startup certificate-failure marker. Only that method
-body is replaced by a void return. Unknown versions, absent/ambiguous markers,
+body is replaced by a void return. Absent/ambiguous markers,
 unexpected method shapes, or oversized DEX files stop generation with an error.
 The resulting DEX is re-read before ARSCLib writes the aligned APK and apksig signs
 and verifies it. Output metadata records effective options and the changed method;

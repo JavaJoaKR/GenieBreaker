@@ -25,6 +25,9 @@ class MainActivity : Activity() {
     private var appTabSelected = false
     private lateinit var filesPage: FilePane
     private lateinit var filesTab: Button
+    private lateinit var sidebarView: LinearLayout
+    private lateinit var settingsTab: Button
+    private val pageFocus = mutableMapOf<String, java.lang.ref.WeakReference<View>>()
     private var filesSelected = false
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var scanExpired = false
@@ -45,6 +48,7 @@ class MainActivity : Activity() {
     private lateinit var scan: Button
     private lateinit var power: Button
     private lateinit var permission: Button
+    private var presentedError: String? = null
     private var updateActionLabel = "업데이트 확인"
     private lateinit var updater: AppUpdater
     private lateinit var badge: TextView
@@ -66,9 +70,9 @@ class MainActivity : Activity() {
     private var searching = false
     private var searched = false
     private var preview = false
-    private val compact: Boolean get() = resources.configuration.screenWidthDp < 800
+    private val compact: Boolean get() = resources.configuration.screenWidthDp < 700
     private val backgroundColor = TvDesign.canvas
-    private val surface = Color.rgb(17, 28, 46)
+    private val surface = TvDesign.surface
     private val muted = TvDesign.muted
     private val accent = TvDesign.blue
     private val white = TvDesign.ink
@@ -130,12 +134,17 @@ class MainActivity : Activity() {
         pendingCompanionAddress = savedInstanceState?.getString("companion_address")
         bluetoothActions = BluetoothActions(this) { text ->
             message(text)
-            if (text.contains("실패") && !isFinishing && !isDestroyed) TvMenus.show(this, "블루투스 요청 결과", listOf("닫기"), text)
+            if (ErrorCodes.isError(text) && !isFinishing && !isDestroyed) TvMenus.show(this, "블루투스 요청 결과", listOf("닫기"), text)
         }
         buildScreen()
         updater = AppUpdater(this) { text, _ -> updateActionLabel = text }
         if (!preview) updater.checkForUpdate(automatic = true)
         scan.requestFocus()
+        val local = getSharedPreferences("local_diagnostics", MODE_PRIVATE)
+        local.getString("last_crash", null)?.let { code ->
+            local.edit().remove("last_crash").apply()
+            uiHandler.post { TvMenus.notice(this, "이전 실행이 종료됐습니다. 오류 코드 [$code]") }
+        }
         selectTab(savedInstanceState?.getBoolean("apps_tab") == true)
         if (savedInstanceState?.getBoolean("files_tab") == true) selectFiles()
     }
@@ -153,6 +162,10 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         val sidebar = column().apply { setPadding(0, 0, dp(20), 0) }
+        sidebarView = sidebar
+        root.viewTreeObserver.addOnGlobalFocusChangeListener { _, next ->
+            if (next != null && !inside(next, sidebarView) && !filesSelected) pageFocus[if (appTabSelected) "apps" else "bluetooth"] = java.lang.ref.WeakReference(next)
+        }
         root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 144 else 184), -1))
         val brand = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         brand.addView(ImageView(this).apply { setImageResource(R.drawable.icon) }, LinearLayout.LayoutParams(dp(34), dp(34)))
@@ -170,7 +183,8 @@ class MainActivity : Activity() {
         permission = actionButton("권한 허용", false, ::requestAccess)
         power = actionButton("블루투스 켜기", false, ::enableBluetooth)
         sidebar.addView(permission); sidebar.addView(power)
-        sidebar.addView(actionButton("설정", false) { showSettings() }.apply { decorateNav(this, R.drawable.nav_settings) })
+        settingsTab = actionButton("설정", false) { showSettings() }.apply { decorateNav(this, R.drawable.nav_settings) }
+        sidebar.addView(settingsTab)
         decorateNav(bluetoothTab, R.drawable.nav_bluetooth); decorateNav(appsTab, R.drawable.nav_apps); decorateNav(filesTab, R.drawable.nav_files)
         root.addView(View(this).apply { setBackgroundColor(TvDesign.border) }, LinearLayout.LayoutParams(dp(1), -1))
         val content = column().apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0) }
@@ -185,7 +199,7 @@ class MainActivity : Activity() {
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = column()
         titles.addView(label("블루투스", if (compact) 24 else 30, white, true))
-        titles.addView(label("헤드폰 · 리모컨 · 입력 기기", 12).apply { setPadding(0, dp(6), 0, 0) })
+        titles.addView(label("기기를 연결하고 관리하세요", 14).apply { setPadding(0, dp(6), 0, 0) })
 
         heading.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         badge = label("확인 중", 12, accent).apply {
@@ -244,8 +258,76 @@ class MainActivity : Activity() {
         for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = TvDesign.selector(this, nav = true)
         filesPage.show(); filesPage.resume()
     }
+    private fun inside(view: View?, parent: View): Boolean {
+        var current = view
+        while (current != null) { if (current === parent) return true; current = current.parent as? View }
+        return false
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && ::bluetoothTab.isInitialized) uiHandler.post {
+            if (!isFinishing && (currentFocus == null || currentFocus?.isShown != true)) activeTab().requestFocus()
+        }
+    }
+    private fun activeTab() = if (filesSelected) filesTab else if (appTabSelected) appsTab else bluetoothTab
+    private fun enterContent() {
+        if (filesSelected) { filesPage.enter(); return }
+        val remembered = pageFocus[if (appTabSelected) "apps" else "bluetooth"]?.get()
+        if (remembered?.isShown == true && remembered.isEnabled && remembered.requestFocus()) return
+        if (appTabSelected) appsPage.enter() else scan.requestFocus()
+    }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN || !::sidebarView.isInitialized) return super.dispatchKeyEvent(event)
+        val focused = currentFocus
+        if (inside(focused, sidebarView)) {
+            val nav = listOf(bluetoothTab, appsTab, filesTab, permission, power, settingsTab).filter { it.isShown && it.isEnabled }
+            val index = nav.indexOf(focused)
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (index >= 0) nav[(index + if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1).coerceIn(0, nav.lastIndex)].requestFocus()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> return true
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    when (focused) { bluetoothTab -> selectTab(false); appsTab -> selectTab(true); filesTab -> selectFiles() }
+                    enterContent(); return true
+                }
+            }
+        } else if (!filesSelected && focused != null) {
+            if (appTabSelected) {
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && appsPage.atLeftEdge()) { appsTab.requestFocus(); return true }
+            } else if (focused is DeviceRow) {
+                val parent = focused.parent as? LinearLayout
+                val own = if (parent == registeredList) registeredList else nearbyList
+                val children = (0 until own.childCount).map { own.getChildAt(it) }.filterIsInstance<DeviceRow>()
+                val index = children.indexOf(focused)
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        val next = index + if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1
+                        if (next < 0) scan.requestFocus() else children.getOrNull(next)?.requestFocus()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        val left = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                        if (compact) { if (left) bluetoothTab.requestFocus(); return true }
+                        if (left && own == registeredList) { bluetoothTab.requestFocus(); return true }
+                        val other = if (left) registeredList else nearbyList
+                        if (other != own) (0 until other.childCount).map { other.getChildAt(it) }.filterIsInstance<DeviceRow>().let { list ->
+                            list.getOrNull(index.coerceAtMost(list.lastIndex))?.requestFocus()
+                        }
+                        return true
+                    }
+                }
+            } else if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { bluetoothTab.requestFocus(); return true }
+            else if (focused == scan && event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                val row = rows.values.firstOrNull { it.isShown && it.parent == nearbyList } ?: rows.values.firstOrNull { it.isShown }
+                row?.requestFocus(); return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
     private fun devicePanel(title: String): Triple<LinearLayout, LinearLayout, TextView> {
-        val panel = column().apply { setPadding(dp(12), dp(12), dp(12), dp(8)); background = TvDesign.shape(this@MainActivity, TvDesign.surface, 18, TvDesign.border) }
+        val panel = column().apply { setPadding(dp(12), dp(12), dp(12), dp(8)); background = TvDesign.shape(this@MainActivity, TvDesign.surface, 12) }
         val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         heading.addView(label(title, 16, white, true), LinearLayout.LayoutParams(0, -2, 1f))
         val count = label("0", 12, accent).apply { gravity = Gravity.CENTER; minWidth = dp(26); setPadding(dp(7), dp(4), dp(7), dp(4)); background = rounded(0xff193554.toInt(), 8) }
@@ -299,14 +381,14 @@ class MainActivity : Activity() {
         init {
             orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             isFocusable = true; isClickable = true; if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false); descendantFocusability = FOCUS_BLOCK_DESCENDANTS
-            minimumHeight = dp(76); setPadding(dp(12), dp(12), dp(12), dp(12))
+            minimumHeight = dp(70); setPadding(dp(12), dp(12), dp(12), dp(12))
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
             addView(symbol, LinearLayout.LayoutParams(dp(28), dp(30)).apply { rightMargin = dp(12) })
             val text = column()
             title.maxLines = 1; title.ellipsize = TextUtils.TruncateAt.END
             text.addView(title); text.addView(detail.apply { setPadding(0, dp(6), 0, 0); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
             addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(label("›", 23, muted).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(16), -1))
+            addView(ImageView(this@MainActivity).apply { setImageResource(R.drawable.ic_chevron); imageTintList = android.content.res.ColorStateList.valueOf(muted) }, LinearLayout.LayoutParams(dp(16), dp(20)))
             background = TvDesign.selector(this@MainActivity)
             setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) } }
         }
@@ -324,26 +406,11 @@ class MainActivity : Activity() {
             contentDescription = "${title.text}, $state, $address"
         }
     }
-    private inner class SymbolView(var kind: String, private val color: Int) : View(this@MainActivity) {
-        private val pen = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.8f; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas); pen.color = color
-            canvas.save(); val scale = minOf(width, height) / 32f
-            canvas.translate((width - 32 * scale) / 2, (height - 32 * scale) / 2); canvas.scale(scale, scale)
-            when (kind) {
-                "search" -> { canvas.drawCircle(13f, 13f, 8f, pen); canvas.drawLine(19f, 19f, 27f, 27f, pen) }
-                "audio" -> {
-                    canvas.drawArc(5f, 4f, 27f, 28f, 180f, 180f, false, pen)
-                    canvas.drawRoundRect(4f, 15f, 10f, 26f, 2f, 2f, pen); canvas.drawRoundRect(22f, 15f, 28f, 26f, 2f, 2f, pen)
-                }
-                "input" -> { canvas.drawRoundRect(3f, 8f, 29f, 25f, 3f, 3f, pen)
-                    for (y in listOf(13f, 17f)) for (x in listOf(8f, 13f, 18f, 23f)) canvas.drawPoint(x, y, pen)
-                    canvas.drawLine(11f, 21f, 21f, 21f, pen)
-                }
-                else -> { val path = Path().apply { moveTo(10f, 8f); lineTo(23f, 22f); lineTo(16f, 28f); lineTo(16f, 4f); lineTo(23f, 10f); lineTo(10f, 24f) }; canvas.drawPath(path, pen) }
-            }
-            canvas.restore()
-        }
+    private inner class SymbolView(kind: String, color: Int) : ImageView(this@MainActivity) {
+        var kind: String = kind
+            set(value) { field = value; updateIcon() }
+        init { scaleType = ScaleType.FIT_CENTER; imageTintList = android.content.res.ColorStateList.valueOf(color); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO; updateIcon() }
+        private fun updateIcon() { setImageResource(when (kind) { "audio" -> R.drawable.ic_audio; "input" -> R.drawable.ic_input; "search" -> R.drawable.ic_search; else -> R.drawable.ic_bluetooth }) }
     }
     private fun access() = if (Build.VERSION.SDK_INT >= 31) {
         checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
@@ -375,7 +442,11 @@ class MainActivity : Activity() {
     }
     override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume(); if (::appsPage.isInitialized && appTabSelected) appsPage.resume(); if (::filesPage.isInitialized && filesSelected) filesPage.resume() }
     @Deprecated("Android TV back key compatibility")
-    override fun onBackPressed() { if (filesSelected && filesPage.hasFocus()) filesPage.back() else super.onBackPressed() }
+    override fun onBackPressed() {
+        if (filesSelected && filesPage.hasFocus()) filesPage.back()
+        else if (currentFocus != null && !inside(currentFocus, sidebarView)) activeTab().requestFocus()
+        else super.onBackPressed()
+    }
     override fun onPause() { if (::filesPage.isInitialized) filesPage.pause(); super.onPause() }
     override fun onDestroy() { if (::filesPage.isInitialized) filesPage.close(); if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); if (::appsPage.isInitialized) appsPage.close(); uiHandler.removeCallbacksAndMessages(null); super.onDestroy() }
     override fun onStop() {
@@ -384,7 +455,7 @@ class MainActivity : Activity() {
         try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
         super.onStop()
     }
-    private fun message(text: String) { status.text = text }
+    private fun message(text: String) { status.text = if (ErrorCodes.isError(text) && !text.contains("[GB-")) "$text [${Diagnostics.record(this, "Bluetooth: $text")}]" else text }
     private fun refresh() {
         if (preview) return
         permission.visibility = if (access()) View.GONE else View.VISIBLE
@@ -512,18 +583,21 @@ class MainActivity : Activity() {
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링 완료", error) }
     }
     private fun operationError(operation: String, error: Exception) {
-        Diagnostics.record(this, operation, error)
-        message("$operation 실패: ${error.javaClass.simpleName}. 오류 기록을 확인하세요.")
+        val code = Diagnostics.record(this, operation, error)
+        val text = "$operation 실패 [$code]. 문제 기록에서 코드를 확인하세요."
+        message(text)
+        if (presentedError != code && !isFinishing && !isDestroyed) { presentedError = code; TvMenus.notice(this, text) }
     }
     private fun showSettings() {
-        TvMenus.show(this, "설정", listOf(updateActionLabel, "문제 기록")) { which ->
+        TvMenus.show(this, "설정", listOf(updater.actionLabel(updateActionLabel), "문제 기록")) { which ->
             if (which == 0) updater.click() else if (which == 1) showDiagnostics()
         }
     }
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)
-        TvMenus.show(this, "문제 기록", listOf("복사"), text) { which -> if (which == 0)
-            getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker diagnostics", text))
+        TvMenus.show(this, "문제 기록 · 기기 내부", listOf("기록 복사", "기록 지우기"), text) { which ->
+            if (which == 0) getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker local errors", text))
+            else TvMenus.show(this, "문제 기록 지우기", listOf("취소", "기록 지우기"), "기기에 저장된 오류 코드를 지웁니다.") { if (it == 1) Diagnostics.clear(this) }
         }
     }
     private fun bondedDevice(address: String): BluetoothDevice? {

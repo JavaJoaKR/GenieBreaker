@@ -45,6 +45,7 @@ internal class AppUpdater(
         handler.removeCallbacks(retry)
         ui { state("업데이트 확인 중", false) }
         executor.execute {
+            StorageTools.pruneUpdates(activity)
             FileWork.lock.readLock().lock()
             var cachedVersion = 0L
             try {
@@ -98,8 +99,8 @@ internal class AppUpdater(
             } catch (error: Exception) {
                 if (!closed) {
                     failed = true
-                    Diagnostics.record(activity, "Update check", error)
-                    ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 다시 확인", true); if (!automatic) toast("확인하지 못했습니다. 잠시 후 자동으로 다시 시도합니다.") }
+                    val code = Diagnostics.record(activity, "Update check", error)
+                    ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 재시도 [$code]", true); if (!automatic) toast("확인하지 못했습니다. [$code]") }
                 }
             } finally {
                 busy.set(false); FileWork.lock.readLock().unlock()
@@ -107,6 +108,7 @@ internal class AppUpdater(
             }
         }
     }
+    fun actionLabel(fallback: String) = if (busy.get()) fallback else if (apk.exists()) "업데이트 설치" else "업데이트 확인"
     fun click() {
         if (busy.get()) return
         if (apk.exists()) install() else checkForUpdate()
@@ -125,7 +127,7 @@ internal class AppUpdater(
             }
             SessionInstaller.submit(activity, apk, activity.packageName)
         } catch (_: ActivityNotFoundException) { toast("이 펌웨어에는 사용할 수 있는 APK 설치 화면이 없습니다") }
-        catch (_: Exception) { apk.delete(); state("업데이트 확인", true); toast("업데이트 파일을 확인하지 못했습니다. 다시 받아주세요") }
+        catch (error: Exception) { val code = Diagnostics.record(activity, "Update install", error); apk.delete(); state("업데이트 확인", true); toast("업데이트 파일 확인 실패 [$code]") }
     }
     fun resume() {
         if (failed && !busy.get()) checkForUpdate(automatic = true)

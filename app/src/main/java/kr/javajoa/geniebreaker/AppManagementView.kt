@@ -37,7 +37,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> main.post {
         if (!activity.isDestroyed) {
             status.text = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
-            status.isFocusable = installState.contains("result") || installState.contains("progress")
+            status.isFocusable = false
             grid.invalidateViews()
         }
     } }
@@ -62,7 +62,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         addView(status, LayoutParams(-1, dp(36)).apply { topMargin = dp(10); bottomMargin = dp(8) })
         val shelf = FrameLayout(activity)
         addView(shelf, LayoutParams(-1, 0, 1f))
-        grid.numColumns = GridView.AUTO_FIT; grid.columnWidth = dp(160); grid.horizontalSpacing = dp(12); grid.verticalSpacing = dp(12)
+        grid.numColumns = if (resources.configuration.screenWidthDp >= 1100) 4 else 3; grid.columnWidth = dp(160); grid.horizontalSpacing = dp(12); grid.verticalSpacing = dp(12)
         grid.stretchMode = GridView.STRETCH_COLUMN_WIDTH; grid.clipToPadding = false; grid.setPadding(dp(3), dp(3), dp(3), dp(3))
         if (Build.VERSION.SDK_INT >= 26) grid.setDefaultFocusHighlightEnabled(false)
         grid.selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
@@ -89,9 +89,9 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         override fun getItemId(position: Int) = position.toLong()
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val card = (convertView as? LinearLayout) ?: LinearLayout(activity).apply {
-                orientation = VERTICAL; gravity = Gravity.CENTER; minimumHeight = dp(128)
+                orientation = VERTICAL; gravity = Gravity.CENTER; minimumHeight = dp(124)
                 setPadding(dp(12), dp(16), dp(12), dp(12)); background = focusBackground()
-                addView(ImageView(activity), LayoutParams(dp(42), dp(42)))
+                addView(ImageView(activity), LayoutParams(dp(40), dp(40)))
                 addView(text("", 15, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.CENTER }, LayoutParams(-1, -2).apply { topMargin = dp(12) })
                 addView(text("", 11).apply { gravity = Gravity.CENTER }, LayoutParams(-1, -2).apply { topMargin = dp(6) })
             }
@@ -133,16 +133,34 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                     count.text = if (onlyDuals) "내 듀얼앱 · ${items.size}개" else "설치된 앱 · ${items.size}개"
                     if (grid.adapter !== adapter) grid.adapter = adapter else adapter.notifyDataSetChanged()
                     val selectedIndex = items.indexOfFirst { it.packageName == selectedPackage }
-                    if (hadGridFocus && selectedIndex >= 0) grid.setSelection(selectedIndex)
+                    if (hadGridFocus && items.isNotEmpty()) { grid.setSelection(if (selectedIndex >= 0) selectedIndex else oldPosition.coerceAtMost(items.lastIndex)); grid.requestFocus() }
                     else if (items.isNotEmpty()) grid.smoothScrollToPosition(oldPosition.coerceAtMost(items.lastIndex))
                     empty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
                     empty.text = if (onlyDuals) "아직 만든 듀얼앱이 없습니다" else "표시할 앱이 없습니다. 보기 설정을 확인하세요."
                     status.text = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
-                    status.isFocusable = installState.contains("result") || installState.contains("progress")
+                    status.isFocusable = false
                     loading = false
                 }
-            } catch (error: Exception) { ui { loading = false; status.text = "앱을 불러오지 못했습니다. 다시 시도하세요."; Diagnostics.record(activity, "App shelf", error) } }
+            } catch (error: Exception) { ui { loading = false; status.text = "앱 목록 오류 [${Diagnostics.record(activity, "App shelf", error)}]" } }
         }
+    }
+    fun enter() { if (packages.isNotEmpty()) { grid.requestFocus(); grid.setSelection(grid.selectedItemPosition.coerceAtLeast(0)) } else getChildAt(0).requestFocus(View.FOCUS_DOWN) }
+    fun atLeftEdge() = if (grid.hasFocus()) grid.selectedItemPosition.coerceAtLeast(0) % grid.numColumns == 0
+        else (getChildAt(0) as ViewGroup).getChildAt(1).hasFocus()
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && !grid.hasFocus()) {
+            if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { enter(); return true }
+            if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP) return true
+            if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && (getChildAt(0) as ViewGroup).getChildAt(2).hasFocus()) return true
+        }
+        if (event.action == KeyEvent.ACTION_DOWN && grid.hasFocus() && packages.isNotEmpty()) {
+            val position = grid.selectedItemPosition.coerceAtLeast(0)
+            val columns = grid.numColumns
+            if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && position < columns) { (getChildAt(0) as ViewGroup).getChildAt(1).requestFocus(); return true }
+            if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && (position % columns == columns - 1 || position == packages.lastIndex)) return true
+            if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN && position + columns >= packages.size) return true
+        }
+        return super.dispatchKeyEvent(event)
     }
     private fun choose(pkg: PackageInfo) {
         if (busy) return
@@ -157,7 +175,10 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
             if (record != null && duals.isInstalled(record.source)) actions += "듀얼앱 다시 만들기" to { create(pm.getPackageInfo(record.source, 0)) }
         } else actions += "듀얼앱 만들기" to { create(pkg) }
         if (record == null || duals.isInstalled(record.source)) actions += "원본 앱 실행" to { launch(record?.source ?: pkg.packageName) }
-        actions += "더 보기" to { more(pkg, record) }
+        if (record != null && duals.file(record).exists()) actions += "듀얼앱 APK 저장" to { export(record.id) }
+        if (pkg.applicationInfo?.flags?.and(ApplicationInfo.FLAG_SYSTEM) == 0) actions += "원본 앱 제거" to { uninstall(record?.source ?: pkg.packageName) }
+        actions += "앱 정보" to { notice("${pkg.packageName}\n버전 ${pkg.versionName}") }
+        if (installState.contains("result")) actions += "설치 결과" to { notice(installState.getString("result", "") ?: "") }
         TvMenus.show(activity, pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "앱 관리", actions.map { it.first }) { index -> actions.getOrNull(index)?.second?.invoke() }
     }
     private fun create(pkg: PackageInfo) {
@@ -165,14 +186,12 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         val netflix = pkg.packageName == NetflixCompatibility.PACKAGE
         @Suppress("DEPRECATION")
         val code = if (Build.VERSION.SDK_INT >= 28) pkg.longVersionCode else pkg.versionCode.toLong()
-        val supported = NetflixCompatibility.supported(pkg.packageName, pkg.versionName, code)
+        val supported = netflix
         val defaults = CloneOptions(netflixCompatibility = supported).values().filterKeys { netflix || it != "netflixCompatibility" }
         val saved = preferences.getString("options_${pkg.packageName}", null)
         val values = try { val json = JSONObject(saved ?: "{}"); defaults.mapValues { (key, fallback) -> json.optBoolean(key, fallback) } } catch (_: Exception) { defaults }
         val label = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "듀얼앱"
-        val description = if (!netflix) label else "$label · ${pkg.versionName}\n" +
-            (if (supported) "실행 호환성 실험 기능 · 원본 앱을 설치·사용 설정 상태로 유지하세요. 실제 재생은 기기에서 확인해야 합니다."
-            else "이 버전은 실행 호환성 미지원입니다. 옵션을 켜면 생성을 중단합니다. 권장: 13.0.1 build 25028.")
+        val description = if (!netflix) label else "$label · ${pkg.versionName}\n버전에 관계없이 실행 코드를 검사합니다. 원본 앱은 설치·사용 설정 상태로 유지하세요."
         TvMenus.cloneOptions(activity, description, values) { chosen ->
             preferences.edit().putString("options_${pkg.packageName}", JSONObject(chosen).toString()).apply()
             createWithOptions(pkg, CloneOptions.from(chosen))
@@ -187,16 +206,17 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
                 val record = duals.build(pkg, options) { progress -> ui { status.text = progress } }
                 ui { busy = false; grid.isEnabled = true; grid.invalidateViews(); install(record.id) }
             } catch (error: Throwable) {
-                Diagnostics.record(activity, "Dual app build", error)
-                ui { busy = false; grid.isEnabled = true; status.text = "듀얼앱을 만들지 못했습니다"; notice(error.message ?: "이 앱의 듀얼앱을 만들지 못했습니다. 설정의 문제 기록에서 원인을 확인할 수 있습니다.") }
+                val code = Diagnostics.record(activity, "Dual app build", error)
+                ui { busy = false; grid.isEnabled = true; status.text = "듀얼앱을 만들지 못했습니다"; notice("${error.message ?: "듀얼앱을 만들지 못했습니다"} [$code]") }
             }
         }
     }
     private fun launch(packageName: String) {
         try {
+            Diagnostics.record(activity, "Launch requested: $packageName")
             val intent = pm.getLeanbackLaunchIntentForPackage(packageName) ?: pm.getLaunchIntentForPackage(packageName)
-            if (intent != null) activity.startActivity(intent) else notice("실행 화면이 없는 앱입니다.")
-        } catch (error: Exception) { Diagnostics.record(activity, "Launch", error); notice("앱을 실행할 수 없습니다. 오류 기록을 확인하세요.") }
+            if (intent != null) activity.startActivity(intent) else { Diagnostics.record(activity, "Launch failed: no launcher for $packageName"); notice("실행 화면이 없는 앱입니다.") }
+        } catch (error: Exception) { val code = Diagnostics.record(activity, "Launch", error); notice("앱을 실행할 수 없습니다. [$code]") }
     }
     private fun more(pkg: PackageInfo, record: DualApp?) {
         val actions = mutableListOf<Pair<String, () -> Unit>>()

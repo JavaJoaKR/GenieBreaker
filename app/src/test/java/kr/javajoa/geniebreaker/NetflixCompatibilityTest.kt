@@ -63,11 +63,13 @@ class NetflixCompatibilityTest {
             assertThrows(IllegalArgumentException::class.java) { NetflixCompatibility.candidates(NetflixCompatibility.read(input)) }
         }
     }
-    @Test fun exactPackageVersionAndCodeAreRequired() {
+    @Test fun packageIsRequiredButVersionsAreNotRestricted() {
         assertTrue(NetflixCompatibility.supported("com.netflix.ninja", "13.0.1 build 25028", 25028))
         assertFalse(NetflixCompatibility.supported("com.netflix.mediaclient", "13.0.1 build 25028", 25028))
-        assertFalse(NetflixCompatibility.supported("com.netflix.ninja", "13.0.1 build 25028", 25029))
-        assertThrows(IllegalArgumentException::class.java) { NetflixCompatibility.validate("com.netflix.ninja", "99.0", 99000) }
+        assertTrue(NetflixCompatibility.supported("com.netflix.ninja", "13.0.1 build 25028", 25029))
+        NetflixCompatibility.validate("com.netflix.ninja", "99.0", 99000)
+        assertTrue(NetflixCompatibility.supported("com.netflix.ninja", null, 0))
+        assertThrows(IllegalArgumentException::class.java) { NetflixCompatibility.validate("com.other", "99.0", 99000) }
     }
     @Test fun profileEnforcesPreservationOnlyWhenEnabled() {
         val generic = CloneOptions()
