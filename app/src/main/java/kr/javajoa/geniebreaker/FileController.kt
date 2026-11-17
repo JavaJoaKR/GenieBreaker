@@ -24,8 +24,10 @@ internal class FileController(private val activity: Activity, private val change
     private var cut = false
     private val resolver get() = activity.contentResolver
     // Do not offer cloud-backed document trees: this explorer must never upload local data.
-    private fun isLocalTree(uri: Uri) = uri.scheme == "content" && uri.authority in setOf(
-        "com.android.externalstorage.documents", "com.android.providers.downloads.documents", "com.android.providers.media.documents")
+    companion object {
+        fun isLocalDocument(uri: Uri) = uri.scheme == "content" && uri.authority in setOf(
+            "com.android.externalstorage.documents", "com.android.providers.downloads.documents", "com.android.providers.media.documents")
+    }
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
         if (call.method == "pick") {
             activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).putExtra(Intent.EXTRA_LOCAL_ONLY, true).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), 620)
@@ -95,7 +97,7 @@ internal class FileController(private val activity: Activity, private val change
                 if (kind == "local") writable.add(handle)
                 items += entry(doc, handle) + mapOf("name" to label)
             }
-            resolver.persistedUriPermissions.filter { it.isReadPermission && isLocalTree(it.uri) }.forEach { permission ->
+            resolver.persistedUriPermissions.filter { it.isReadPermission && isLocalDocument(it.uri) }.forEach { permission ->
                 DocumentFile.fromTreeUri(activity, permission.uri)?.let { doc ->
                     val handle = doc.uri.toString(); known[handle] = doc; roots.add(handle)
                     if (permission.isWritePermission) writable.add(handle) else writable.remove(handle)
@@ -252,7 +254,7 @@ internal class FileController(private val activity: Activity, private val change
         if (request != 620) return false
         if (result == Activity.RESULT_OK) data?.data?.let { uri ->
             try {
-                require(isLocalTree(uri)) { "내부 저장소나 USB의 로컬 폴더만 연결할 수 있습니다" }
+                require(isLocalDocument(uri)) { "내부 저장소나 USB의 로컬 폴더만 연결할 수 있습니다" }
                 val flags = requireNotNull(data).flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 require(flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) { "폴더 읽기 권한이 필요합니다" }
                 if (flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0) {

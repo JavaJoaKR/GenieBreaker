@@ -15,6 +15,8 @@ class FileControllerTest {
         val fixture = File(root, "file-test-${java.util.UUID.randomUUID()}").apply { mkdirs() }
         val base = "local:${fixture.name}"
         try {
+            assertTrue(FileController.isLocalDocument(android.net.Uri.parse("content://com.android.externalstorage.documents/tree/primary%3ADownload")))
+            assertFalse(FileController.isLocalDocument(android.net.Uri.parse("content://cloud.example.documents/tree/private")))
             browser.listing(""); browser.listing("local:")
             File(fixture, "source.txt").writeText("exact contents")
             browser.listing(base)

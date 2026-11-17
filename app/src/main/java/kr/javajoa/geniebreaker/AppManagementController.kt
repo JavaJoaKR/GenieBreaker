@@ -178,6 +178,9 @@ internal class AppManagementController(private val activity: Activity, private v
         val id = preferences.getString("pending_export", null); preferences.edit().remove("pending_export").apply()
         val uri = data?.data
         if (result != Activity.RESULT_OK || id == null || uri == null) return
+        if (!FileController.isLocalDocument(uri)) {
+            notice("내부 저장소나 USB의 로컬 폴더에만 저장할 수 있습니다. [GB-UI-0001]"); return
+        }
         worker.execute { FileWork.reading { try {
             activity.contentResolver.openOutputStream(uri)?.use { output -> File(activity.filesDir, "edited/$id.apk").inputStream().use { it.copyTo(output) } } ?: error("저장 위치를 열지 못했습니다")
             ui { notice("APK를 저장했습니다") }
