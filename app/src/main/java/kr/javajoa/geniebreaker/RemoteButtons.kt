@@ -78,6 +78,10 @@ internal class ButtonPresses {
 
 class RemoteButtonService : AccessibilityService() {
     private val presses = ButtonPresses()
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        if (BuildConfig.DEBUG) android.util.Log.i("GenieRemoteTest", "Remapping service connected")
+    }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
     override fun onInterrupt() = presses.clear()
     override fun onDestroy() { presses.clear(); super.onDestroy() }

@@ -6,7 +6,9 @@ home_component() {
   adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | tail -1
 }
 wait_for_settings() {
-  for attempt in {1..80}; do
+  local limit=80
+  if [[ "$1" != reboot ]]; then limit=15; fi
+  for ((attempt=0; attempt<limit; attempt++)); do
     if adb shell dumpsys activity activities | grep -E '(topResumedActivity|mResumedActivity|ResumedActivity).*com\.android\.settings/' >/dev/null; then return 0; fi
     sleep 2
   done
@@ -14,7 +16,8 @@ wait_for_settings() {
   # Only the disposable test AVD and its synthetic test app are inspected here.
   adb shell dumpsys package "$pkg" | grep -E 'User 0:|StartupBootReceiver|RECEIVE_BOOT_COMPLETED' | head -12 || true
   adb shell dumpsys activity broadcasts | grep -E 'StartupBootReceiver|act=android.intent.action.BOOT_COMPLETED' | tail -16 || true
-  adb logcat -b all -d -s GenieStartupTest | tail -10
+  adb logcat -b all -d -s GenieStartupTest GenieRemoteTest | tail -14
+  adb shell dumpsys accessibility | grep -E "Bound services|RemoteButtonService|filterKeyEvents" | head -12 || true
   adb shell cmd appops get "$pkg" SYSTEM_ALERT_WINDOW
   adb shell settings get global boot_count
   adb shell run-as "$pkg" cat shared_prefs/tv_controls.xml || true
@@ -56,14 +59,27 @@ wait_for_settings standby
 echo 'Selected app opened after reboot and standby. Original HOME component verified.'
 
 # This AVD is disposable. Enable the tested service only here to exercise an actual input event.
-service="$pkg/.RemoteButtonService"
+service="$pkg/$pkg.RemoteButtonService"
 previous=$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')
 if [[ -z "$previous" || "$previous" == null ]]; then services="$service"; else services="$previous:$service"; fi
 adb shell settings put secure enabled_accessibility_services "$services"
 adb shell settings put secure accessibility_enabled 1
 adb shell input keyevent KEYCODE_HOME
-sleep 3
-adb shell input keyevent KEYCODE_PROG_RED
+for attempt in {1..20}; do
+  if adb logcat -d -s GenieRemoteTest | grep -F 'Remapping service connected' >/dev/null; then break; fi
+  sleep 1
+done
+adb logcat -d -s GenieRemoteTest | grep -F 'Remapping service connected'
+# The shell input command dispatches at the framework level. A virtual USB remote
+# enters through InputReader and exercises the same accessibility filter as hardware.
+adb shell uinput - <<'REMOTE'
+{"id":1,"command":"register","name":"Genie QA Remote","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,398]}]}
+{"id":1,"command":"delay","duration":1500}
+{"id":1,"command":"inject","events":[1,398,1,0,0,0]}
+{"id":1,"command":"delay","duration":120}
+{"id":1,"command":"inject","events":[1,398,0,0,0,0]}
+{"id":1,"command":"delay","duration":300}
+REMOTE
 wait_for_settings remote
 [[ "$(home_component)" == "$original_home" ]]
 echo 'Mapped red key opened the selected app from the original launcher.'
