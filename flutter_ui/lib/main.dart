@@ -107,11 +107,12 @@ class PopupPanel extends StatelessWidget {
   final List<String> breadcrumbs;
   final Widget body;
   final Widget? footer;
+  final String? errorCode;
   final bool wide;
   final VoidCallback onBack;
   final VoidCallback onClose;
   const PopupPanel({super.key, required this.title, this.breadcrumbs = const [], required this.body,
-    this.footer, this.wide = false, required this.onBack, required this.onClose});
+    this.footer, this.errorCode, this.wide = false, required this.onBack, required this.onClose});
   @override
   Widget build(BuildContext context) => ConstrainedBox(
     constraints: BoxConstraints(maxWidth: wide ? 660 : 490, maxHeight: MediaQuery.sizeOf(context).height - 64),
@@ -128,6 +129,7 @@ class PopupPanel extends StatelessWidget {
               Expanded(child: Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis)),
               const SizedBox(width: 12), IconButton(tooltip: '메뉴 닫기', onPressed: onClose, icon: const Icon(Icons.close_rounded, color: muted, size: 22)),
             ]),
+            if (errorCode != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('오류 코드  $errorCode', key: const ValueKey('error-code'), style: const TextStyle(color: blue, fontSize: 18, fontWeight: FontWeight.w600))),
             const SizedBox(height: 14),
             Flexible(fit: FlexFit.loose, child: body),
             if (footer != null) ...[const SizedBox(height: 14), const Divider(height: 1, color: Color(0xff293a53)), const SizedBox(height: 14), footer!],
@@ -341,6 +343,7 @@ class _GeniePageState extends State<GeniePage> {
       SafeArea(child: Center(child: Padding(padding: const EdgeInsets.all(24), child: FocusScope(
         key: ValueKey(data == null ? 'loading' : data?['pageId'] ?? 'root'),
         child: FocusTraversalGroup(policy: TvFocusPolicy(), child: PopupPanel(title: data?['title'] as String? ?? '불러오는 중',
+          errorCode: (data?['title'] as String? ?? '').startsWith('문제 기록') ? null : RegExp(r'GB-[A-Z]{2}-[0-9A-F]{4}').firstMatch(data?['message'] as String? ?? error ?? '')?.group(0),
           wide: configure || (data?['message'] as String? ?? '').length > 180,
           breadcrumbs: (data?['breadcrumbs'] as List? ?? []).cast<String>(), onBack: back, onClose: () => perform('close'),
           body: data == null ? (error == null ? const SizedBox(height: 60, child: Center(child: CircularProgressIndicator())) : RemoteTile('다시 시도', autofocus: true, subtitle: error, onTap: () => load(location))) : menuBody(),

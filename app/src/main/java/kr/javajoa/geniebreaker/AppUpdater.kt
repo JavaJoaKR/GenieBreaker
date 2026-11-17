@@ -45,7 +45,7 @@ internal class AppUpdater(
         handler.removeCallbacks(retry)
         ui { state("업데이트 확인 중", false) }
         executor.execute {
-            StorageTools.pruneUpdates(activity)
+            try { StorageTools.pruneUpdates(activity) } catch (error: Exception) { Diagnostics.record(activity, "Update cleanup", error) }
             FileWork.lock.readLock().lock()
             var cachedVersion = 0L
             try {

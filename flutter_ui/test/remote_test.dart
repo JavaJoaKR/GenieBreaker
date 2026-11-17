@@ -137,6 +137,18 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'file::apks:');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft); await tester.pumpAndSettle(); expect(sidebar, 1);
   });
+  testWidgets('Error code stays visible above a long scrollable message', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {'title': '안내', 'items': ['닫기'], 'message': '${List.filled(50, '오류 설명').join('\n')} [GB-BT-3A2F]'};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    final code = find.byKey(const ValueKey('error-code'));
+    expect(code, findsOneWidget);
+    expect(tester.getRect(code).top, greaterThan(0));
+    expect(tester.getRect(code).bottom, lessThan(600));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Remote selection returns the focused menu item', (tester) async {
     Object? choice;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {

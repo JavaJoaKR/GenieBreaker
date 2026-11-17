@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 /// TV arrows move within the current row/column. Never wrap or jump diagonally.
-class TvFocusPolicy extends WidgetOrderTraversalPolicy {
+class TvFocusPolicy extends FocusTraversalPolicy {
+  @override
+  Iterable<FocusNode> sortDescendants(Iterable<FocusNode> descendants, FocusNode currentNode) => descendants;
   @override
   bool inDirection(FocusNode currentNode, TraversalDirection direction) {
     final origin = currentNode.rect;
