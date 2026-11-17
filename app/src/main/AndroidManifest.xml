@@ -29,7 +29,8 @@
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/remote_buttons_service" />
         </service>
-        <receiver android:name=".StartupBootReceiver" android:exported="false">
+        <!-- The receiver accepts only the system-protected BOOT_COMPLETED action. -->
+        <receiver android:name=".StartupBootReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
         </receiver>
         <service android:name=".StartupWakeService" android:exported="false" android:foregroundServiceType="specialUse">

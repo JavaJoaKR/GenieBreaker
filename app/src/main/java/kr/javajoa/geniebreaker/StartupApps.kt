@@ -49,6 +49,7 @@ internal object StartupApps {
     fun present(context: Context, waking: Boolean, done: () -> Unit = {}) {
         val app = context.applicationContext
         val boot = boot(app)
+        if (BuildConfig.DEBUG) android.util.Log.i("GenieStartupTest", "eligible=${due(app, boot, waking)} permission=${allowed(app)} locked=${app.getSystemService(KeyguardManager::class.java).isDeviceLocked}")
         if (presenting || !due(app, boot, waking) || !allowed(app) ||
             app.getSystemService(KeyguardManager::class.java).isDeviceLocked) { done(); return }
         if (Build.VERSION.SDK_INT < 29) { try { launchIfDue(app, boot, waking) } finally { done() }; return }
@@ -71,7 +72,7 @@ internal object StartupApps {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.END }
-        try { wm.addView(banner, params) } catch (_: RuntimeException) { done(); return }
+        try { wm.addView(banner, params) } catch (e: RuntimeException) { if (BuildConfig.DEBUG) android.util.Log.i("GenieStartupTest", "Notice rejected: ${e.javaClass.simpleName}"); done(); return }
         presenting = true
         Handler(Looper.getMainLooper()).postDelayed({
             try {
@@ -89,6 +90,7 @@ internal object StartupApps {
 class StartupBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (BuildConfig.DEBUG) android.util.Log.i("GenieStartupTest", "Boot receiver entered")
         val locked = context.getSystemService(KeyguardManager::class.java).isDeviceLocked
         val awaitUnlock = locked && StartupApps.allowed(context) && StartupApps.due(context, StartupApps.boot(context), false)
         StartupWakeService.restore(context, awaitUnlock)

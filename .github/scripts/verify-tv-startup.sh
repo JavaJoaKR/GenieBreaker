@@ -6,12 +6,15 @@ home_component() {
   adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | tail -1
 }
 wait_for_settings() {
-  for attempt in {1..40}; do
+  for attempt in {1..80}; do
     if adb shell dumpsys activity activities | grep -E '(topResumedActivity|mResumedActivity|ResumedActivity).*com\.android\.settings/' >/dev/null; then return 0; fi
     sleep 2
   done
   echo "Selected app did not become the resumed activity after $1" >&2
   # Only the disposable test AVD and its synthetic test app are inspected here.
+  adb shell dumpsys package "$pkg" | grep -E 'User 0:|StartupBootReceiver|RECEIVE_BOOT_COMPLETED' | head -12 || true
+  adb shell dumpsys activity broadcasts | grep -E 'StartupBootReceiver|act=android.intent.action.BOOT_COMPLETED' | tail -16 || true
+  adb logcat -b all -d -s GenieStartupTest | tail -10
   adb shell cmd appops get "$pkg" SYSTEM_ALERT_WINDOW
   adb shell settings get global boot_count
   adb shell run-as "$pkg" cat shared_prefs/tv_controls.xml || true
@@ -28,8 +31,12 @@ if [[ "$seed" != *'OK (1 test)'* ]]; then echo "$seed"; exit 1; fi
 adb shell am start -W -n "$pkg/.MainActivity" --ez ui_preview true
 adb shell input keyevent KEYCODE_HOME
 adb shell cmd appops write-settings
+# A normal power-menu reboot lets PackageManager persist the newly installed app's
+# first-launch state before BOOT_COMPLETED is dispatched on the next boot.
+sleep 12
 adb shell sync
-adb reboot
+adb shell svc power reboot || true
+adb wait-for-disconnect
 adb wait-for-device
 for attempt in {1..60}; do
   [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]] && break
