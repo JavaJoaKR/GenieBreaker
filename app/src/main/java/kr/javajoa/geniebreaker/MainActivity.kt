@@ -106,6 +106,28 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+    private fun ensureFlutterFocus() {
+        fun find(view: android.view.View): io.flutter.embedding.android.FlutterView? {
+            if (view is io.flutter.embedding.android.FlutterView) return view
+            if (view is android.view.ViewGroup) for (index in 0 until view.childCount) find(view.getChildAt(index))?.let { return it }
+            return null
+        }
+        find(window.decorView)?.let { view ->
+            view.isFocusable = true; view.isFocusableInTouchMode = true
+            if (!view.hasFocus()) view.requestFocus()
+        }
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) { ensureFlutterFocus(); channel?.invokeMethod("enter", null) }
+    }
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.keyCode in setOf(
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER)) ensureFlutterFocus()
+        return super.dispatchKeyEvent(event)
+    }
     private fun device(address: String): BluetoothDevice? {
         if (!access()) return null
         return try { found[address] ?: adapter?.bondedDevices?.firstOrNull { it.address == address } }

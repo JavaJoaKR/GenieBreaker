@@ -195,7 +195,7 @@ class _GeniePageState extends State<GeniePage> {
       if (call.method == 'dismiss') { setState(() => data = shellData); homeKey.currentState?.restoreModalOpener(); }
       if (call.method == 'filesChanged') homeKey.currentState?.filesChanged();
       if (call.method == 'back') back();
-      if (call.method == 'enter') restoreFocus();
+      if (call.method == 'enter') { if (data?['shell'] == true) { homeKey.currentState?.restore(); } else { restoreFocus(); } }
       if (call.method == 'page') receive(Map<String, dynamic>.from(call.arguments as Map));
     });
     load('');

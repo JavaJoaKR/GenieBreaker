@@ -192,4 +192,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('The first arrow after root focus loss both recovers and moves', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, 'nav:apps'); expect(tester.takeException(), isNull);
+  });
+
 }

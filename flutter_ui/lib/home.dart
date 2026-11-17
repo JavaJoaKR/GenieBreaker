@@ -41,6 +41,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState(); WidgetsBinding.instance.addObserver(this);
+    FocusManager.instance.addEarlyKeyEventHandler(rescueFocus);
     WidgetsBinding.instance.addPostFrameCallback((_) => focus('nav:$tab'));
   }
   @override
@@ -152,6 +153,15 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     }
     if (!onSidebar) { focus('nav:$tab'); return; }
     call('exit');
+  }
+  KeyEventResult rescueFocus(KeyEvent event) {
+    if (!mounted || widget.obscured || ModalRoute.of(context)?.isCurrent != true || (event is! KeyDownEvent && event is! KeyRepeatEvent)) return KeyEventResult.ignored;
+    if (![LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight].contains(event.logicalKey)) return KeyEventResult.ignored;
+    final id = focused;
+    if (id != null && nodes[id]?.context != null && nodes[id]!.canRequestFocus) return KeyEventResult.ignored;
+    // Losing Android surface focus must not consume the first directional press.
+    focus('nav:$tab'); FocusManager.instance.applyFocusChangesIfNeeded();
+    return key(contentScope, event);
   }
   KeyEventResult key(FocusNode _, KeyEvent event) {
     if (widget.obscured || (event is! KeyDownEvent && event is! KeyRepeatEvent)) return KeyEventResult.ignored;
@@ -386,6 +396,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   void filesChanged() { if (tab == 'files') loadFiles(location); }
   @override
   void dispose() {
+    FocusManager.instance.removeEarlyKeyEventHandler(rescueFocus);
     WidgetsBinding.instance.removeObserver(this);
     for (final n in nodes.values) { n.dispose(); } contentScope.dispose(); sidebarScope.dispose(); super.dispose();
   }
