@@ -4,12 +4,14 @@ import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.hardware.display.DisplayManager
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.Display
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.TextView
@@ -50,10 +52,15 @@ internal object StartupApps {
         if (presenting || !due(app, boot, waking) || !allowed(app) ||
             app.getSystemService(KeyguardManager::class.java).isDeviceLocked) { done(); return }
         if (Build.VERSION.SDK_INT < 29) { try { launchIfDue(app, boot, waking) } finally { done() }; return }
-        val wm = app.getSystemService(WindowManager::class.java)
+        val visual = if (Build.VERSION.SDK_INT >= 30) {
+            val display = app.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+            if (display == null) { done(); return }
+            app.createDisplayContext(display).createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
+        } else app
+        val wm = visual.getSystemService(WindowManager::class.java)
         val prefs = tvPreferences(app)
         val chosen = prefs.getString("startup", null)
-        val banner = TextView(app).apply {
+        val banner = TextView(visual).apply {
             text = app.getString(R.string.startup_opening, prefs.getString("startupLabel", ""))
             setTextColor(android.graphics.Color.WHITE)
             setBackgroundColor(android.graphics.Color.rgb(26, 44, 65))

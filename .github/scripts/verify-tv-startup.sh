@@ -40,3 +40,15 @@ wait_for_settings
 [[ "$(home_component)" == "$original_home" ]]
 echo 'Selected app opened after reboot and standby. Original HOME component verified.'
 
+# This AVD is disposable. Enable the tested service only here to exercise an actual input event.
+service="$pkg/.RemoteButtonService"
+previous=$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')
+if [[ -z "$previous" || "$previous" == null ]]; then services="$service"; else services="$previous:$service"; fi
+adb shell settings put secure enabled_accessibility_services "$services"
+adb shell settings put secure accessibility_enabled 1
+adb shell input keyevent KEYCODE_HOME
+sleep 3
+adb shell input keyevent KEYCODE_PROG_RED
+wait_for_settings
+[[ "$(home_component)" == "$original_home" ]]
+echo 'Mapped red key opened the selected app from the original launcher.'
