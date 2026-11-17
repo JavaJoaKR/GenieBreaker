@@ -62,6 +62,7 @@ jobs:
             adb pull /sdcard/Download/genie-shortcuts-ui.png shortcuts-ui.png
             adb pull /sdcard/Download/genie-popup-depth.png popup-depth.png
             adb pull /sdcard/Download/genie-clone-options.png clone-options.png
+            adb pull /sdcard/Download/genie-per-app-options.png per-app-options.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -77,4 +78,5 @@ jobs:
             shortcuts-ui.png
             popup-depth.png
             clone-options.png
+            per-app-options.png
             app/build/reports/androidTests/connected/debug/

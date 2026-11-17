@@ -82,18 +82,17 @@ class _GeniePageState extends State<GeniePage> {
     if (!mounted) return;
     if (next['shell'] != true && data?['shell'] == true) homeKey.currentState?.saveModalOpener();
     setState(() {
-      final changed = next['pageId'] != data?['pageId'];
-      data = next;
-      if (next['shell'] == true) {
-        shellData = next;
-        if (next['menu'] is Map) data = Map<String, dynamic>.from(next['menu'] as Map);
-      }
+      final menu = next['shell'] == true ? next['menu'] : null;
+      final page = menu is Map ? Map<String, dynamic>.from(menu) : next;
+      final changed = page['pageId'] != data?['pageId'];
+      if (next['shell'] == true) shellData = next;
+      data = page;
       error = null;
       if (changed) {
         advanced = expandedPages[pageId] ?? false;
         working = false;
       }
-      if (next['cloneOptions'] == true) cloneOptions = Map<String, bool>.from(next['options'] as Map);
+      cloneOptions = page['cloneOptions'] == true ? Map<String, bool>.from(page['options'] as Map) : {};
     });
     restoreFocus();
   }
@@ -173,11 +172,13 @@ class _GeniePageState extends State<GeniePage> {
           if (configure) ...[
             if (cloneOptions.containsKey('netflixCompatibility'))
               RemoteTile(
-                '넷플릭스 실행 호환성',
+                '넷플릭스 전용 패치',
+                icon: Icons.extension_outlined,
+                accent: const Color(0xffffd39a),
                 key: const ValueKey('netflixCompatibility'),
                 focusNode: menuNode('netflixCompatibility'),
                 onFocus: () => remember('netflixCompatibility'),
-                subtitle: '버전 제한 없이 실행 코드 검사',
+                subtitle: '이 듀얼앱에 실행 호환성 설정 적용',
                 toggle: cloneOptions['netflixCompatibility'] ?? false,
                 onTap: () => toggleOption('netflixCompatibility'),
               ),

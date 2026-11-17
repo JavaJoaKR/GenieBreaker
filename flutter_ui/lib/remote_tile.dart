@@ -13,6 +13,7 @@ class RemoteTile extends StatefulWidget {
   final bool navigation;
   final bool? toggle;
   final bool danger;
+  final Color? accent;
   final VoidCallback? onFocus;
   final VoidCallback onTap;
   const RemoteTile(
@@ -27,6 +28,7 @@ class RemoteTile extends StatefulWidget {
     this.navigation = false,
     this.toggle,
     this.danger = false,
+    this.accent,
     this.onFocus,
     required this.onTap,
   });
@@ -84,7 +86,10 @@ class _RemoteTileState extends State<RemoteTile> {
             ),
             child: Row(
               children: [
-                if (widget.navigation) ...[
+                if (widget.accent != null) ...[
+                  Icon(widget.icon, size: 24, color: widget.accent),
+                  const SizedBox(width: 12),
+                ] else if (widget.navigation) ...[
                   Icon(widget.icon, size: 21, color: widget.selected || focused ? ink : muted),
                   const SizedBox(width: 8),
                 ] else if (widget.toggle == null) ...[
@@ -118,7 +123,7 @@ class _RemoteTileState extends State<RemoteTile> {
                           fontSize: 17,
                           height: 1.3,
                           fontWeight: FontWeight.w500,
-                          color: widget.danger ? const Color(0xffffb6b6) : ink,
+                          color: widget.danger ? const Color(0xffffb6b6) : widget.accent ?? ink,
                         ),
                       ),
                       if (widget.subtitle?.isNotEmpty == true) ...[

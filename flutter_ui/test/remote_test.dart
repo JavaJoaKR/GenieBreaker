@@ -44,6 +44,7 @@ void main() {
     });
     await tester.pumpWidget(const GenieUI());
     await tester.pumpAndSettle();
+    expect(find.text('넷플릭스 전용 패치'), findsNothing);
     expect(find.text('리소스 패키지 변경'), findsNothing);
     await tester.tap(find.text('호환성 옵션'));
     await tester.pumpAndSettle();
@@ -79,14 +80,32 @@ void main() {
     });
     await tester.pumpWidget(const GenieUI());
     await tester.pumpAndSettle();
-    expect(find.text('넷플릭스 실행 호환성'), findsOneWidget);
-    await tester.tap(find.text('넷플릭스 실행 호환성'));
+    expect(find.text('넷플릭스 전용 패치'), findsOneWidget);
+    await tester.tap(find.text('넷플릭스 전용 패치'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('듀얼앱 만들기'));
     await tester.pumpAndSettle();
     expect(submitted?['netflixCompatibility'], false);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('Restored per-app options keep their emphasis even when off and clear for the next app', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return {
+        'shell': true, 'menu': {'title': '듀얼앱 옵션', 'pageId': 'a', 'cloneOptions': true,
+          'options': {'renameApp': true, 'netflixCompatibility': false}},
+      };
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    final option = tester.widget<RemoteTile>(find.byKey(const ValueKey('netflixCompatibility')));
+    expect(option.toggle, false); expect(option.accent, isNotNull);
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(
+      const MethodCall('page', {'title': '넷플릭스', 'pageId': 'b', 'cloneOptions': true, 'options': {'renameApp': true}})), (_) {});
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('netflixCompatibility')), findsNothing);
+    expect(find.text('앱 이름 변경'), findsOneWidget);
+  });
+
   testWidgets('TV focus clamps edges and never jumps diagonally', (tester) async {
     final a = FocusNode(); final b = FocusNode(); final c = FocusNode();
     await tester.pumpWidget(MaterialApp(home: FocusTraversalGroup(policy: TvFocusPolicy(), child: Scaffold(body: Column(children: [

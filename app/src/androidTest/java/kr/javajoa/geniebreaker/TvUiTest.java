@@ -50,6 +50,12 @@ public class TvUiTest {
             android.os.SystemClock.sleep(500);
             capture(instrumentation, "genie-clone-options.png");
             key(instrumentation, android.view.KeyEvent.KEYCODE_BACK);
+            java.util.Map<String, Boolean> special = new java.util.HashMap<>(options);
+            special.put("netflixCompatibility", false);
+            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.cloneOptions(activity, "넷플릭스 TV", special, values -> kotlin.Unit.INSTANCE));
+            android.os.SystemClock.sleep(500);
+            capture(instrumentation, "genie-per-app-options.png");
+            key(instrumentation, android.view.KeyEvent.KEYCODE_BACK);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_DOWN);
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
