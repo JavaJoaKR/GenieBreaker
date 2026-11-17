@@ -138,7 +138,14 @@ internal class FileController(private val activity: Activity, private val change
         val source = snapshot.doc
         val name = validName(source.name ?: "파일")
         require(target.findFile(name) == null) { "같은 이름이 있습니다. 이름을 바꾸거나 다른 폴더를 선택하세요." }
-        val created = if (source.isDirectory) target.createDirectory(name) else target.createFile(source.type ?: "application/octet-stream", name)
+        val created = if (source.isDirectory) target.createDirectory(name)
+            else if (target.uri.scheme == "file") {
+                // FileDocumentFile.createFile appends the MIME extension even when already present.
+                // Preserve the exact filename and atomically refuse existing files.
+                val file = File(requireNotNull(target.uri.path), name)
+                require(file.createNewFile()) { "같은 이름이 있습니다" }
+                DocumentFile.fromFile(file)
+            } else target.createFile(source.type ?: "application/octet-stream", name)
         requireNotNull(created) { "파일을 만들지 못했습니다" }
         try {
             if (source.isDirectory) snapshot.children.forEach { copy(it, created) }
@@ -173,7 +180,9 @@ internal class FileController(private val activity: Activity, private val change
                 "rename" -> {
                     val doc = requireWrite(path); val name = validName(args["name"] as String)
                     val parent = args["parent"] as String
-                    require(document(parent).findFile(name) == null) { "같은 이름이 있습니다" }
+                    val parentDoc = document(parent)
+                    require(parentDoc.listFiles().any { key(it) == key(doc) }) { "상위 폴더를 다시 열어주세요" }
+                    require(parentDoc.findFile(name) == null) { "같은 이름이 있습니다" }
                     require(doc.renameTo(name)) { "이름을 바꾸지 못했습니다" }
                     known.remove(path); writable.remove(path)
                     selected = remember(doc, parent, true)
