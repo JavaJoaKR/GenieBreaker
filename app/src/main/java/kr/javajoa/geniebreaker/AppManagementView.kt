@@ -63,7 +63,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         val shelf = FrameLayout(activity)
         addView(shelf, LayoutParams(-1, 0, 1f))
         grid.selector = TvDesign.shape(activity, Color.TRANSPARENT, 10, TvDesign.ink); grid.setDrawSelectorOnTop(true)
-        grid.numColumns = if (resources.configuration.screenWidthDp >= 1100) 4 else 3; grid.columnWidth = dp(160); grid.horizontalSpacing = dp(12); grid.verticalSpacing = dp(12)
+        grid.numColumns = GridView.AUTO_FIT; grid.columnWidth = dp(144); grid.horizontalSpacing = dp(12); grid.verticalSpacing = dp(12)
         grid.stretchMode = GridView.STRETCH_COLUMN_WIDTH; grid.clipToPadding = false; grid.setPadding(dp(3), dp(3), dp(3), dp(3))
         if (Build.VERSION.SDK_INT >= 26) grid.setDefaultFocusHighlightEnabled(false)
         grid.selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
@@ -146,7 +146,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         }
     }
     fun enter() { if (packages.isNotEmpty()) { grid.requestFocus(); grid.setSelection(grid.selectedItemPosition.coerceAtLeast(0)) } else getChildAt(0).requestFocus(View.FOCUS_DOWN) }
-    fun atLeftEdge() = if (grid.hasFocus()) grid.selectedItemPosition.coerceAtLeast(0) % grid.numColumns == 0
+    fun atLeftEdge() = if (grid.hasFocus()) grid.selectedItemPosition.coerceAtLeast(0) % grid.numColumns.coerceAtLeast(1) == 0
         else (getChildAt(0) as ViewGroup).getChildAt(1).hasFocus()
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && !grid.hasFocus()) {
@@ -156,7 +156,7 @@ internal class AppManagementView(private val activity: Activity) : LinearLayout(
         }
         if (event.action == KeyEvent.ACTION_DOWN && grid.hasFocus() && packages.isNotEmpty()) {
             val position = grid.selectedItemPosition.coerceAtLeast(0)
-            val columns = grid.numColumns
+            val columns = grid.numColumns.coerceAtLeast(1)
             if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && position < columns) { (getChildAt(0) as ViewGroup).getChildAt(1).requestFocus(); return true }
             if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && (position % columns == columns - 1 || position == packages.lastIndex)) return true
             if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN && position + columns >= packages.size) return true

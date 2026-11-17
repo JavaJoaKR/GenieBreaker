@@ -79,7 +79,7 @@ class _RemoteTileState extends State<RemoteTile> {
         child: GestureDetector(onTap: widget.onTap, child: AnimatedContainer(
           duration: Duration.zero,
           constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(color: focused ? const Color(0xff2d4665) : const Color(0xff1b293b),
             borderRadius: BorderRadius.circular(10), border: Border.all(color: focused ? ink : Colors.transparent, width: 2)),
           child: Row(children: [
@@ -88,9 +88,9 @@ class _RemoteTileState extends State<RemoteTile> {
               child: Icon(widget.selected ? Icons.check_circle_rounded : widget.icon,
                 color: widget.danger ? const Color(0xffffa4a4) : blue, size: 20)), const SizedBox(width: 12)],
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500,
+              Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 17, height: 1.3, fontWeight: FontWeight.w500,
                 color: widget.danger ? const Color(0xffffb6b6) : ink)),
-              if (widget.subtitle != null) ...[const SizedBox(height: 4), Text(widget.subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 13, height: 1.45))],
+              if (widget.subtitle != null) ...[const SizedBox(height: 4), Text(widget.subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 12, height: 1.4))],
             ])),
             if (widget.toggle != null) ...[const SizedBox(width: 16), Icon(widget.toggle! ? Icons.toggle_on_rounded : Icons.toggle_off_outlined,
               size: 36, color: widget.toggle! ? blue : muted)],
