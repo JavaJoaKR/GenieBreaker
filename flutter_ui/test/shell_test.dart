@@ -1,0 +1,116 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:genie_ui/main.dart';
+
+Map<String, dynamic> shell({List<Map>? devices, List<Map>? apps}) => {
+  'shell': true, 'version': 'test', 'permission': true, 'enabled': true,
+  'devices': devices ?? [
+    {'id': 'r1', 'name': '등록 헤드폰', 'bonded': true},
+    {'id': 'n1', 'name': '새 키보드', 'bonded': false},
+    {'id': 'n2', 'name': '이름 확인 중', 'bonded': false},
+  ],
+  'apps': {'items': apps ?? [], 'status': '앱을 선택하세요'},
+};
+Future<void> arrow(WidgetTester tester, LogicalKeyboardKey key) async {
+  await tester.sendKeyEvent(key); await tester.pumpAndSettle();
+}
+String? get focus => FocusManager.instance.primaryFocus?.debugLabel;
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'files.list') return {'title': '파일탐색기', 'entries': [], 'writable': false, 'clipboard': ''};
+      if (call.method == 'storage.list') return {'total': '8 GB', 'free': '4 GB', 'usedFraction': .5};
+      return null;
+    });
+  });
+  testWidgets('Sidebar clamps and Bluetooth columns never wrap or jump diagonally', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    expect(focus, 'nav:bluetooth');
+    await arrow(tester, LogicalKeyboardKey.arrowUp); expect(focus, 'nav:bluetooth');
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'bt:scan');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'bt:r1');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'bt:r1');
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'bt:n1');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'bt:n2');
+    await arrow(tester, LogicalKeyboardKey.arrowLeft); expect(focus, 'bt:n2');
+    await arrow(tester, LogicalKeyboardKey.arrowUp); await arrow(tester, LogicalKeyboardKey.arrowLeft); expect(focus, 'bt:r1');
+    await arrow(tester, LogicalKeyboardKey.arrowLeft); expect(focus, 'nav:bluetooth');
+    expect(find.textContaining('방향키'), findsNothing);
+  });
+  testWidgets('Shortcut opens Android app settings and storage has its own tab', (tester) async {
+    String? method;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      method = call.method;
+      if (call.method == 'ready') return shell();
+      if (call.method == 'storage.list') return {'total': '8 GB', 'free': '4 GB', 'usedFraction': .5};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'shortcut:apps');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'appSettings');
+    await arrow(tester, LogicalKeyboardKey.arrowLeft);
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'storage:refresh');
+    expect(find.textContaining('전체 8 GB'), findsOneWidget);
+    expect(find.text('저장소 연결'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Folder Back restores originating row and cleanup is absent from explorer', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'files.list') return {'title': '내 파일', 'writable': true, 'clipboard': '',
+        'entries': call.arguments == '' ? [{'name': '내 파일', 'path': 'local:', 'directory': true, 'root': true}] : []};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'files:refresh');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'file:local:');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(find.text('상위 폴더'), findsOneWidget);
+    expect(find.text('설치파일 정리'), findsNothing);
+    await arrow(tester, LogicalKeyboardKey.escape);
+    expect(focus, 'file:local:');
+    expect(find.text('상위 폴더'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Same-identity late names and background refresh preserve focus', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    final updated = shell(devices: [{'id': 'r1', 'name': '새로 확인된 기기 이름', 'bonded': true}]);
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(MethodCall('shell', updated)), (_) {});
+    await tester.pumpAndSettle();
+    expect(focus, 'bt:r1'); expect(find.text('새로 확인된 기기 이름'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Removed focused devices recover to an attached target', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(MethodCall('shell', shell(devices: []))), (_) {});
+    await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, isNotNull); expect(['bt:scan', 'nav:bluetooth'], contains(focus));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Cleanup cancel never sends a destructive operation', (tester) async {
+    var cleaned = false;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'storage.list') return {'total': '8 GB', 'free': '4 GB', 'usedFraction': .5};
+      if (call.method == 'clean') cleaned = true;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    for (var i = 0; i < 4; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(cleaned, false);
+    await tester.tap(find.text('취소')); await tester.pumpAndSettle();
+    expect(cleaned, false); expect(focus, 'storage:apks');
+  });
+}

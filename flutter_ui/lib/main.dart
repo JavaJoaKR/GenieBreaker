@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'tv_focus.dart';
+import 'home.dart';
 
 const bridge = MethodChannel('genie/ui');
 const ink = Color(0xfff3f6fc);
@@ -34,6 +35,13 @@ class GenieUI extends StatelessWidget {
           side: WidgetStateProperty.resolveWith((states) => BorderSide(color: states.contains(WidgetState.focused) ? blue : const Color(0xff344c6b), width: 2)),
           backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused) ? const Color(0xff2d4665) : Colors.transparent))),
     ),
+    // App-local logical density: every UI element is 90% of its previous size.
+    // The TV system density and other applications are never modified.
+    builder: (context, child) => LayoutBuilder(builder: (context, constraints) {
+      final size = Size(constraints.maxWidth / .9, constraints.maxHeight / .9);
+      return FittedBox(fit: BoxFit.contain, child: SizedBox(width: size.width, height: size.height,
+        child: MediaQuery(data: MediaQuery.of(context).copyWith(size: size), child: child!)));
+    }),
     shortcuts: {...WidgetsApp.defaultShortcuts, const SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): const ActivateIntent()},
     home: const GeniePage(),
   );
@@ -43,6 +51,7 @@ class RemoteTile extends StatefulWidget {
   final String title;
   final String? subtitle;
   final IconData icon;
+  final Widget? leading;
   final FocusNode? focusNode;
   final bool autofocus;
   final bool selected;
@@ -51,7 +60,7 @@ class RemoteTile extends StatefulWidget {
   final VoidCallback? onFocus;
   final VoidCallback onTap;
   const RemoteTile(this.title, {super.key, this.subtitle, this.icon = Icons.chevron_right_rounded,
-    this.focusNode, this.autofocus = false, this.selected = false, this.toggle, this.danger = false, this.onFocus, required this.onTap});
+    this.leading, this.focusNode, this.autofocus = false, this.selected = false, this.toggle, this.danger = false, this.onFocus, required this.onTap});
   @override
   State<RemoteTile> createState() => _RemoteTileState();
 }
@@ -80,12 +89,12 @@ class _RemoteTileState extends State<RemoteTile> {
           duration: Duration.zero,
           constraints: const BoxConstraints(minHeight: 56),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(color: focused ? const Color(0xff2d4665) : const Color(0xff1b293b),
+          decoration: BoxDecoration(color: focused ? const Color(0xff2d4665) : widget.selected ? const Color(0xff193554) : const Color(0xff1b293b),
             borderRadius: BorderRadius.circular(10), border: Border.all(color: focused ? ink : Colors.transparent, width: 2)),
           child: Row(children: [
             if (widget.toggle == null) ...[Container(width: 34, height: 34, alignment: Alignment.center,
               decoration: BoxDecoration(color: widget.danger ? const Color(0xff40292e) : const Color(0xff1c3453), borderRadius: BorderRadius.circular(9)),
-              child: Icon(widget.selected ? Icons.check_circle_rounded : widget.icon,
+              child: widget.leading ?? Icon(widget.selected ? Icons.check_circle_rounded : widget.icon,
                 color: widget.danger ? const Color(0xffffa4a4) : blue, size: 20)), const SizedBox(width: 12)],
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 17, height: 1.3, fontWeight: FontWeight.w500,
@@ -133,7 +142,6 @@ class PopupPanel extends StatelessWidget {
             const SizedBox(height: 14),
             Flexible(fit: FlexFit.loose, child: body),
             if (footer != null) ...[const SizedBox(height: 14), const Divider(height: 1, color: Color(0xff293a53)), const SizedBox(height: 14), footer!],
-            const SizedBox(height: 12), const Text('방향키  이동    확인  선택    뒤로  이전', style: TextStyle(color: muted, fontSize: 11)),
           ]),
         ),
       ),
@@ -148,33 +156,25 @@ class GeniePage extends StatefulWidget {
 }
 class _GeniePageState extends State<GeniePage> {
   Map<String, dynamic>? data;
+  Map<String, dynamic>? shellData;
+  final homeKey = GlobalKey<AppHomeState>();
   String? error;
-  final List<String> parents = [];
   String location = '';
   bool working = false;
   bool advanced = false;
-  bool storageOnRight = false;
   Map<String, bool> cloneOptions = {};
   final Map<String, FocusNode> focusNodes = {};
   final Map<String, bool> expandedPages = {};
-  final Map<String, String> fileFocus = {};
   FocusNode node(String key) => focusNodes.putIfAbsent(key, () => FocusNode(debugLabel: key));
   String get pageId => '${data?['pageId'] ?? 'root'}';
   FocusNode menuNode(String key) => node('$pageId:$key');
   void remember(String key) => bridge.invokeMethod<void>('focus', key);
   void restoreFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      FocusNode? target;
-      if (data?['files'] == true) {
-        final entries = (data?['entries'] as List? ?? []).cast<Map>();
-        final key = fileFocus[location] ?? (location.isNotEmpty ? 'parent' : entries.isEmpty ? 'pick' : entries.first['path'] as String);
-        target = focusNodes['file:$location:$key'];
-      } else {
-        final key = data?['focusKey'] as String?;
-        final initial = data?['cloneOptions'] == true ? (cloneOptions.containsKey('netflixCompatibility') ? 'netflixCompatibility' : 'renameApp') : 'item-${data?['focus'] ?? 0}';
-        target = focusNodes['$pageId:${key?.isNotEmpty == true ? key : initial}'];
-      }
+      if (!mounted || data?['shell'] == true) return;
+      final key = data?['focusKey'] as String?;
+      final initial = data?['cloneOptions'] == true ? (cloneOptions.containsKey('netflixCompatibility') ? 'netflixCompatibility' : 'renameApp') : 'item-${data?['focus'] ?? 0}';
+      final target = focusNodes['$pageId:${key?.isNotEmpty == true ? key : initial}'];
       if (target?.context != null && target!.canRequestFocus) target.requestFocus();
     });
   }
@@ -183,7 +183,12 @@ class _GeniePageState extends State<GeniePage> {
     super.initState();
     bridge.setMethodCallHandler((call) async {
       if (!mounted) return;
-      if (call.method == 'refresh') await load(location);
+      if (call.method == 'shell') {
+        final next = Map<String, dynamic>.from(call.arguments as Map);
+        setState(() { shellData = next; if (data?['shell'] == true) data = next; });
+      }
+      if (call.method == 'dismiss') { setState(() => data = shellData); homeKey.currentState?.restore(); }
+      if (call.method == 'filesChanged') homeKey.currentState?.filesChanged();
       if (call.method == 'back') back();
       if (call.method == 'enter') restoreFocus();
       if (call.method == 'page') receive(Map<String, dynamic>.from(call.arguments as Map));
@@ -196,7 +201,7 @@ class _GeniePageState extends State<GeniePage> {
     if (!mounted) return;
     setState(() {
       final changed = next['pageId'] != data?['pageId'];
-      data = next; error = null;
+      data = next; if (next['shell'] == true) shellData = next; error = null;
       if (changed) { advanced = expandedPages[pageId] ?? false; working = false; }
       if (next['cloneOptions'] == true) cloneOptions = Map<String, bool>.from(next['options'] as Map);
     });
@@ -224,38 +229,11 @@ class _GeniePageState extends State<GeniePage> {
     try {
       final message = await bridge.invokeMethod(method, argument);
       if (mounted && message is String) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-      if (data?['files'] == true) await load(location);
     } catch (e) {
       if (mounted) setState(() => error = errorText(e));
     } finally { if (mounted) setState(() => working = false); }
   }
-  Future<void> cleanup(String kind) async {
-    final accepted = await showDialog<bool>(context: context, barrierColor: const Color(0x99050b14), builder: (ctx) => Center(
-      child: Padding(padding: const EdgeInsets.all(24), child: PopupPanel(
-        title: kind == 'apks' ? '듀얼앱 설치파일 정리' : kind == 'updates' ? '업데이트 파일 정리' : '캐시 정리',
-        onBack: () => Navigator.pop(ctx, false), onClose: () => Navigator.pop(ctx, false),
-        body: const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('설치된 앱과 서명 키는 유지됩니다.\n다운로드와 파일 작업 중에는 정리할 수 없습니다.', style: TextStyle(color: muted, fontSize: 16, height: 1.6))),
-        footer: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          OutlinedButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          const SizedBox(width: 12), FilledButton(style: FilledButton.styleFrom(backgroundColor: const Color(0xffffb4ab)),
-            onPressed: () => Navigator.pop(ctx, true), child: const Text('정리하기')),
-        ]),
-      )),
-    ));
-    if (accepted == true) await perform('clean', kind);
-  }
-  void focusFolders() {
-    final entries = (data?['entries'] as List? ?? []).cast<Map>();
-    final key = fileFocus[location] ?? (entries.isEmpty ? 'pick' : entries.first['path'] as String);
-    final target = focusNodes['file:$location:$key'];
-    if (target?.context != null) target!.requestFocus();
-  }
-  void back() {
-    if (data?['files'] == true) {
-      if (storageOnRight && (FocusManager.instance.primaryFocus?.debugLabel ?? '').startsWith('storage:')) { focusFolders(); return; }
-      if (parents.isNotEmpty) { load(parents.removeLast()); } else { perform('sidebar'); }
-    } else { perform('back'); }
-  }
+  void back() { perform('back'); }
   void toggleOption(String key) {
     setState(() => cloneOptions[key] = !(cloneOptions[key] ?? true));
     bridge.invokeMethod<void>('options', cloneOptions);
@@ -358,73 +336,18 @@ class _GeniePageState extends State<GeniePage> {
       )))),
     ]);
   }
-  Widget filesPage() {
-    final entries = (data?['entries'] as List? ?? []).cast<Map>();
-    final root = location.isEmpty;
-    final folders = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
-        Expanded(child: Text(root ? '내 폴더' : '폴더 내용', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
-        Text('${entries.length}개', style: const TextStyle(color: muted, fontSize: 12)),
-      ])),
-      Expanded(child: ListView(children: [
-        if (!root) RemoteTile('상위 폴더', focusNode: node('file:$location:parent'), onFocus: () => fileFocus[location] = 'parent', autofocus: true, icon: Icons.arrow_back, onTap: back),
-        for (var i = 0; i < entries.length; i++) RemoteTile(entries[i]['name'] as String, key: ValueKey(entries[i]['path']),
-          focusNode: node('file:$location:${entries[i]['path']}'), onFocus: () => fileFocus[location] = entries[i]['path'] as String, autofocus: root && i == 0, subtitle: entries[i]['detail'] as String?,
-          icon: entries[i]['directory'] == true ? Icons.folder_outlined : (entries[i]['path'] as String).endsWith('.apk') ? Icons.android_rounded : Icons.insert_drive_file_outlined,
-          onTap: () { final path = entries[i]['path'] as String; if (entries[i]['directory'] == true) { parents.add(location); load(path); } else { perform('open', path); } }),
-        if (entries.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 48), child: Column(children: [
-          Icon(Icons.folder_open_rounded, color: muted, size: 42), SizedBox(height: 16), Text('폴더가 비어 있습니다', style: TextStyle(color: muted, fontSize: 17)),
-        ])),
-      ])),
-    ]);
-    final storage = Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(
-      color: panel, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xff304057))),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('저장공간', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)), const SizedBox(height: 16),
-        Text('듀얼앱 설치파일  ${data?['apkSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
-        OutlinedButton.icon(focusNode: node('storage:apks'), onPressed: () => cleanup('apks'), icon: const Icon(Icons.delete_outline, size: 18), label: const Text('설치파일 정리')),
-        const SizedBox(height: 12), Text('업데이트 다운로드  ${data?['updateSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
-        OutlinedButton.icon(focusNode: node('storage:updates'), onPressed: () => cleanup('updates'), icon: const Icon(Icons.downloading_rounded, size: 18), label: const Text('업데이트 파일 정리')),
-        const SizedBox(height: 12), Text('임시 캐시  ${data?['cacheSize'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 12)), const SizedBox(height: 8),
-        OutlinedButton.icon(focusNode: node('storage:cache'), onPressed: () => cleanup('cache'), icon: const Icon(Icons.cleaning_services_outlined, size: 18), label: const Text('캐시 정리')),
-        const SizedBox(height: 8), const Text('설치된 앱과 서명 키는 유지됩니다.', style: TextStyle(color: muted, fontSize: 11, height: 1.5)),
-      ]),
-    );
-    return ColoredBox(color: canvas, child: Padding(padding: const EdgeInsets.all(0),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(data?['title'] as String? ?? '파일탐색기', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6), Text(root ? '기기 폴더와 설치파일을 한곳에서' : '파일탐색기  ›  ${data?['title'] ?? ''}', style: const TextStyle(color: muted, fontSize: 12)),
-        ])), if (root) ...[const SizedBox(width: 12), OutlinedButton.icon(focusNode: node('file:$location:pick'), onPressed: () => perform('pick'), icon: const Icon(Icons.add_rounded, size: 19), label: const Text('폴더 연결'))]]),
-        const SizedBox(height: 24),
-        if (error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(error!, style: const TextStyle(color: Colors.orangeAccent))),
-        Expanded(child: LayoutBuilder(builder: (context, constraints) {
-          storageOnRight = root && constraints.maxWidth >= 560;
-          if (!root) return folders;
-          if (constraints.maxWidth < 560) return Column(children: [Expanded(child: folders), SizedBox(height: 155, child: SingleChildScrollView(child: storage))]);
-          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: folders), const SizedBox(width: 16), SizedBox(width: 220, child: SingleChildScrollView(child: storage))]);
-        })),
-        const SizedBox(height: 14), const Text('방향키  이동     확인  선택     뒤로  돌아가기', style: TextStyle(color: muted, fontSize: 11)),
-      ]),
-    ));
-  }
   @override
   Widget build(BuildContext context) {
-    final files = data?['files'] == true;
-    return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) { if (!didPop) back(); },
-      child: Focus(onKeyEvent: (_, event) {
-        if (files && event is KeyDownEvent) {
-          final label = FocusManager.instance.primaryFocus?.debugLabel ?? '';
-          if (event.logicalKey == LogicalKeyboardKey.arrowRight && storageOnRight && label.startsWith('file:') && !label.endsWith(':pick')) {
-            node('storage:apks').requestFocus(); return KeyEventResult.handled;
-          }
-          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            if (label.startsWith('storage:') && storageOnRight) { focusFolders(); } else { back(); }
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      }, child: Scaffold(backgroundColor: Colors.transparent, body: files ? FocusTraversalGroup(policy: TvFocusPolicy(), child: filesPage()) : menuOverlay())),
+    final home = shellData;
+    final menu = data?['shell'] != true;
+    return PopScope(canPop: false, onPopInvokedWithResult: (didPop, _) { if (!didPop && menu) back(); },
+      child: Scaffold(backgroundColor: home == null ? Colors.transparent : canvas,
+        body: Stack(children: [
+          if (home != null) ExcludeFocus(excluding: menu, child: ExcludeSemantics(excluding: menu,
+            child: AppHome(key: homeKey, data: home, obscured: menu))),
+          if (menu) Positioned.fill(child: menuOverlay()),
+        ]),
+      ),
     );
   }
 }

@@ -6,26 +6,7 @@ import 'package:genie_ui/tv_focus.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets('Files move left through folders before returning to the sidebar', (tester) async {
-    var sidebar = 0;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
-      if (call.method == 'ready') return {'title': '파일탐색기', 'files': true,
-        'entries': [{'name': '듀얼앱 설치파일', 'path': 'apks:', 'directory': true, 'detail': '폴더'}], 'apkSize': '4 MB', 'cacheSize': '1 MB'};
-      if (call.method == 'sidebar') sidebar++;
-      return null;
-    });
-    await tester.pumpWidget(const GenieUI());
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'storage:apks');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
-    expect(sidebar, 0);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
-    expect(sidebar, 1);
-  });
+
   testWidgets('Confirmation actions stay visible with a long message', (tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return {'title': '앱을 제거할까요?', 'items': ['취소', '제거 요청'], 'message': List.filled(50, '앱 데이터가 삭제됩니다.').join('\n')};
@@ -122,22 +103,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); await tester.pumpAndSettle(); expect(c.hasFocus, true);
     await tester.pumpWidget(const SizedBox()); a.dispose(); b.dispose(); c.dispose();
   });
-  testWidgets('Nested folder Left returns to parent and restores the originating row', (tester) async {
-    var sidebar = 0;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
-      if (call.method == 'ready') return {'files': true, 'title': '파일탐색기', 'entries': [{'name': '설치파일', 'path': 'apks:', 'directory': true}]};
-      if (call.method == 'list') return {'files': true, 'title': '설치파일', 'entries': []};
-      if (call.method == 'sidebar') sidebar++;
-      return null;
-    });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.select); await tester.pumpAndSettle();
-    expect(find.text('상위 폴더'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft); await tester.pumpAndSettle();
-    expect(sidebar, 0); expect(find.text('상위 폴더'), findsNothing);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'file::apks:');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft); await tester.pumpAndSettle(); expect(sidebar, 1);
-  });
+
   testWidgets('Error code stays visible above a long scrollable message', (tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return {'title': '안내', 'items': ['닫기'], 'message': '${List.filled(50, '오류 설명').join('\n')} [GB-BT-3A2F]'};
@@ -165,21 +131,5 @@ void main() {
     await tester.pumpAndSettle();
     expect(choice, 1);
   });
-  testWidgets('Cleanup requires an explicit confirmation and cancel preserves files', (tester) async {
-    var cleaned = false;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
-      if (call.method == 'ready') return {'title': '파일탐색기', 'files': true, 'entries': [], 'apkSize': '4 MB', 'cacheSize': '1 MB'};
-      if (call.method == 'clean') cleaned = true;
-      return null;
-    });
-    await tester.pumpWidget(const GenieUI());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('설치파일 정리'));
-    await tester.pumpAndSettle();
-    expect(cleaned, false);
-    await tester.tap(find.text('취소'));
-    await tester.pumpAndSettle();
-    expect(cleaned, false);
-    expect(find.byType(PopupPanel), findsNothing);
-  });
+
 }
