@@ -113,4 +113,36 @@ void main() {
     await tester.tap(find.text('취소')); await tester.pumpAndSettle();
     expect(cleaned, false); expect(focus, 'storage:apks');
   });
+  testWidgets('Menu traps focus and dismiss restores its content opener in the same surface', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, 'bt:r1');
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(
+      const MethodCall('page', {'title': '기기 작업', 'pageId': 'device-menu', 'items': ['연결', '닫기'], 'focus': 0})), (_) {});
+    await tester.pumpAndSettle(); expect(focus, 'device-menu:item-0');
+    await arrow(tester, LogicalKeyboardKey.arrowLeft); expect(focus, 'device-menu:item-0');
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(const MethodCall('dismiss')), (_) {});
+    await tester.pumpAndSettle(); expect(focus, 'bt:r1');
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Partial app rows clamp and narrow landscape keeps every tab reachable', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(640, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell(apps: [for (var i = 0; i < 5; i++) {'id': 'p$i', 'name': '긴 이름을 가진 TV 앱 $i', 'detail': ''}]);
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'apps:filter');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'app:p0');
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'app:p1');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'app:p3');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'app:p3');
+    await arrow(tester, LogicalKeyboardKey.arrowLeft); await arrow(tester, LogicalKeyboardKey.arrowLeft);
+    for (var i = 0; i < 8; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
+    expect(focus, 'nav:settings');
+    expect(tester.takeException(), isNull);
+  });
+
 }

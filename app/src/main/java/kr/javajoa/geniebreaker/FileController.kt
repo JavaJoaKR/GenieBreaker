@@ -245,7 +245,10 @@ internal class FileController(private val activity: Activity, private val change
             try {
                 require(isLocalTree(uri)) { "내부 저장소나 USB의 로컬 폴더만 연결할 수 있습니다" }
                 val flags = requireNotNull(data).flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                resolver.takePersistableUriPermission(uri, flags)
+                require(flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) { "폴더 읽기 권한이 필요합니다" }
+                if (flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0) {
+                    resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                } else resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 changed()
             } catch (error: Exception) { TvMenus.notice(activity, "폴더 권한을 저장하지 못했습니다. [${Diagnostics.record(activity, "Folder permission", error)}]") }
         }

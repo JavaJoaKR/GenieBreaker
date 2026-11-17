@@ -25,7 +25,7 @@ jobs:
           flutter-version: '3.35.7'
           channel: stable
           cache: true
-      - name: Build Flutter menus
+      - name: Verify and build Flutter UI
         working-directory: flutter_ui
         run: |
           flutter pub get
@@ -40,7 +40,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Check TV layout and late name focus
+      - name: Check Flutter TV UI and Android operations
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -56,6 +56,8 @@ jobs:
             adb pull /sdcard/Download/genie-app-ui.png app-ui.png
             adb pull /sdcard/Download/genie-flutter-menu.png flutter-menu.png
             adb pull /sdcard/Download/genie-files-ui.png files-ui.png
+            adb pull /sdcard/Download/genie-storage-ui.png storage-ui.png
+            adb pull /sdcard/Download/genie-shortcuts-ui.png shortcuts-ui.png
             adb pull /sdcard/Download/genie-popup-depth.png popup-depth.png
             adb pull /sdcard/Download/genie-clone-options.png clone-options.png
       - uses: actions/upload-artifact@v4
@@ -67,6 +69,8 @@ jobs:
             app-ui.png
             flutter-menu.png
             files-ui.png
+            storage-ui.png
+            shortcuts-ui.png
             popup-depth.png
             clone-options.png
             app/build/reports/androidTests/connected/debug/

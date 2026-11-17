@@ -38,7 +38,7 @@ class MainActivity : FlutterActivity() {
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val scanWatchdog = Runnable {
         watchdogScheduled = false; scanExpired = true
-        try { adapter?.cancelDiscovery() } catch (error: Exception) { operationError("검색 중지", error) }
+        try { if (access()) adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
         message("검색을 마쳤습니다. 기기를 선택하거나 다시 검색하세요.")
     }
     private val nameTick = object : Runnable {
@@ -106,7 +106,11 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
-    private fun device(address: String) = found[address] ?: if (access()) adapter?.bondedDevices?.firstOrNull { it.address == address } else null
+    private fun device(address: String): BluetoothDevice? {
+        if (!access()) return null
+        return try { found[address] ?: adapter?.bondedDevices?.firstOrNull { it.address == address } }
+        catch (error: SecurityException) { operationError("기기 접근 권한", error); null }
+    }
     private fun snapshot(): Map<String, Any> {
         val devices = mutableListOf<Map<String, Any>>()
         pendingNames = false
@@ -124,7 +128,8 @@ class MainActivity : FlutterActivity() {
                     "kind" to when (device.bluetoothClass?.majorDeviceClass) { BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"; BluetoothClass.Device.Major.PERIPHERAL -> "input"; else -> "bluetooth" },
                     "detail" to when { device.bondState == BluetoothDevice.BOND_BONDING -> "페어링 중"; device.address in linked -> "기기 링크 연결됨"; device.bondState == BluetoothDevice.BOND_BONDED -> "등록됨"; else -> "페어링 가능" })
             }
-        } catch (error: Exception) { Diagnostics.record(this, "Bluetooth snapshot", error) }
+        } catch (error: SecurityException) { Diagnostics.record(this, "Bluetooth snapshot", error) }
+        catch (error: Exception) { Diagnostics.record(this, "Bluetooth snapshot", error) }
         val enabled = preview || try { access() && adapter?.isEnabled == true } catch (_: SecurityException) { false }
         val searching = preview || try { access() && adapter?.isDiscovering == true && !scanExpired } catch (_: SecurityException) { false }
         return mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME, "devices" to devices,
@@ -142,7 +147,8 @@ class MainActivity : FlutterActivity() {
             val searching = adapter?.isDiscovering == true && !scanExpired
             if (searching && !watchdogScheduled) { watchdogScheduled = true; uiHandler.postDelayed(scanWatchdog, 35000) }
             if (!searching) { uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false }
-        } catch (error: Exception) { Diagnostics.record(this, "Bluetooth refresh", error) }
+        } catch (error: SecurityException) { Diagnostics.record(this, "Bluetooth refresh", error) }
+        catch (error: Exception) { Diagnostics.record(this, "Bluetooth refresh", error) }
         publish()
         uiHandler.removeCallbacks(nameTick); if (pendingNames) uiHandler.postDelayed(nameTick, 1000)
     }
@@ -163,7 +169,8 @@ class MainActivity : FlutterActivity() {
                 }
                 refresh()
                 uiHandler.removeCallbacks(nameTick); uiHandler.postDelayed(nameTick, 1000)
-            } catch (error: Exception) { operationError("기기 목록 갱신", error) }
+            } catch (error: SecurityException) { operationError("기기 목록 갱신", error) }
+            catch (error: Exception) { operationError("기기 목록 갱신", error) }
         }
     }
     override fun onStart() {

@@ -39,7 +39,10 @@ public class TvUiTest {
             instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.show(activity, "보기 설정", java.util.Arrays.asList("실행 가능한 앱", "전체 설치 앱"), "", 0, index -> kotlin.Unit.INSTANCE));
             android.os.SystemClock.sleep(500);
             capture(instrumentation, "genie-flutter-menu.png");
+            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.show(activity, "하위 메뉴", java.util.Arrays.asList("닫기"), "상위 메뉴로 돌아갈 수 있습니다.", -1, index -> kotlin.Unit.INSTANCE));
+            android.os.SystemClock.sleep(250);
             capture(instrumentation, "genie-popup-depth.png");
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
             instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
             java.util.Map<String, Boolean> options = new java.util.HashMap<>();
             for (String key : new String[]{"renameApp", "renameLaunchers", "renameResources", "isolateTasks", "extractLibraries"}) options.put(key, true);
@@ -52,6 +55,15 @@ public class TvUiTest {
             instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             android.os.SystemClock.sleep(700);
             capture(instrumentation, "genie-files-ui.png");
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN);
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            android.os.SystemClock.sleep(500);
+            capture(instrumentation, "genie-storage-ui.png");
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_UP);
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_UP);
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            android.os.SystemClock.sleep(300);
+            capture(instrumentation, "genie-shortcuts-ui.png");
         } finally { instrumentation.runOnMainSync(activity::finish); }
     }
     private void capture(Instrumentation instrumentation, String name) throws Exception {

@@ -113,15 +113,15 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     if (busy) return;
     final parent = location;
     if (focused != null) folderFocus[parent] = focused!;
-    busy = true;
+    setState(() => busy = true);
     try { if (await loadFiles(path)) history.add(parent); }
-    finally { busy = false; }
+    finally { if (mounted) setState(() => busy = false); }
   }
   void back() {
     if (busy) return;
     if (tab == 'files' && !onSidebar && history.isNotEmpty) {
-      final parent = history.last; busy = true;
-      loadFiles(parent).then((ok) { if (ok) history.removeLast(); }).whenComplete(() => busy = false); return;
+      final parent = history.last; setState(() => busy = true);
+      loadFiles(parent).then((ok) { if (ok) history.removeLast(); }).whenComplete(() { if (mounted) setState(() => busy = false); }); return;
     }
     if (!onSidebar) { focus('nav:$tab'); return; }
     call('exit');
@@ -289,6 +289,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         if (files['writable'] == true) button('files:new', '새 폴더', () async { final name = await inputName('새 폴더'); if (mounted && name != null) await fileAction('mkdir', name: name); }),
         if (files['writable'] == true && files['clipboard'] != '') button('files:paste', '붙여넣기', () => fileAction('paste'))]),
       if ((files['clipboard'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('${files['cut'] == true ? '이동' : '복사'}: ${files['clipboard']}', style: const TextStyle(color: blue))),
+      if (busy) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
       if (location.isEmpty) const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('내부 저장소·USB는 저장소 연결에서 폴더 접근을 허용하세요.', style: TextStyle(color: muted, fontSize: 12))),
       Expanded(child: entries.isEmpty ? const Center(child: Text('폴더가 비어 있습니다', style: TextStyle(color: muted))) : scroll([
         for (final e in entries) Row(children: [Expanded(child: tile('file:${e['path']}', e['name'] as String, () { if (e['directory'] == true) { openFolder(e['path'] as String); } else { fileMenu(e); } },
