@@ -50,6 +50,8 @@ internal class FilePane(private val activity: Activity, private val sidebar: () 
         } }
         flutter.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
         flutterView = FlutterView(activity).also { addView(it, LayoutParams(-1, -1)); it.attachToFlutterEngine(flutter) }
+        // Flutter draws its own focus rings; Android's default overlay washes out the whole pane.
+        flutterView?.setDefaultFocusHighlightEnabled(false)
         flutterView?.isFocusable = true
         flutterView?.isFocusableInTouchMode = true
         flutterView?.requestFocus()

@@ -60,6 +60,11 @@ class TvMenuActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         TvMenus.takePending()?.let { pages.add(it) }
         super.onCreate(savedInstanceState)
+        fun useFlutterFocus(view: android.view.View) {
+            view.setDefaultFocusHighlightEnabled(false)
+            if (view is android.view.ViewGroup) for (index in 0 until view.childCount) useFlutterFocus(view.getChildAt(index))
+        }
+        useFlutterFocus(window.decorView)
         // Callbacks cannot survive process death. Close safely instead of offering inert actions.
         if (pages.isEmpty()) { finish(); return }
         TvMenus.attach(this)
