@@ -104,7 +104,7 @@ class _RemoteTileState extends State<RemoteTile> {
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 17, height: 1.3, fontWeight: FontWeight.w500,
                 color: widget.danger ? const Color(0xffffb6b6) : ink)),
-              if (widget.subtitle != null) ...[const SizedBox(height: 4), Text(widget.subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 12, height: 1.4))],
+              if (widget.subtitle?.isNotEmpty == true) ...[const SizedBox(height: 4), Text(widget.subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 12, height: 1.4))],
             ])),
             if (widget.toggle != null) ...[const SizedBox(width: 16), Icon(widget.toggle! ? Icons.toggle_on_rounded : Icons.toggle_off_outlined,
               size: 36, color: widget.toggle! ? blue : muted)],
