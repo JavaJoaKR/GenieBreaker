@@ -1,416 +1,264 @@
 package kr.javajoa.geniebreaker
 
 import android.Manifest
-import android.app.Activity
 import android.bluetooth.*
+import android.companion.*
 import android.content.*
 import android.content.pm.PackageManager
-import android.companion.*
-import android.graphics.*
-import android.graphics.drawable.GradientDrawable
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
-import android.text.TextUtils
-import android.view.*
-import android.widget.*
+import android.provider.Settings
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 
-/** Leanback-style settings, implemented with platform views and no UI runtime. */
-class MainActivity : Activity() {
+/** One Flutter surface owns all application UI and remote focus. Android owns device APIs only. */
+class MainActivity : FlutterActivity() {
+    private var channel: MethodChannel? = null
+    private var menus: MenuController? = null
     private var adapter: BluetoothAdapter? = null
-    private lateinit var bluetoothPage: LinearLayout
-    private lateinit var appsPage: AppManagementView
-    private lateinit var bluetoothTab: Button
-    private lateinit var appsTab: Button
-    private var appTabSelected = false
-    private lateinit var filesPage: FilePane
-    private lateinit var filesTab: Button
-    private lateinit var sidebarView: LinearLayout
-    private lateinit var settingsTab: Button
-    private val pageFocus = mutableMapOf<String, java.lang.ref.WeakReference<View>>()
-    private var filesSelected = false
-    private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val found = linkedMapOf<String, BluetoothDevice>()
+    private val linked = mutableSetOf<String>()
+    private val names = DeviceNames()
+    private var pendingCompanionAddress: String? = null
+    private lateinit var bluetoothActions: BluetoothActions
+    private lateinit var apps: AppManagementController
+    private lateinit var files: FileController
+    private lateinit var updater: AppUpdater
+    private var updateLabel = "업데이트 확인"
+    private var btMessage = "연결할 기기를 선택하세요"
+    private var registered = false
+    private var preview = false
     private var scanExpired = false
     private var watchdogScheduled = false
+    private var searched = false
+    private var pendingNames = false
+    private var presentedError: String? = null
+    private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val scanWatchdog = Runnable {
+        watchdogScheduled = false; scanExpired = true
+        try { if (access()) adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
+        message("검색을 마쳤습니다. 기기를 선택하거나 다시 검색하세요.")
+    }
     private val nameTick = object : Runnable {
         override fun run() {
             if (!registered || preview) return
-            rows.values.forEach { it.refreshName() }
-            if (rows.keys.any { names.isPending(it) }) uiHandler.postDelayed(this, 1_000)
+            renderDevices()
+            if (pendingNames) uiHandler.postDelayed(this, 1000)
         }
     }
-    private val scanWatchdog = Runnable {
-        watchdogScheduled = false; scanExpired = true; searching = false
-        try { adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
-        refresh()
+    override fun onCreate(savedInstanceState: Bundle?) {
+        preview = BuildConfig.DEBUG && intent.getBooleanExtra("ui_preview", false)
+        Diagnostics.install(applicationContext)
+        adapter = getSystemService(BluetoothManager::class.java)?.adapter
+        bluetoothActions = BluetoothActions(this) { text ->
+            message(text)
+            if (ErrorCodes.isError(text)) TvMenus.notice(this, text)
+        }
+        apps = AppManagementController(this) { publish() }
+        files = FileController(this) { channel?.invokeMethod("filesChanged", null) }
+        updater = AppUpdater(this) { text, _ -> updateLabel = text; publish() }
+        super.onCreate(savedInstanceState)
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        fun disableNativeFocusOverlay(view: android.view.View) {
+            view.setDefaultFocusHighlightEnabled(false)
+            if (view is android.view.ViewGroup) for (index in 0 until view.childCount) disableNativeFocusOverlay(view.getChildAt(index))
+        }
+        disableNativeFocusOverlay(window.decorView)
+        pendingCompanionAddress = savedInstanceState?.getString("companion_address")
+        savedInstanceState?.getBundle("names")?.let { bundle -> bundle.keySet().forEach { names.merge(it, bundle.getString(it)) } }
+        if (!preview) updater.checkForUpdate(automatic = true)
+        val prefs = getSharedPreferences("local_diagnostics", MODE_PRIVATE)
+        prefs.getString("last_crash", null)?.let { code ->
+            prefs.edit().remove("last_crash").apply()
+            uiHandler.post { TvMenus.notice(this, "이전 실행이 종료됐습니다. 오류 코드 [$code]") }
+        }
     }
-    private lateinit var status: TextView
-    private lateinit var scan: Button
-    private lateinit var power: Button
-    private lateinit var permission: Button
-    private var presentedError: String? = null
-    private var updateActionLabel = "업데이트 확인"
-    private lateinit var updater: AppUpdater
-    private lateinit var badge: TextView
-    private lateinit var registeredList: LinearLayout
-    private lateinit var nearbyList: LinearLayout
-    private lateinit var registeredCount: TextView
-    private lateinit var nearbyCount: TextView
-    private lateinit var registeredEmpty: LinearLayout
-    private lateinit var nearbyEmpty: LinearLayout
-    private lateinit var nearbyHint: TextView
-    private lateinit var progress: ProgressBar
-    private val found = linkedMapOf<String, BluetoothDevice>()
-    private val names = DeviceNames()
-    private val rows = linkedMapOf<String, DeviceRow>()
-    private lateinit var bluetoothActions: BluetoothActions
-    private var pendingCompanionAddress: String? = null
-    private val linked = mutableSetOf<String>()
-    private var registered = false
-    private var searching = false
-    private var searched = false
-    private var preview = false
-    private val compact: Boolean get() = resources.configuration.screenWidthDp < 700
-    private val backgroundColor = TvDesign.canvas
-    private val surface = TvDesign.surface
-    private val muted = TvDesign.muted
-    private val accent = TvDesign.blue
-    private val white = TvDesign.ink
-
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "genie/ui")
+        menus = MenuController(this, { page -> channel?.invokeMethod("page", page) }, { channel?.invokeMethod("dismiss", null) })
+        TvMenus.attach(this, menus!!)
+        channel!!.setMethodCallHandler { call, result ->
+            try {
+                if (call.method != "ready" && menus?.handle(call, result) == true) return@setMethodCallHandler
+                if (files.handle(call, result)) return@setMethodCallHandler
+                when (call.method) {
+                    "ready" -> { result.success(snapshot()); apps.refresh() }
+                    "refreshShell" -> { refresh(); apps.refresh(); result.success(null) }
+                    "scan" -> { discover(); result.success(null) }
+                    "permission" -> { requestAccess(); result.success(null) }
+                    "power" -> { enableBluetooth(); result.success(null) }
+                    "device" -> { device(call.arguments as String)?.let(::pair); result.success(null) }
+                    "app" -> { apps.choose(call.arguments as String); result.success(null) }
+                    "appFilter" -> { apps.toggleDuals(); result.success(null) }
+                    "appView" -> { apps.viewOptions(); result.success(null) }
+                    "update" -> { updater.click(); result.success(null) }
+                    "diagnostics" -> { showDiagnostics(); result.success(null) }
+                    "appSettings" -> { openAppSettings(); result.success(null) }
+                    "exit" -> { finish(); result.success(null) }
+                    else -> result.notImplemented()
+                }
+            } catch (error: Exception) {
+                val code = Diagnostics.record(this, "UI request", error)
+                result.error("request", "요청을 처리하지 못했습니다. [$code]", null)
+            }
+        }
+    }
+    private fun ensureFlutterFocus() {
+        fun find(view: android.view.View): io.flutter.embedding.android.FlutterView? {
+            if (view is io.flutter.embedding.android.FlutterView) return view
+            if (view is android.view.ViewGroup) for (index in 0 until view.childCount) find(view.getChildAt(index))?.let { return it }
+            return null
+        }
+        find(window.decorView)?.let { view ->
+            view.isFocusable = true; view.isFocusableInTouchMode = true
+            if (!view.hasFocus()) view.requestFocus()
+        }
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) { ensureFlutterFocus(); channel?.invokeMethod("enter", null) }
+    }
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.keyCode in setOf(
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER)) ensureFlutterFocus()
+        return super.dispatchKeyEvent(event)
+    }
+    private fun device(address: String): BluetoothDevice? {
+        if (!access()) return null
+        return try { found[address] ?: adapter?.bondedDevices?.firstOrNull { it.address == address } }
+        catch (error: SecurityException) { operationError("기기 접근 권한", error); null }
+    }
+    private fun snapshot(): Map<String, Any> {
+        val devices = mutableListOf<Map<String, Any>>()
+        pendingNames = false
+        if (preview) {
+            listOf("거실 헤드폰", "무선 키보드", "WH-1000XM5", "이름 확인 중", "Bluetooth Keyboard").forEachIndexed { index, name ->
+                devices += mapOf("id" to "preview-$index", "name" to name, "bonded" to (index < 2), "kind" to if (index == 1 || index == 4) "input" else "audio", "detail" to if (index < 2) "등록됨" else "페어링 가능")
+            }
+        } else if (access()) try {
+            val bonded = adapter?.bondedDevices.orEmpty()
+            (bonded + found.values).distinctBy { it.address }.forEach { device ->
+                names.seed(device.address, device.name)
+                pendingNames = pendingNames || names.isPending(device.address)
+                devices += mapOf("id" to device.address, "name" to (names.get(device.address) ?: if (names.isPending(device.address)) "이름 확인 중" else "이름 없는 기기"),
+                    "bonded" to (device.bondState == BluetoothDevice.BOND_BONDED),
+                    "kind" to when (device.bluetoothClass?.majorDeviceClass) { BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"; BluetoothClass.Device.Major.PERIPHERAL -> "input"; else -> "bluetooth" },
+                    "detail" to when { device.bondState == BluetoothDevice.BOND_BONDING -> "페어링 중"; device.address in linked -> "기기 링크 연결됨"; device.bondState == BluetoothDevice.BOND_BONDED -> "등록됨"; else -> "페어링 가능" })
+            }
+        } catch (error: SecurityException) { Diagnostics.record(this, "Bluetooth snapshot", error) }
+        catch (error: Exception) { Diagnostics.record(this, "Bluetooth snapshot", error) }
+        val enabled = preview || try { access() && adapter?.isEnabled == true } catch (_: SecurityException) { false }
+        val searching = preview || try { access() && adapter?.isDiscovering == true && !scanExpired } catch (_: SecurityException) { false }
+        return mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME, "devices" to devices,
+            "permission" to (preview || access()), "enabled" to enabled, "supported" to (preview || adapter != null),
+            "searching" to searching, "searched" to searched, "status" to btMessage, "apps" to apps.snapshot(), "update" to updateLabel) + (menus?.current()?.let { mapOf("menu" to it) } ?: emptyMap())
+    }
+    private fun publish() { if (!isFinishing && !isDestroyed && ::apps.isInitialized) channel?.invokeMethod("shell", snapshot()) }
+    private fun message(text: String) {
+        btMessage = if (ErrorCodes.isError(text) && !text.contains("[GB-")) "$text [${Diagnostics.record(this, "Bluetooth: $text")}]" else text
+        publish()
+    }
+    private fun renderDevices() = publish()
+    private fun refresh() {
+        if (!preview && access()) try {
+            val searching = adapter?.isDiscovering == true && !scanExpired
+            if (searching && !watchdogScheduled) { watchdogScheduled = true; uiHandler.postDelayed(scanWatchdog, 35000) }
+            if (!searching) { uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false }
+        } catch (error: SecurityException) { Diagnostics.record(this, "Bluetooth refresh", error) }
+        catch (error: Exception) { Diagnostics.record(this, "Bluetooth refresh", error) }
+        publish()
+        uiHandler.removeCallbacks(nameTick); if (pendingNames) uiHandler.postDelayed(nameTick, 1000)
+    }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (!access()) { refresh(); return }
             try {
-                when (intent.action) {
-                    BluetoothDevice.ACTION_FOUND -> {
-                        val device = deviceExtra(intent) ?: return
-                        found[device.address] = device
-                        val reportedName = intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
-                        if (!reportedName.isNullOrBlank()) names.merge(device.address, reportedName) else names.seed(device.address, device.name)
-                        renderDevices()
+                @Suppress("DEPRECATION")
+                val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) else intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                device?.let {
+                    if (intent.action == BluetoothDevice.ACTION_FOUND) found[it.address] = it
+                    names.merge(it.address, intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: it.name)
+                    when (intent.action) {
+                        BluetoothDevice.ACTION_ACL_CONNECTED -> linked.add(it.address)
+                        BluetoothDevice.ACTION_ACL_DISCONNECTED -> linked.remove(it.address)
+                        BluetoothDevice.ACTION_BOND_STATE_CHANGED -> message(when (it.bondState) { BluetoothDevice.BOND_BONDED -> "페어링 완료. 기기에서 연결 상태를 확인하세요."; BluetoothDevice.BOND_BONDING -> "페어링 중입니다. 확인 창을 확인하세요."; else -> "페어링이 취소되었거나 등록이 해제되었습니다." })
                     }
-                    BluetoothDevice.ACTION_NAME_CHANGED -> {
-                        val device = deviceExtra(intent) ?: return
-                        // Name broadcasts may precede discovery, or arrive after scanning finishes.
-                        val reportedName = intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
-                        if (!reportedName.isNullOrBlank()) names.merge(device.address, reportedName) else names.seed(device.address, device.name)
-                        if (found.containsKey(device.address)) found[device.address] = device
-                        // Never add an unrelated device from a name-only broadcast.
-                        renderDevices()
-                    }
-                    BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
-                        renderDevices()
-                        message(when (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)) {
-                            BluetoothDevice.BOND_BONDED -> "페어링 완료. 기기에서 연결 상태를 확인하세요."
-                            BluetoothDevice.BOND_BONDING -> "페어링 중입니다. TV에 표시된 확인 창을 확인하세요."
-                            else -> "페어링이 취소되었거나 등록이 해제되었습니다."
-                        })
-                    }
-                    BluetoothDevice.ACTION_ACL_CONNECTED, BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                        deviceExtra(intent)?.let { device ->
-                            if (intent.action == BluetoothDevice.ACTION_ACL_CONNECTED) linked.add(device.address) else linked.remove(device.address)
-                        }
-                        renderDevices()
-                    }
-                    BluetoothAdapter.ACTION_DISCOVERY_STARTED -> { searching = true; refresh() }
-                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { searching = false; watchdogScheduled = false; uiHandler.removeCallbacks(scanWatchdog); refresh() }
-                    else -> refresh()
                 }
-            } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("블루투스 상태 갱신", error) }
+                refresh()
+                uiHandler.removeCallbacks(nameTick); uiHandler.postDelayed(nameTick, 1000)
+            } catch (error: SecurityException) { operationError("기기 목록 갱신", error) }
+            catch (error: Exception) { operationError("기기 목록 갱신", error) }
         }
     }
-    @Suppress("DEPRECATION")
-    private fun deviceExtra(intent: Intent): BluetoothDevice? =
-        if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-        else intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        Diagnostics.install(applicationContext)
-        window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        preview = BuildConfig.DEBUG && intent.getBooleanExtra("ui_preview", false)
-        adapter = getSystemService(BluetoothManager::class.java)?.adapter
-        savedInstanceState?.getBundle("names")?.let { bundle -> bundle.keySet().forEach { names.merge(it, bundle.getString(it)) } }
-        pendingCompanionAddress = savedInstanceState?.getString("companion_address")
-        bluetoothActions = BluetoothActions(this) { text ->
-            message(text)
-            if (ErrorCodes.isError(text) && !isFinishing && !isDestroyed) TvMenus.show(this, "블루투스 요청 결과", listOf("닫기"), text)
+    override fun onStart() {
+        super.onStart()
+        if (preview) return
+        val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_FOUND); addAction(BluetoothDevice.ACTION_NAME_CHANGED)
+            addAction(BluetoothDevice.ACTION_CLASS_CHANGED); addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED); addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED); addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED); addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
-        buildScreen()
-        updater = AppUpdater(this) { text, _ -> updateActionLabel = text }
-        if (!preview) updater.checkForUpdate(automatic = true)
-        scan.requestFocus()
-        val local = getSharedPreferences("local_diagnostics", MODE_PRIVATE)
-        local.getString("last_crash", null)?.let { code ->
-            local.edit().remove("last_crash").apply()
-            uiHandler.post { TvMenus.notice(this, "이전 실행이 종료됐습니다. 오류 코드 [$code]") }
-        }
-        selectTab(savedInstanceState?.getBoolean("apps_tab") == true)
-        if (savedInstanceState?.getBoolean("files_tab") == true) selectFiles()
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED) else registerReceiver(receiver, filter)
+        registered = true
+    }
+    override fun onResume() { super.onResume(); if (::updater.isInitialized) { if (!preview) updater.resume(); apps.resume(); refresh() } }
+    override fun onStop() {
+        if (registered) { unregisterReceiver(receiver); registered = false }
+        uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false
+        try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
+        super.onStop()
     }
     override fun onSaveInstanceState(out: Bundle) {
-        out.putBoolean("apps_tab", appTabSelected)
-        out.putBoolean("files_tab", filesSelected)
         out.putString("companion_address", pendingCompanionAddress)
         out.putBundle("names", Bundle().apply { names.snapshot().forEach { (key, value) -> putString(key, value) } })
         super.onSaveInstanceState(out)
     }
-    private fun buildScreen() {
-        val root = column().apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(if (compact) 18 else 32), dp(if (compact) 16 else 28), dp(if (compact) 18 else 32), dp(if (compact) 16 else 24)); setBackgroundColor(backgroundColor)
-        }
-        setContentView(root)
-        val sidebar = column().apply { setPadding(0, 0, dp(20), 0) }
-        sidebarView = sidebar
-        root.viewTreeObserver.addOnGlobalFocusChangeListener { _, next ->
-            if (next != null && !inside(next, sidebarView) && !filesSelected) pageFocus[if (appTabSelected) "apps" else "bluetooth"] = java.lang.ref.WeakReference(next)
-        }
-        root.addView(sidebar, LinearLayout.LayoutParams(dp(if (compact) 144 else 184), -1))
-        val brand = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        brand.addView(ImageView(this).apply { setImageResource(R.drawable.icon) }, LinearLayout.LayoutParams(dp(34), dp(34)))
-        val branding = column().apply { setPadding(dp(8), 0, 0, 0) }
-        branding.addView(label("GenieBreaker", if (compact) 13 else 17, white, true))
-        branding.addView(label("v${BuildConfig.VERSION_NAME}", 10, muted).apply { setPadding(0, dp(4), 0, 0) })
-        brand.addView(branding)
-        sidebar.addView(brand)
-        sidebar.addView(Space(this), LinearLayout.LayoutParams(1, dp(if (compact) 22 else 38)))
-        bluetoothTab = actionButton("블루투스", false) { selectTab(false) }.apply { isSelected = true }
-        appsTab = actionButton("앱 관리", false) { selectTab(true) }
-        filesTab = actionButton("파일탐색기", false) { selectFiles() }
-        sidebar.addView(bluetoothTab); sidebar.addView(appsTab); sidebar.addView(filesTab)
-        sidebar.addView(Space(this), LinearLayout.LayoutParams(1, 0, 1f))
-        permission = actionButton("권한 허용", false, ::requestAccess)
-        power = actionButton("블루투스 켜기", false, ::enableBluetooth)
-        sidebar.addView(permission); sidebar.addView(power)
-        settingsTab = actionButton("설정", false) { showSettings() }.apply { decorateNav(this, R.drawable.nav_settings) }
-        sidebar.addView(settingsTab)
-        decorateNav(bluetoothTab, R.drawable.nav_bluetooth); decorateNav(appsTab, R.drawable.nav_apps); decorateNav(filesTab, R.drawable.nav_files)
-        root.addView(View(this).apply { setBackgroundColor(TvDesign.border) }, LinearLayout.LayoutParams(dp(1), -1))
-        val content = column().apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0) }
-        bluetoothPage = content
-        val pageHost = FrameLayout(this)
-        root.addView(pageHost, LinearLayout.LayoutParams(0, -1, 1f))
-        pageHost.addView(content, FrameLayout.LayoutParams(-1, -1))
-        appsPage = AppManagementView(this).apply { setPadding(dp(if (compact) 16 else 28), 0, 0, 0); visibility = View.GONE }
-        pageHost.addView(appsPage, FrameLayout.LayoutParams(-1, -1))
-        filesPage = FilePane(this) { filesTab.requestFocus() }.apply { setPadding(dp(28), 0, 0, 0); visibility = View.GONE }
-        pageHost.addView(filesPage, FrameLayout.LayoutParams(-1, -1))
-        val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val titles = column()
-        titles.addView(label("블루투스", if (compact) 24 else 30, white, true))
-        titles.addView(label("기기를 연결하고 관리하세요", 14).apply { setPadding(0, dp(6), 0, 0) })
-
-        heading.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        badge = label("확인 중", 12, accent).apply {
-            gravity = Gravity.CENTER; setPadding(dp(12), dp(6), dp(12), dp(6))
-            background = rounded(0xff1c385e.toInt(), 20)
-        }
-        heading.addView(badge)
-        content.addView(heading)
-        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(if (compact) 10 else 16), 0, dp(if (compact) 10 else 16)) }
-        status = label("", 13).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
-        toolbar.addView(status, LinearLayout.LayoutParams(0, dp(46), 1f))
-        progress = ProgressBar(this, null, android.R.attr.progressBarStyleSmall).apply {
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(accent); visibility = View.GONE
-        }
-        toolbar.addView(progress, LinearLayout.LayoutParams(dp(20), dp(20)).apply { setMargins(dp(8), 0, dp(12), 0) })
-        scan = actionButton("기기 검색", true, ::discover).apply { minWidth = dp(122) }
-        toolbar.addView(scan, LinearLayout.LayoutParams(dp(122), dp(46)).apply { setMargins(dp(12), 0, 0, 0) })
-        content.addView(toolbar)
-        val panels = LinearLayout(this).apply { orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
-        if (compact) content.addView(ScrollView(this).apply { addView(panels) }, LinearLayout.LayoutParams(-1, 0, 1f))
-        else content.addView(panels, LinearLayout.LayoutParams(-1, 0, 1f))
-        val left = devicePanel("내 기기")
-        val right = devicePanel("새 기기")
-        if (compact) {
-            panels.addView(right.first, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
-            panels.addView(left.first, LinearLayout.LayoutParams(-1, -2))
-        } else {
-            panels.addView(left.first, LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, dp(12), 0) })
-            panels.addView(right.first, LinearLayout.LayoutParams(0, -1, 1.15f))
-        }
-        registeredList = left.second; nearbyList = right.second
-        registeredCount = left.third; nearbyCount = right.third
-        registeredEmpty = emptyState("bluetooth", "등록된 기기가 없습니다", "새 기기를 페어링하면\n여기에 표시됩니다.")
-        nearbyEmpty = emptyState("search", "새 기기를 찾아보세요", "기기를 페어링 모드로 두고\n위의 ‘기기 검색’을 선택하세요.")
-        nearbyHint = (nearbyEmpty.getChildAt(2) as TextView)
-        registeredList.addView(registeredEmpty); nearbyList.addView(nearbyEmpty)
-        val footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(16), 0, 0) }
-        footer.addView(label("방향키  이동     확인  선택", 11), LinearLayout.LayoutParams(0, -2, 1f))
-        footer.addView(label("뒤로  나가기", 11))
-        content.addView(footer)
+    override fun onDestroy() {
+        TvMenus.detach(this); menus?.clear(); channel?.setMethodCallHandler(null)
+        if (::updater.isInitialized) updater.close()
+        if (::apps.isInitialized) apps.close()
+        if (::files.isInitialized) files.close()
+        if (::bluetoothActions.isInitialized) bluetoothActions.close()
+        uiHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
-    private fun selectTab(apps: Boolean) {
-        filesSelected = false; filesPage.visibility = View.GONE; filesPage.pause()
-        appTabSelected = apps
-        bluetoothPage.visibility = if (apps) View.GONE else View.VISIBLE
-        appsPage.visibility = if (apps) View.VISIBLE else View.GONE
-        bluetoothTab.isSelected = !apps; appsTab.isSelected = apps
-        filesTab.isSelected = false
-        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = TvDesign.selector(this, nav = true)
-        if (apps) appsPage.refresh()
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults); refresh()
     }
-    private fun selectFiles() {
-        selectTab(false)
-        filesSelected = true; bluetoothPage.visibility = View.GONE; filesPage.visibility = View.VISIBLE
-        bluetoothTab.isSelected = false; filesTab.isSelected = true
-        for (tab in listOf(bluetoothTab, appsTab, filesTab)) tab.background = TvDesign.selector(this, nav = true)
-        filesPage.show(); filesPage.resume()
+    @Deprecated("Platform result callback for TV firmware compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (files.result(requestCode, resultCode, data)) return
+        if (requestCode == 610) { apps.exportResult(resultCode, data); return }
+        if (requestCode != 501) return
+        val address = pendingCompanionAddress; pendingCompanionAddress = null
+        if (resultCode != RESULT_OK || address == null) { message("대체 페어링이 취소되었습니다."); return }
+        try { adapter?.getRemoteDevice(address)?.let { found[address] = it; bluetoothActions.bond(it) } }
+        catch (error: Exception) { operationError("대체 페어링 완료", error) }
     }
-    private fun inside(view: View?, parent: View): Boolean {
-        var current = view
-        while (current != null) { if (current === parent) return true; current = current.parent as? View }
-        return false
+    private fun openAppSettings() {
+        for (action in listOf(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS, Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS)) {
+            try { startActivity(Intent(action)); return } catch (_: ActivityNotFoundException) { }
+        }
+        TvMenus.notice(this, "이 TV 펌웨어는 앱 목록 설정 화면을 제공하지 않습니다. [GB-UI-0001]")
     }
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && ::bluetoothTab.isInitialized) uiHandler.post {
-            if (!isFinishing && (currentFocus == null || currentFocus?.isShown != true)) activeTab().requestFocus()
+    private fun showDiagnostics() {
+        val text = Diagnostics.read(this)
+        TvMenus.show(this, "문제 기록 · 기기 내부", listOf("기록 복사", "기록 지우기"), text) { which ->
+            if (which == 0) getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker local errors", text))
+            else TvMenus.show(this, "문제 기록 지우기", listOf("취소", "기록 지우기"), "기기에 저장된 오류 코드를 지웁니다.") { if (it == 1) Diagnostics.clear(this) }
         }
     }
-    private fun activeTab() = if (filesSelected) filesTab else if (appTabSelected) appsTab else bluetoothTab
-    private fun enterContent() {
-        if (filesSelected) { filesPage.enter(); return }
-        val remembered = pageFocus[if (appTabSelected) "apps" else "bluetooth"]?.get()
-        if (remembered?.isShown == true && remembered.isEnabled && remembered.requestFocus()) return
-        if (appTabSelected) appsPage.enter() else scan.requestFocus()
-    }
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action != KeyEvent.ACTION_DOWN || !::sidebarView.isInitialized) return super.dispatchKeyEvent(event)
-        val focused = currentFocus
-        if (inside(focused, sidebarView)) {
-            val nav = listOf(bluetoothTab, appsTab, filesTab, permission, power, settingsTab).filter { it.isShown && it.isEnabled }
-            val index = nav.indexOf(focused)
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (index >= 0) nav[(index + if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1).coerceIn(0, nav.lastIndex)].requestFocus()
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT -> return true
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    when (focused) { bluetoothTab -> selectTab(false); appsTab -> selectTab(true); filesTab -> selectFiles() }
-                    enterContent(); return true
-                }
-            }
-        } else if (!filesSelected && focused != null) {
-            if (appTabSelected) {
-                if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && appsPage.atLeftEdge()) { appsTab.requestFocus(); return true }
-            } else if (focused is DeviceRow) {
-                val parent = focused.parent as? LinearLayout
-                val own = if (parent == registeredList) registeredList else nearbyList
-                val children = (0 until own.childCount).map { own.getChildAt(it) }.filterIsInstance<DeviceRow>()
-                val index = children.indexOf(focused)
-                when (event.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        val next = index + if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1
-                        if (next < 0) scan.requestFocus() else children.getOrNull(next)?.requestFocus()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        val left = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT
-                        if (compact) { if (left) bluetoothTab.requestFocus(); return true }
-                        if (left && own == registeredList) { bluetoothTab.requestFocus(); return true }
-                        val other = if (left) registeredList else nearbyList
-                        if (other != own) (0 until other.childCount).map { other.getChildAt(it) }.filterIsInstance<DeviceRow>().let { list ->
-                            list.getOrNull(index.coerceAtMost(list.lastIndex))?.requestFocus()
-                        }
-                        return true
-                    }
-                }
-            } else if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { bluetoothTab.requestFocus(); return true }
-            else if (focused == scan && event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                val row = rows.values.firstOrNull { it.isShown && it.parent == nearbyList } ?: rows.values.firstOrNull { it.isShown }
-                row?.requestFocus(); return true
-            }
-        }
-        return super.dispatchKeyEvent(event)
-    }
-    private fun devicePanel(title: String): Triple<LinearLayout, LinearLayout, TextView> {
-        val panel = column().apply { setPadding(dp(12), dp(12), dp(12), dp(8)); background = TvDesign.shape(this@MainActivity, TvDesign.surface, 12) }
-        val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        heading.addView(label(title, 16, white, true), LinearLayout.LayoutParams(0, -2, 1f))
-        val count = label("0", 12, accent).apply { gravity = Gravity.CENTER; minWidth = dp(26); setPadding(dp(7), dp(4), dp(7), dp(4)); background = rounded(0xff193554.toInt(), 8) }
-        heading.addView(count)
-        panel.addView(heading)
-        panel.addView(Space(this), LinearLayout.LayoutParams(1, dp(12)))
-        val list = column()
-        if (compact) panel.addView(list)
-        else panel.addView(ScrollView(this).apply { isFillViewport = true; clipToPadding = false; addView(list) }, LinearLayout.LayoutParams(-1, 0, 1f))
-        return Triple(panel, list, count)
-    }
-    private fun emptyState(symbol: String, title: String, hint: String) = column().apply {
-        gravity = Gravity.CENTER; setPadding(dp(6), dp(20), dp(6), dp(20))
-        addView(SymbolView(symbol, muted), LinearLayout.LayoutParams(dp(40), dp(40)))
-        addView(label(title, 14, white, true).apply { gravity = Gravity.CENTER; setPadding(0, dp(18), 0, dp(9)) })
-        addView(label(hint, 12).apply { gravity = Gravity.CENTER; setLineSpacing(dp(4).toFloat(), 1f) })
-    }
-    private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
-    private fun rounded(color: Int, radius: Int, stroke: Int = Color.TRANSPARENT) = GradientDrawable().apply {
-        setColor(color); cornerRadius = dp(radius).toFloat(); setStroke(dp(2), stroke)
-    }
-    private fun label(text: String, size: Int, color: Int = muted, bold: Boolean = false) = TextView(this).apply {
-        this.text = text; textSize = size.toFloat(); setTextColor(color); includeFontPadding = false
-        typeface = Typeface.create("sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
-    }
-    private fun decorateNav(button: Button, icon: Int) {
-        button.gravity = Gravity.START or Gravity.CENTER_VERTICAL
-        button.compoundDrawablePadding = dp(12)
-        button.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0)
-        button.background = TvDesign.selector(this, nav = true)
-        button.setPadding(dp(12), 0, dp(10), 0)
-    }
-    private fun actionButton(text: String, primary: Boolean, action: () -> Unit) = Button(this).apply {
-        this.text = text; textSize = 14f; isAllCaps = false; isFocusable = true; stateListAnimator = null
-        if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false)
-        minHeight = dp(44); minimumHeight = dp(44); setPadding(dp(12), 0, dp(12), 0)
-        setTypeface(Typeface.DEFAULT, Typeface.NORMAL)
-        layoutParams = LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) }
-        background = TvDesign.selector(this@MainActivity, primary = primary)
-        setTextColor(if (primary) backgroundColor else white)
-        setOnClickListener { action() }
-    }
-    private inner class DeviceRow(val address: String) : LinearLayout(this@MainActivity) {
-        private var lastBond = BluetoothDevice.BOND_NONE
-        private var lastKind = "bluetooth"
-        fun refreshName() { bind(names.get(address), lastBond, lastKind) }
-        val title = label("", 17, white, true)
-        val detail = label("", 12)
-        val symbol = SymbolView("bluetooth", accent)
-        init {
-            orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            isFocusable = true; isClickable = true; if (Build.VERSION.SDK_INT >= 26) setDefaultFocusHighlightEnabled(false); descendantFocusability = FOCUS_BLOCK_DESCENDANTS
-            minimumHeight = dp(70); setPadding(dp(12), dp(12), dp(12), dp(12))
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
-            addView(symbol, LinearLayout.LayoutParams(dp(28), dp(30)).apply { rightMargin = dp(12) })
-            val text = column()
-            title.maxLines = 1; title.ellipsize = TextUtils.TruncateAt.END
-            text.addView(title); text.addView(detail.apply { setPadding(0, dp(6), 0, 0); maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
-            addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(ImageView(this@MainActivity).apply { setImageResource(R.drawable.ic_chevron); imageTintList = android.content.res.ColorStateList.valueOf(muted) }, LinearLayout.LayoutParams(dp(16), dp(20)))
-            background = TvDesign.selector(this@MainActivity)
-            setOnClickListener { try { found[address]?.let(::pair) ?: bondedDevice(address)?.let(::pair) } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) } }
-        }
-        fun bind(name: String?, bondState: Int, kind: String) {
-            lastBond = bondState; lastKind = kind
-            val pending = name == null && names.isPending(address)
-            title.text = name ?: if (pending) "이름 확인 중…" else "블루투스 기기 ${address.takeLast(5)}"
-            val state = when (bondState) {
-                BluetoothDevice.BOND_BONDED -> if (address in linked) "기기 링크 연결됨" else "등록됨"
-                BluetoothDevice.BOND_BONDING -> "페어링 중"
-                else -> if (pending) "잠시 기다려주세요" else "페어링 가능"
-            }
-            detail.text = if (name == null) "$state  ${address.takeLast(8)}" else state
-            symbol.kind = kind; symbol.invalidate()
-            contentDescription = "${title.text}, $state, $address"
-        }
-    }
-    private inner class SymbolView(kind: String, color: Int) : ImageView(this@MainActivity) {
-        var kind: String = kind
-            set(value) { field = value; updateIcon() }
-        init { scaleType = ImageView.ScaleType.FIT_CENTER; imageTintList = android.content.res.ColorStateList.valueOf(color); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO; updateIcon() }
-        private fun updateIcon() { setImageResource(when (kind) { "audio" -> R.drawable.ic_audio; "input" -> R.drawable.ic_input; "search" -> R.drawable.ic_search; else -> R.drawable.ic_bluetooth }) }
+    private fun operationError(operation: String, error: Exception) {
+        val code = Diagnostics.record(this, operation, error)
+        message("$operation 실패 [$code]")
+        if (presentedError != code && !isFinishing && !isDestroyed) { presentedError = code; TvMenus.notice(this, "$operation 실패 [$code]") }
     }
     private fun access() = if (Build.VERSION.SDK_INT >= 31) {
         checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
@@ -421,66 +269,6 @@ class MainActivity : Activity() {
             arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
             else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("권한 요청", error) }
-    }
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults); refresh()
-    }
-    override fun onStart() {
-        super.onStart()
-        if (preview) { showPreview(); return }
-        val filter = IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_ACL_CONNECTED); addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
-            addAction(BluetoothDevice.ACTION_NAME_CHANGED); addAction(BluetoothDevice.ACTION_CLASS_CHANGED)
-            addAction(BluetoothDevice.ACTION_FOUND); addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
-            addAction(BluetoothAdapter.ACTION_STATE_CHANGED); addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
-            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-        }
-        // Bluetooth broadcasts may originate from a privileged process outside our UID.
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-        else registerReceiver(receiver, filter)
-        registered = true; refresh()
-    }
-    override fun onResume() { super.onResume(); if (::status.isInitialized) refresh(); if (::updater.isInitialized && !preview) updater.resume(); if (::appsPage.isInitialized && appTabSelected) appsPage.resume(); if (::filesPage.isInitialized && filesSelected) filesPage.resume() }
-    @Deprecated("Android TV back key compatibility")
-    override fun onBackPressed() {
-        if (filesSelected && filesPage.hasFocus()) filesPage.back()
-        else if (currentFocus != null && !inside(currentFocus, sidebarView)) activeTab().requestFocus()
-        else super.onBackPressed()
-    }
-    override fun onPause() { if (::filesPage.isInitialized) filesPage.pause(); super.onPause() }
-    override fun onDestroy() { if (::filesPage.isInitialized) filesPage.close(); if (::updater.isInitialized) updater.close(); if (::bluetoothActions.isInitialized) bluetoothActions.close(); if (::appsPage.isInitialized) appsPage.close(); uiHandler.removeCallbacksAndMessages(null); super.onDestroy() }
-    override fun onStop() {
-        uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false
-        if (registered) { unregisterReceiver(receiver); registered = false }
-        try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
-        super.onStop()
-    }
-    private fun message(text: String) { status.text = if (ErrorCodes.isError(text) && !text.contains("[GB-")) "$text [${Diagnostics.record(this, "Bluetooth: $text")}]" else text }
-    private fun refresh() {
-        if (preview) return
-        permission.visibility = if (access()) View.GONE else View.VISIBLE
-        val bt = adapter
-        if (bt == null) { badge.text = "지원 안 됨"; message("이 기기는 블루투스를 지원하지 않습니다."); scan.isEnabled = false; power.visibility = View.GONE; return }
-        if (!access()) { badge.text = "권한 필요"; message("왼쪽의 ‘권한 허용’을 선택해 시작하세요."); return }
-        try {
-            searching = bt.isDiscovering && !scanExpired
-            if (searching && !watchdogScheduled) {
-                watchdogScheduled = true; uiHandler.postDelayed(scanWatchdog, 35_000)
-            } else if (!searching) { uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false }
-            power.visibility = if (bt.isEnabled) View.GONE else View.VISIBLE
-            badge.text = if (bt.isEnabled) "● 켜짐" else "꺼짐"
-            scan.text = if (searching) "검색 중지" else if (searched) "다시 검색" else "기기 검색"
-            progress.visibility = if (searching) View.VISIBLE else View.GONE
-            nearbyHint.text = when { searching -> "기기를 페어링 모드로 설정하세요.\n이름이 확인되면 자동으로 표시됩니다."
-                searched -> "기기를 TV 가까이에 두고\n페어링 모드를 확인한 뒤 다시 검색하세요."
-                else -> "기기를 페어링 모드로 두고\n위의 ‘기기 검색’을 선택하세요." }
-            (nearbyEmpty.getChildAt(1) as TextView).text = when { searching -> "주변 기기를 찾고 있습니다"; searched -> "발견된 기기가 없습니다"; else -> "새 기기를 찾아보세요" }
-            message(when { !bt.isEnabled -> "왼쪽에서 블루투스를 켜주세요."
-                searching -> "새 기기를 찾고 있습니다"
-                searched -> "연결할 기기를 선택하세요"
-                else -> "연결할 기기를 선택하세요" })
-            renderDevices()
-        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("블루투스 상태", error) }
     }
     private fun enableBluetooth() {
         val bt = adapter ?: run { message("블루투스를 지원하지 않습니다"); return }
@@ -569,102 +357,4 @@ class MainActivity : Activity() {
             message("대체 페어링 준비 중입니다. 기기를 페어링 모드로 유지하세요.")
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링", error) }
     }
-    @Deprecated("Platform result callback used for vendor compatibility")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (TvMenus.result(requestCode, resultCode, data)) return
-        if (::filesPage.isInitialized && filesPage.result(requestCode, resultCode, data)) return
-        if (requestCode == 610) { appsPage.exportResult(resultCode, data); return }
-        if (requestCode != 501) return
-        val address = pendingCompanionAddress; pendingCompanionAddress = null
-        if (resultCode != RESULT_OK || address == null) { message("대체 페어링이 취소되었습니다."); return }
-        try {
-            adapter?.getRemoteDevice(address)?.let { device -> found[address] = device; bluetoothActions.bond(device) }
-        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링 완료", error) }
-    }
-    private fun operationError(operation: String, error: Exception) {
-        val code = Diagnostics.record(this, operation, error)
-        val text = "$operation 실패 [$code]. 문제 기록에서 코드를 확인하세요."
-        message(text)
-        if (presentedError != code && !isFinishing && !isDestroyed) { presentedError = code; TvMenus.notice(this, text) }
-    }
-    private fun showSettings() {
-        TvMenus.show(this, "설정", listOf(updater.actionLabel(updateActionLabel), "문제 기록")) { which ->
-            if (which == 0) updater.click() else if (which == 1) showDiagnostics()
-        }
-    }
-    private fun showDiagnostics() {
-        val text = Diagnostics.read(this)
-        TvMenus.show(this, "문제 기록 · 기기 내부", listOf("기록 복사", "기록 지우기"), text) { which ->
-            if (which == 0) getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker local errors", text))
-            else TvMenus.show(this, "문제 기록 지우기", listOf("취소", "기록 지우기"), "기기에 저장된 오류 코드를 지웁니다.") { if (it == 1) Diagnostics.clear(this) }
-        }
-    }
-    private fun bondedDevice(address: String): BluetoothDevice? {
-        if (!access()) return null
-        return try { adapter?.bondedDevices?.firstOrNull { it.address == address } }
-        catch (_: SecurityException) { null }
-    }
-    private fun renderDevices() {
-        val bt = adapter ?: return
-        if (!access()) return
-        try {
-            val bonded = bt.bondedDevices
-            val nearby = found.values.filter { it.bondState != BluetoothDevice.BOND_BONDED }
-            val visible = (bonded + nearby).map { it.address }.toSet()
-            val focusedAddress = (currentFocus as? DeviceRow)?.address
-            rows.keys.filter { it !in visible }.toList().forEach { key ->
-                rows.remove(key)?.let { (it.parent as? LinearLayout)?.removeView(it) }
-            }
-            fun reconcile(device: BluetoothDevice, parent: LinearLayout) {
-                names.seed(device.address, device.name)
-                val row = rows.getOrPut(device.address) { DeviceRow(device.address) }
-                if (row.parent !== parent) {
-                    (row.parent as? LinearLayout)?.removeView(row); parent.addView(row)
-                }
-                val kind = when (device.bluetoothClass?.majorDeviceClass) {
-                    BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"
-                    BluetoothClass.Device.Major.PERIPHERAL -> "input"
-                    else -> "bluetooth"
-                }
-                row.bind(names.get(device.address), device.bondState, kind)
-            }
-            // Rows keep their identity and position when a late name arrives.
-            bonded.forEach { reconcile(it, registeredList) }
-            nearby.forEach { reconcile(it, nearbyList) }
-            registeredCount.text = bonded.size.toString(); nearbyCount.text = nearby.size.toString()
-            registeredEmpty.visibility = if (bonded.isEmpty()) View.VISIBLE else View.GONE
-            nearbyEmpty.visibility = if (nearby.isEmpty()) View.VISIBLE else View.GONE
-            if (focusedAddress != null && currentFocus !is DeviceRow) (rows[focusedAddress] ?: scan).requestFocus()
-            uiHandler.removeCallbacks(nameTick)
-            if (rows.keys.any { names.isPending(it) }) uiHandler.postDelayed(nameTick, 1_000)
-        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 목록", error) }
-    }
-    /** Debug-only fixtures for instrumentation screenshots, never shown in release builds. */
-    private fun showPreview() {
-        badge.text = "● 켜짐"; permission.visibility = View.GONE; power.visibility = View.GONE
-        message("새 기기를 찾고 있습니다")
-        scan.text = "검색 중지"; progress.visibility = View.VISIBLE
-        registeredEmpty.visibility = View.GONE; nearbyEmpty.visibility = View.GONE
-        registeredCount.text = "2"; nearbyCount.text = "3"
-        fun sample(parent: LinearLayout, address: String, name: String?, bond: Int, kind: String) {
-            val row = DeviceRow(address); names.merge(address, name); row.bind(name, bond, kind); rows[address] = row; parent.addView(row)
-        }
-        sample(registeredList, "00:11:22:33:44:01", "거실 헤드폰", BluetoothDevice.BOND_BONDED, "audio")
-        sample(registeredList, "00:11:22:33:44:02", "무선 키보드", BluetoothDevice.BOND_BONDED, "input")
-        sample(nearbyList, "00:11:22:33:44:03", "WH-1000XM5", BluetoothDevice.BOND_NONE, "audio")
-        sample(nearbyList, "00:11:22:33:44:04", null, BluetoothDevice.BOND_NONE, "bluetooth")
-        sample(nearbyList, "00:11:22:33:44:05", "Bluetooth Keyboard", BluetoothDevice.BOND_NONE, "input")
-    }
-    // An instrumentation hook also verifies that updating a title preserves view identity and focus.
-    fun previewLateName(): Boolean {
-        check(BuildConfig.DEBUG && preview)
-        val row = rows.getValue("00:11:22:33:44:04")
-        row.requestFocus()
-        names.merge(row.address, "Galaxy Buds FE")
-        row.bind(names.get(row.address), BluetoothDevice.BOND_NONE, "audio")
-        return row.hasFocus() && rows[row.address] === row && row.title.text.toString() == "Galaxy Buds FE"
-    }
-    fun previewFilesTab() { check(BuildConfig.DEBUG && preview); selectFiles() }
-    fun previewAppsTab() { check(BuildConfig.DEBUG && preview); selectTab(true); appsTab.requestFocus() }
 }
