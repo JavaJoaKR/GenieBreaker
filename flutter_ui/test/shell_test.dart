@@ -129,6 +129,8 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select);
     expect(find.text('저장소 목록'), findsNothing);
     expect(focus, 'file:$pictures');
+    await arrow(tester, LogicalKeyboardKey.arrowUp); expect(focus, 'files:up');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'file:$pictures');
     await arrow(tester, LogicalKeyboardKey.select);
     expect(find.text('USB 저장장치  ›  사진'), findsOneWidget);
     expect(find.text('폴더가 비어 있습니다'), findsOneWidget);

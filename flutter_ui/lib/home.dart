@@ -146,7 +146,10 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     setState(() {
       files = next;
       listingError = null;
-      if (destination != null) _trail = destination;
+      if (destination != null) {
+        _trail = destination;
+        fileToolbarFocus = null;
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || request != fileRequest || tab != 'files' || widget.obscured || onSidebar) return;

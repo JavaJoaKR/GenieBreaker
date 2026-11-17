@@ -56,6 +56,7 @@ jobs:
             adb pull /sdcard/Download/genie-app-ui.png app-ui.png
             adb pull /sdcard/Download/genie-flutter-menu.png flutter-menu.png
             adb pull /sdcard/Download/genie-files-ui.png files-ui.png
+            adb pull /sdcard/Download/genie-file-path-ui.png file-path-ui.png
             adb pull /sdcard/Download/genie-storage-ui.png storage-ui.png
             adb pull /sdcard/Download/genie-shortcuts-ui.png shortcuts-ui.png
             adb pull /sdcard/Download/genie-popup-depth.png popup-depth.png
@@ -69,6 +70,7 @@ jobs:
             app-ui.png
             flutter-menu.png
             files-ui.png
+            file-path-ui.png
             storage-ui.png
             shortcuts-ui.png
             popup-depth.png
