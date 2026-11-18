@@ -99,3 +99,35 @@ REMOTE
 wait_for_settings remote
 [[ "$(home_component)" == "$original_home" ]]
 echo 'Mapped red key opened the selected app from the original launcher.'
+
+# Use the disposable emulator's HOME role to exercise foreground startup
+# with the overlay permission revoked, then restore the previous launcher.
+adb shell input keyevent KEYCODE_HOME
+adb shell appops set "$pkg" SYSTEM_ALERT_WINDOW deny
+seed=$(adb shell am instrument -w -e class "$pkg.TvControlsTest#configureEmulatorBoot" \
+  -e startupFixture "$target" -e startupPending true "$pkg.test/androidx.test.runner.AndroidJUnitRunner")
+if [[ "$seed" != *'OK (1 test)'* ]]; then echo "$seed"; exit 1; fi
+adb shell cmd package set-home-activity --user 0 "$pkg/.MainActivity"
+[[ "$(home_component)" == "$pkg/"* ]]
+if ! adb logcat -d -s GenieStartupTest | grep -F 'HOME launched the selected app' >/dev/null; then
+  adb shell input keyevent KEYCODE_HOME
+fi
+for ((attempt=0; attempt<15; attempt++)); do
+  if adb logcat -d -s GenieStartupTest | grep -F 'HOME launched the selected app' >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+adb logcat -d -s GenieStartupTest | grep -F 'HOME launched the selected app'
+wait_for_settings default-home
+adb shell input keyevent KEYCODE_HOME
+for ((attempt=0; attempt<15; attempt++)); do
+  if adb shell dumpsys activity activities | grep -E "(topResumedActivity|mResumedActivity|ResumedActivity).*$pkg/" >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+adb shell dumpsys activity activities | grep -E "(topResumedActivity|mResumedActivity|ResumedActivity).*$pkg/" >/dev/null
+adb shell cmd package set-home-activity --user 0 "$original_home"
+[[ "$(home_component)" == "$original_home" ]]
+echo 'GenieBreaker HOME launched the startup app once without overlay permission. Original HOME restored.'

@@ -45,7 +45,9 @@ internal object StartupApps {
         val boot = boot(context)
         if (!due(context, boot, false) || !isDefaultHome(context)) return false
         if (context.getSystemService(KeyguardManager::class.java).isDeviceLocked) return false
-        return launchSelected(context, boot)
+        val launched = launchSelected(context, boot)
+        if (BuildConfig.DEBUG && launched) android.util.Log.i("GenieStartupTest", "HOME launched the selected app")
+        return launched
     }
 
     private fun launchSelected(context: Context, boot: Int): Boolean {

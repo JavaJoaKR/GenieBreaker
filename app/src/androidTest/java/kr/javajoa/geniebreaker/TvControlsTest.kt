@@ -45,7 +45,11 @@ class TvControlsTest {
         org.junit.Assume.assumeNotNull(target)
         assertNotNull(context.packageManager.getLaunchIntentForPackage(target!!))
         StartupApps.select(context, target, "설정")
-        assertTrue(tvPreferences(context).edit().putBoolean("wake", true)
+        val prefs = tvPreferences(context).edit().putBoolean("wake", true)
+        if (InstrumentationRegistry.getArguments().getString("startupPending") == "true") {
+            prefs.putInt("lastBoot", StartupApps.boot(context) - 1)
+        }
+        assertTrue(prefs
             .putString("button.$key", "app:$target").putString("buttonLabel.$key", "설정").commit())
     }
     @Test fun ownedPressSurvivesRebindAndNeverRunsTwice() {
