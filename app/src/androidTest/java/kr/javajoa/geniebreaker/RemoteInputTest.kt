@@ -12,21 +12,23 @@ import java.util.concurrent.atomic.AtomicInteger
 class RemoteInputTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
-    private fun awaitMenu(activity: MainActivity, title: String?) {
-        // Observe the real Android menu controller reached by Flutter selection.
-        // This avoids depending on whether the test runner exposes Flutter semantics.
+    private fun awaitMenuValue(activity: MainActivity, key: String, expected: String?) {
+        // A focus acknowledgement comes from Dart after rendering. Android idle
+        // or a published menu alone does not mean Flutter is ready for the next key.
         val field = MainActivity::class.java.getDeclaredField("menus").apply { isAccessible = true }
         val deadline = SystemClock.uptimeMillis() + 8000
         var actual: String? = null
         do {
             instrumentation.runOnMainSync {
-                actual = (field.get(activity) as MenuController).current()?.get("title") as? String
+                actual = (field.get(activity) as MenuController).current()?.get(key) as? String
             }
-            if (actual == title) return
+            if (actual == expected) return
             SystemClock.sleep(100)
         } while (SystemClock.uptimeMillis() < deadline)
-        assertEquals("Remote must reach the requested popup", title, actual)
+        assertEquals("Remote menu $key", expected, actual)
     }
+    private fun awaitMenu(activity: MainActivity, title: String?) = awaitMenuValue(activity, "title", title)
+    private fun awaitFocus(activity: MainActivity, key: String) = awaitMenuValue(activity, "focusKey", key)
     private fun awaitChoice(choice: AtomicInteger, expected: Int) {
         val deadline = SystemClock.uptimeMillis() + 5000
         while (choice.get() == -1 && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
@@ -59,10 +61,12 @@ class RemoteInputTest {
             press(108)
             press(353)
             awaitMenu(activity, "리모컨 버튼 선택")
+            awaitFocus(activity, "item-0")
             press(158)
             awaitMenu(activity, null)
             press(353)
             awaitMenu(activity, "리모컨 버튼 선택")
+            awaitFocus(activity, "item-0")
             press(158)
             awaitMenu(activity, null)
 
@@ -71,7 +75,9 @@ class RemoteInputTest {
                 TvMenus.show(activity, "리모컨 회귀 검사", listOf("첫 번째", "두 번째", "세 번째")) { choice.set(it) }
             }
             awaitMenu(activity, "리모컨 회귀 검사")
+            awaitFocus(activity, "item-0")
             press(108)
+            awaitFocus(activity, "item-1")
             // A native settings/keyboard window temporarily owns the Android window focus.
             var dialog: android.app.AlertDialog? = null
             instrumentation.runOnMainSync {
@@ -87,10 +93,7 @@ class RemoteInputTest {
             ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
                 "screencap -p /sdcard/Download/genie-remote-failure.png"
             )).use { it.readBytes() }
-            val logs = ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("logcat -d -s GenieFocusTest flutter")).use {
-                it.bufferedReader().readText().lines().filter { line -> line.contains("GenieFocusTest") }.takeLast(35).joinToString("\n")
-            }
-            throw AssertionError(error.message + "\n" + logs, error)
+            throw error
         } finally {
             input.close()
             pipes[0].close()
