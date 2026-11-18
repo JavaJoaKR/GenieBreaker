@@ -876,6 +876,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['shortcut:home'],
                 ['shortcut:accounts'],
                 ['shortcut:add-account'],
+                ['shortcut:tv-update'],
               ];
               content = scroll([
                 tile(
@@ -910,6 +911,12 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   '계정 추가',
                   () => call('addAccount'),
                   icon: Icons.person_add_alt_1_outlined,
+                ),
+                tile(
+                  'shortcut:tv-update',
+                  'TV 업데이트 설정',
+                  () => call('tvUpdateSettings'),
+                  icon: Icons.system_update_alt_rounded,
                 ),
               ]);
             default:
