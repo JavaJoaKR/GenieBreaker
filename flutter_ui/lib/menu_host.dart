@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'home.dart';
+import 'pin_panel.dart';
 import 'platform_bridge.dart';
 import 'popup_panel.dart';
 import 'remote_tile.dart';
@@ -138,6 +139,11 @@ class _GeniePageState extends State<GeniePage> {
         expandedPages.clear();
         setState(() => data = shellData);
         homeKey.currentState?.restoreModalOpener();
+      }
+      if (call.method == 'session') {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        expandedPages.clear();
+        receive(Map<String, dynamic>.from(call.arguments as Map));
       }
       if (call.method == 'filesChanged') homeKey.currentState?.filesChanged();
       if (call.method == 'back') back();
@@ -478,6 +484,17 @@ class _GeniePageState extends State<GeniePage> {
         focusNodes.remove(id)?.dispose();
       }
     });
+    if (data?['locked'] == true) {
+      return Scaffold(
+        backgroundColor: canvas,
+        body: PinPanel(
+          title: 'GenieBreaker 잠금',
+          minimum: 1,
+          maximum: 12,
+          onSubmit: (pin) async => await bridge.invokeMethod<bool>('unlockPin', pin) == true,
+        ),
+      );
+    }
     final home = shellData;
     final menu = data?['shell'] != true;
     return PopScope(

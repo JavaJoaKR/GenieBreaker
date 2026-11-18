@@ -38,6 +38,19 @@ internal object StartupApps {
     }
     fun launchIfDue(context: Context, boot: Int, waking: Boolean = false): Boolean {
         if (!due(context, boot, waking) || !allowed(context)) return false
+        return launchSelected(context, boot)
+    }
+
+    fun launchFromHome(context: Context): Boolean {
+        val boot = boot(context)
+        if (!due(context, boot, false) || !isDefaultHome(context)) return false
+        if (context.getSystemService(KeyguardManager::class.java).isDeviceLocked) return false
+        val launched = launchSelected(context, boot)
+        if (BuildConfig.DEBUG && launched) android.util.Log.i("GenieStartupTest", "HOME launched the selected app")
+        return launched
+    }
+
+    private fun launchSelected(context: Context, boot: Int): Boolean {
         val prefs = tvPreferences(context)
         if (!launchPackage(context, prefs.getString("startup", null).orEmpty())) return false
         prefs.edit().putInt("lastBoot", boot).apply()
@@ -50,7 +63,7 @@ internal object StartupApps {
         val app = context.applicationContext
         val boot = boot(app)
         if (BuildConfig.DEBUG) android.util.Log.i("GenieStartupTest", "eligible=${due(app, boot, waking)} permission=${allowed(app)} locked=${app.getSystemService(KeyguardManager::class.java).isDeviceLocked}")
-        if (presenting || !due(app, boot, waking) || !allowed(app) ||
+        if (presenting || (!waking && isDefaultHome(app)) || !due(app, boot, waking) || !allowed(app) ||
             app.getSystemService(KeyguardManager::class.java).isDeviceLocked) { done(); return }
         if (Build.VERSION.SDK_INT < 29) { try { launchIfDue(app, boot, waking) } finally { done() }; return }
         val visual = if (Build.VERSION.SDK_INT >= 30) {

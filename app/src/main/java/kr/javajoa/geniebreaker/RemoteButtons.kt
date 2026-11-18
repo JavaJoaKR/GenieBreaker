@@ -39,11 +39,13 @@ internal fun openScreen(context: Context, intent: Intent?): Boolean {
       catch (_: SecurityException) { false }
 }
 
-internal fun launchPackage(context: Context, pkg: String): Boolean {
-    if (pkg == context.packageName || pkg.isBlank()) return false
+internal fun launchIntent(context: Context, pkg: String): Intent? {
+    if (pkg == context.packageName || pkg.isBlank()) return null
     val pm = context.packageManager
-    return openScreen(context, pm.getLeanbackLaunchIntentForPackage(pkg) ?: pm.getLaunchIntentForPackage(pkg))
+    return pm.getLeanbackLaunchIntentForPackage(pkg) ?: pm.getLaunchIntentForPackage(pkg)
 }
+
+internal fun launchPackage(context: Context, pkg: String): Boolean = openScreen(context, launchIntent(context, pkg))
 
 internal fun openAppsScreen(context: Context) =
     openScreen(context, Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)) ||

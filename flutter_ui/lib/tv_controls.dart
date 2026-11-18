@@ -49,7 +49,11 @@ List<TvAction> startupActions(Map state) {
         TvAction(
           'startup:permission',
           '다른 앱 위에 표시',
-          state['canStart'] == true ? '허용됨 · 권한 설정 열기' : 'TV를 켤 때 실행 안내를 표시하려면 권한을 허용하세요',
+          state['hasOverlay'] == true
+              ? '허용됨 · 권한 설정 열기'
+              : state['defaultHome'] == true
+              ? '대기 해제 시에도 실행하려면 권한을 허용하세요'
+              : 'TV를 켤 때 실행하려면 권한을 허용하세요',
           Icons.open_in_new_rounded,
           'startupPermission',
         ),

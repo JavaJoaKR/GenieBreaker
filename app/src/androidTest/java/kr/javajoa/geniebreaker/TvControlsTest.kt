@@ -8,6 +8,33 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TvControlsTest {
+    @Test fun homeRegistrationAndPinSessionAreOptIn() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val homes = context.packageManager.queryIntentActivities(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+        )
+        assertTrue(homes.any { it.activityInfo.name == MainActivity::class.java.name })
+        assertFalse("Installing the app must not replace the current HOME", isDefaultHome(context))
+
+        val lock = AppLock(context)
+        try {
+            assertFalse(lock.enabled)
+            assertFalse(lock.setPin("012"))
+            assertTrue(lock.setPin("02468"))
+            assertFalse(lock.locked)
+            assertTrue(lock.relock())
+            assertTrue(lock.locked)
+            assertFalse(lock.unlock("99999"))
+            assertTrue(lock.unlock("02468"))
+            assertTrue(lock.relock())
+            assertTrue(lock.unlock(BuildConfig.VERSION_NAME.replace(".", "")))
+            assertTrue(AppLock(context).locked)
+        } finally {
+            assertTrue(lock.disable())
+        }
+    }
+
     private val key = KeyEvent.KEYCODE_PROG_RED
     private fun event(action: Int, key: Int, repeat: Int = 0, flags: Int = 0) =
         KeyEvent(0, 10, action, key, repeat, 0, 1, 0, flags)
@@ -18,7 +45,11 @@ class TvControlsTest {
         org.junit.Assume.assumeNotNull(target)
         assertNotNull(context.packageManager.getLaunchIntentForPackage(target!!))
         StartupApps.select(context, target, "설정")
-        assertTrue(tvPreferences(context).edit().putBoolean("wake", true)
+        val prefs = tvPreferences(context).edit().putBoolean("wake", true)
+        if (InstrumentationRegistry.getArguments().getString("startupPending") == "true") {
+            prefs.putInt("lastBoot", StartupApps.boot(context) - 1)
+        }
+        assertTrue(prefs
             .putString("button.$key", "app:$target").putString("buttonLabel.$key", "설정").commit())
     }
     @Test fun ownedPressSurvivesRebindAndNeverRunsTwice() {
