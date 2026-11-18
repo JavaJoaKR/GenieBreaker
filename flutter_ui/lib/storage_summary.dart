@@ -30,7 +30,7 @@ class StorageSummary extends StatelessWidget {
           LinearProgressIndicator(
             value: fraction ?? 0,
             minHeight: 6,
-            color: blue,
+            color: accentTone,
             backgroundColor: divider,
             borderRadius: BorderRadius.circular(2),
             semanticsLabel: '사용 중인 저장공간',

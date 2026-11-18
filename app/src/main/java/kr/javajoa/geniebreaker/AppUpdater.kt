@@ -6,6 +6,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.widget.Toast
 import org.json.JSONArray
@@ -14,6 +15,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+
+private const val CHECK_COOLDOWN_MS = 5_000L
 
 /** Startup update checks. Downloads are automatic; installation always requires user consent. */
 internal class AppUpdater(
@@ -29,19 +32,27 @@ internal class AppUpdater(
     private var waitingForPermission = false
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var retryCount = 0
+    @Volatile private var nextCheckAt = 0L
     @Volatile private var failed = false
     @Volatile private var closed = false
     private val retry = Runnable { if (!closed) checkForUpdate(automatic = true) }
+    private fun cooldownRemaining() = (nextCheckAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
     private fun succeeded() { failed = false; retryCount = 0; handler.removeCallbacks(retry) }
     private fun scheduleRetry() {
         if (closed || retryCount >= retryDelays.size) return
-        val delay = retryDelays[retryCount++]
+        val delay = maxOf(retryDelays[retryCount++], cooldownRemaining())
         handler.removeCallbacks(retry); handler.postDelayed(retry, delay)
     }
 
     fun checkForUpdate(automatic: Boolean = false) {
         if (closed) return
         if (!busy.compareAndSet(false, true)) return
+        val remaining = cooldownRemaining()
+        if (remaining > 0) {
+            busy.set(false)
+            if (!automatic) toast("${(remaining + 999) / 1000}초 뒤에 다시 확인할 수 있습니다")
+            return
+        }
         handler.removeCallbacks(retry)
         ui { state("업데이트 확인 중", false) }
         executor.execute {
@@ -59,6 +70,7 @@ internal class AppUpdater(
                 if (automatic && !failed && System.currentTimeMillis() - preferences.getLong("last_check", 0) < 6 * 60 * 60 * 1000) {
                     ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 확인", true) }; return@execute
                 }
+                nextCheckAt = SystemClock.elapsedRealtime() + CHECK_COOLDOWN_MS
                 val releases = catalogLoader?.invoke() ?: run {
                     val connection = connect("https://api.github.com/repos/JavaJoaKR/GenieBreaker/releases?per_page=100")
                     try { connection.inputStream.bufferedReader().use { JSONArray(it.readText()) } }

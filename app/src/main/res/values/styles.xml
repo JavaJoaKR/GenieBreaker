@@ -1,10 +1,10 @@
 <resources>
     <style name="GenieBase" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowFullscreen">true</item>
-        <item name="android:windowBackground">#0b1220</item>
-        <item name="android:colorAccent">#79adff</item>
-        <item name="android:statusBarColor">#0b1220</item>
-        <item name="android:navigationBarColor">#0b1220</item>
+        <item name="android:windowBackground">#121212</item>
+        <item name="android:colorAccent">#DDDDDD</item>
+        <item name="android:statusBarColor">#121212</item>
+        <item name="android:navigationBarColor">#121212</item>
     </style>
     <style name="GenieTheme" parent="GenieBase" />
     <style name="GeniePopup" parent="GenieTheme">

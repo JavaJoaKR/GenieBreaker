@@ -1,6 +1,7 @@
 package kr.javajoa.geniebreaker
 
 import android.content.Intent
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONArray
@@ -27,11 +28,13 @@ class AppUpdaterTest {
         preferences.edit().remove("last_check").commit()
         val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java).putExtra("ui_preview", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val attempts = AtomicInteger()
+        val requestTimes = mutableListOf<Long>()
         val done = CountDownLatch(1)
         var updater: AppUpdater? = null
         try {
             instrumentation.runOnMainSync {
                 updater = AppUpdater(activity, catalogLoader = {
+                    requestTimes += SystemClock.elapsedRealtime()
                     if (attempts.incrementAndGet() == 1) throw java.io.IOException("first request offline")
                     JSONArray("[${release(1)}]")
                 }, retryDelays = longArrayOf(50)) { text, _ ->
@@ -41,6 +44,7 @@ class AppUpdaterTest {
             }
             assertTrue("First failure must retry automatically", done.await(10, TimeUnit.SECONDS))
             assertEquals(2, attempts.get())
+            assertTrue("Retry must wait for the five-second check cooldown", requestTimes[1] - requestTimes[0] >= 4_990L)
             assertTrue(preferences.getLong("last_check", 0) > 0)
         } finally {
             instrumentation.runOnMainSync { updater?.close(); activity.finish() }

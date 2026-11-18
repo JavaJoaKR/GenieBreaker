@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
-const ink = Color(0xfff4f6fb);
-const muted = Color(0xffb2bfd2);
-const blue = Color(0xffaacaff);
-const canvas = Color(0xff0d1521);
-const panel = Color(0xff192738);
-const railSurface = Color(0xff121f2f);
-const raised = Color(0xff203044);
-const focusFill = Color(0xff304c6a);
-const divider = Color(0xff35485f);
+const ink = Color(0xfff5f5f5);
+const muted = Color(0xffbdbdbd);
+const accentTone = Color(0xffdddddd);
+const canvas = Color(0xff121212);
+const panel = Color(0xff222222);
+const railSurface = Color(0xff1b1b1b);
+const raised = Color(0xff2a2a2a);
+const selectedFill = Color(0xff393939);
+const focusFill = Color(0xff5c5c5c);
+const divider = Color(0xff4b4b4b);
 
 // Keep the existing size hierarchy with each explicit radius halved.
 const tileRadius = 5.0;
@@ -19,7 +20,19 @@ const modalRadius = 9.0;
 
 ThemeData tvTheme() => ThemeData.dark(useMaterial3: true).copyWith(
   scaffoldBackgroundColor: Colors.transparent,
-  colorScheme: const ColorScheme.dark(primary: blue, surface: panel, surfaceTint: Colors.transparent),
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: accentTone,
+    brightness: Brightness.dark,
+    dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
+    primary: accentTone,
+    onPrimary: canvas,
+    surface: panel,
+    surfaceTint: Colors.transparent,
+    error: ink,
+    onError: canvas,
+    errorContainer: raised,
+    onErrorContainer: ink,
+  ),
   textTheme: ThemeData.dark().textTheme.apply(bodyColor: ink, displayColor: ink),
   iconButtonTheme: IconButtonThemeData(
     style: ButtonStyle(
@@ -43,7 +56,7 @@ ThemeData tvTheme() => ThemeData.dark(useMaterial3: true).copyWith(
   filledButtonTheme: FilledButtonThemeData(
     style:
         FilledButton.styleFrom(
-          backgroundColor: blue,
+          backgroundColor: accentTone,
           foregroundColor: canvas,
           minimumSize: const Size(100, 44),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(tileRadius)),
