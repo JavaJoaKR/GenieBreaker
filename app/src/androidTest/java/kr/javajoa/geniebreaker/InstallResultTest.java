@@ -25,7 +25,16 @@ public class InstallResultTest {
             assertTrue(saved.contains("INSTALL_FAILED_DUPLICATE_PERMISSION"));
             assertTrue(saved.contains("vendor.original"));
             assertTrue(saved.contains("vendor.clone"));
+            assertEquals(saved, SessionInstaller.INSTANCE.resultFor(context, "vendor.clone"));
+            assertNull(SessionInstaller.INSTANCE.resultFor(context, "vendor.original"));
             assertFalse(state.contains("progress"));
+
+            Intent otherInstall = new Intent(result)
+                .putExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_SUCCESS)
+                .putExtra("expected_package", "vendor.other");
+            new InstallResultReceiver().onReceive(context, otherInstall);
+            assertTrue(state.getString("result", "").contains("대상: vendor.other"));
+            assertEquals(saved, SessionInstaller.INSTANCE.resultFor(context, "vendor.clone"));
         } finally { state.edit().clear().commit(); }
     }
 }
