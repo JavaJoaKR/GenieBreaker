@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-const tvArrowKeys = {
+const tvArrowKeys = [
   LogicalKeyboardKey.arrowUp,
   LogicalKeyboardKey.arrowDown,
   LogicalKeyboardKey.arrowLeft,
   LogicalKeyboardKey.arrowRight,
-};
+];
 
 const tvActivationShortcuts = <SingleActivator, ActivateIntent>{
   SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): ActivateIntent(),
