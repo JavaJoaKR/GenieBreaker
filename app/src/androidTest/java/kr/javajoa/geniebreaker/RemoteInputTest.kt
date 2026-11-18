@@ -3,6 +3,8 @@ package kr.javajoa.geniebreaker
 import android.content.Intent
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.KeyEvent
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
@@ -35,6 +37,17 @@ class RemoteInputTest {
         assertEquals("Direction and OK must activate exactly the requested row", expected, choice.get())
     }
 
+    private fun unmappedRemoteKey(activity: MainActivity, scanCode: Int) {
+        val downTime = SystemClock.uptimeMillis()
+        instrumentation.runOnMainSync {
+            for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+                val event = KeyEvent(downTime, SystemClock.uptimeMillis(), action, KeyEvent.KEYCODE_UNKNOWN,
+                    0, 0, -1, scanCode, 0, InputDevice.SOURCE_DPAD)
+                assertTrue("The activity must handle an unmapped remote scan code", activity.dispatchKeyEvent(event))
+            }
+        }
+    }
+
     @Test fun usbRemoteNavigatesTabsAndPopupAfterNativeWindowReturns() {
         val activity = instrumentation.startActivitySync(Intent(instrumentation.targetContext, MainActivity::class.java)
             .putExtra("ui_preview", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
@@ -49,7 +62,7 @@ class RemoteInputTest {
         }
         try {
             instrumentation.setInTouchMode(true)
-            send("""{"id":1,"command":"register","name":"Genie D-pad Regression","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,353,158]}]}""")
+            send("""{"id":1,"command":"register","name":"Genie D-pad Regression","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,314,353,158]}]}""")
             SystemClock.sleep(2500)
             assertFalse("Connecting a remote must preserve the Flutter activity", activity.isDestroyed)
             // Up clamps at the first tab. Five down presses must reach button mapping.
@@ -59,12 +72,12 @@ class RemoteInputTest {
             SystemClock.sleep(250)
             press(106)
             press(108)
-            press(353)
+            press(314) // A controller can report Android BUTTON_SELECT for OK.
             awaitMenu(activity, "리모컨 버튼 선택")
             awaitFocus(activity, "item-0")
             press(158)
             awaitMenu(activity, null)
-            press(353)
+            unmappedRemoteKey(activity, 0x160) // Linux KEY_OK without an Android layout entry.
             awaitMenu(activity, "리모컨 버튼 선택")
             awaitFocus(activity, "item-0")
             press(158)
@@ -76,7 +89,7 @@ class RemoteInputTest {
             }
             awaitMenu(activity, "리모컨 회귀 검사")
             awaitFocus(activity, "item-0")
-            press(108)
+            unmappedRemoteKey(activity, 108) // KEY_DOWN without an Android layout entry.
             awaitFocus(activity, "item-1")
             // A native settings/keyboard window temporarily owns the Android window focus.
             var dialog: android.app.AlertDialog? = null
