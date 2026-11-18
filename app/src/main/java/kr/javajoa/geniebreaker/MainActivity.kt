@@ -2,8 +2,8 @@ package kr.javajoa.geniebreaker
 
 import android.content.*
 import android.os.Bundle
-import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -24,6 +24,8 @@ class MainActivity : FlutterActivity() {
     private var preview = false
     private var uiReady = false
     private var resumed = false
+    private var editingText = false
+    private val navigationInput = TvNavigationInput { channel?.invokeMethod("remoteNavigation", it) }
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     override fun onCreate(savedInstanceState: Bundle?) {
         preview = BuildConfig.DEBUG && intent.getBooleanExtra("ui_preview", false)
@@ -71,6 +73,11 @@ class MainActivity : FlutterActivity() {
                         publishSession()
                         apps.refresh()
                     }
+                    return@setMethodCallHandler
+                }
+                if (call.method == "remoteEditing") {
+                    editingText = call.arguments == true
+                    result.success(null)
                     return@setMethodCallHandler
                 }
                 if (appLock.locked) {
@@ -141,49 +148,14 @@ class MainActivity : FlutterActivity() {
         if (!preview && hasWindowFocus() && intent.hasCategory(Intent.CATEGORY_HOME)) StartupApps.launchFromHome(this)
     }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Handle remote navigation at the window before Flutter's keyboard
-        // embedder can drop or misclassify a firmware key event.
-        val bridge = channel
-        val command = remoteNavigationCommand(event)
-        if (uiReady && bridge != null && command != null && hasWindowFocus()) {
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                if (!event.isCanceled && (command != "activate" || event.repeatCount == 0)) {
-                    bridge.invokeMethod("remoteNavigation", command)
-                }
-                return true
-            }
-            if (event.action == KeyEvent.ACTION_UP) return true
-        }
+        if (uiReady && resumed && navigationInput.key(event, editingText)) return true
         if (!appLock.locked && RemoteCapture.handle(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
-    private fun remoteNavigationCommand(event: KeyEvent): String? {
-        if (!event.hasNoModifiers()) return null
-        // Preserve editing shortcuts for an alphabetic keyboard. TV remotes
-        // with dedicated D-pad sources and controller buttons use the bridge.
-        val typingKeyboard = event.device?.keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC &&
-            !event.isFromSource(InputDevice.SOURCE_DPAD)
-        return when (event.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> if (typingKeyboard) null else "up"
-            KeyEvent.KEYCODE_DPAD_DOWN -> if (typingKeyboard) null else "down"
-            KeyEvent.KEYCODE_DPAD_LEFT -> if (typingKeyboard) null else "left"
-            KeyEvent.KEYCODE_DPAD_RIGHT -> if (typingKeyboard) null else "right"
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_SELECT -> "activate"
-            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> if (typingKeyboard) null else "activate"
-            // Linux input-event-codes.h. Only recover these when this device's
-            // key layout did not map them to an Android key code.
-            KeyEvent.KEYCODE_UNKNOWN -> when (event.scanCode) {
-                103 -> "up"
-                108 -> "down"
-                105 -> "left"
-                106 -> "right"
-                0x160, 0x161 -> "activate" // KEY_OK, KEY_SELECT
-                else -> null
-            }
-            else -> null
-        }
-    }
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
+        (uiReady && resumed && navigationInput.motion(event, editingText)) ||
+            super.dispatchGenericMotionEvent(event)
 
     private fun snapshot(): Map<String, Any> = if (appLock.locked) {
         mapOf("shell" to true, "locked" to true, "version" to BuildConfig.VERSION_NAME)
@@ -207,6 +179,7 @@ class MainActivity : FlutterActivity() {
     }
     override fun onPause() {
         resumed = false
+        navigationInput.pause()
         if (appLock.relock()) {
             menus?.clear()
             publishSession()
