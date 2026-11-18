@@ -43,7 +43,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   String? enteringTab;
   String? lastSurfaceFocus;
   String? modalOpener;
-  final pendingKeys = <KeyEvent>[];
+  final pendingKeys = <LogicalKeyboardKey>[];
   List<List<String>> rows = [];
   FocusNode node(String id) => nodes.putIfAbsent(id, () => FocusNode(debugLabel: id));
   String? get focused => FocusManager.instance.primaryFocus?.debugLabel;
@@ -157,15 +157,15 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || tab != next || enteringTab != next) return;
         enteringTab = null;
-        final queued = List<KeyEvent>.from(pendingKeys);
+        final queued = List<LogicalKeyboardKey>.from(pendingKeys);
         pendingKeys.clear();
         if (widget.obscured) return;
         enter();
         // Focus changes normally settle in a microtask. Settle them before replaying
         // keys that arrived while the new tab's first frame was being built.
         FocusManager.instance.applyFocusChangesIfNeeded();
-        for (final event in queued) {
-          key(contentScope, event);
+        for (final key in queued) {
+          navigate(key);
           FocusManager.instance.applyFocusChangesIfNeeded();
         }
       });
@@ -270,21 +270,26 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       LogicalKeyboardKey.gameButtonA,
     ].contains(event.logicalKey))
       return KeyEventResult.ignored;
-    final id = focused;
-    if (id != null && nodes[id]?.context != null && nodes[id]!.canRequestFocus)
-      return KeyEventResult.ignored;
-    // Losing Android surface focus must not consume the first directional press.
-    final saved = lastSurfaceFocus;
-    focus(saved != null && nodes[saved]?.context != null ? saved : 'nav:$tab');
+    return recoverFocus() ? navigate(event.logicalKey) : KeyEventResult.ignored;
+  }
+
+  bool recoverFocus() {
+    if (!acceptsFocus) return false;
+    final current = nodes[focused];
+    if (current?.context != null && current!.canRequestFocus) return false;
+    final saved = nodes[lastSurfaceFocus];
+    focus(saved?.context != null && saved!.canRequestFocus ? lastSurfaceFocus! : 'nav:$tab');
     FocusManager.instance.applyFocusChangesIfNeeded();
-    // Let activation continue through the focused control's own shortcuts.
-    return key(contentScope, event);
+    return true;
   }
 
   KeyEventResult key(FocusNode _, KeyEvent event) {
-    if (!acceptsFocus || (event is! KeyDownEvent && event is! KeyRepeatEvent))
-      return KeyEventResult.ignored;
-    final key = event.logicalKey;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+    return navigate(event.logicalKey);
+  }
+
+  KeyEventResult navigate(LogicalKeyboardKey key) {
+    if (!acceptsFocus) return KeyEventResult.ignored;
     final id = focused;
     if (enteringTab != null) {
       if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
@@ -299,7 +304,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         LogicalKeyboardKey.arrowLeft,
         LogicalKeyboardKey.arrowRight,
       ].contains(key)) {
-        if (pendingKeys.length < 8) pendingKeys.add(event);
+        if (pendingKeys.length < 8) pendingKeys.add(key);
         return KeyEventResult.handled;
       }
     }

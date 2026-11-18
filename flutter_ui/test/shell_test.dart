@@ -398,4 +398,41 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(choices, [2]);
   });
 
+  testWidgets('Android remote commands move and activate the foreground control', (tester) async {
+    final calls = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      calls.add(call.method);
+      return null;
+    });
+    Future<void> remote(String command) async {
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        'genie/ui',
+        const StandardMethodCodec().encodeMethodCall(MethodCall('remoteNavigation', command)),
+        (_) {},
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    expect(focus, 'nav:bluetooth');
+    await remote('down');
+    await remote('down');
+    await remote('right');
+    expect(focus, 'shortcut:apps');
+    await remote('activate');
+    expect(calls.where((call) => call == 'appSettings'), hasLength(1));
+
+    final context = tester.element(find.text('GenieBreaker'));
+    final dialog = confirmAction(context, '검사', '계속하시겠습니까?', '계속');
+    await tester.pumpAndSettle();
+    await remote('right');
+    await remote('activate');
+    expect(find.text('계속하시겠습니까?'), findsNothing);
+    expect(await dialog, true);
+    expect(focus, 'shortcut:apps');
+    expect(calls.where((call) => call == 'appSettings'), hasLength(1));
+  });
+
 }

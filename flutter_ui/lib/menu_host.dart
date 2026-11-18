@@ -64,20 +64,59 @@ class _GeniePageState extends State<GeniePage> {
     ].contains(event.logicalKey)) {
       return KeyEventResult.ignored;
     }
+    recoverPopupFocus();
+    return KeyEventResult.ignored;
+  }
+
+  void recoverPopupFocus() {
     final current = FocusManager.instance.primaryFocus;
     if (current != null &&
         current is! FocusScopeNode &&
         current.context != null &&
         current.canRequestFocus &&
         current.ancestors.contains(menuScope)) {
-      return KeyEventResult.ignored;
+      return;
     }
     final target = rememberedFocus;
-    if (target?.context != null && target!.canRequestFocus) {
+    if (target?.context != null && target!.canRequestFocus && target.ancestors.contains(menuScope)) {
       target.requestFocus();
       FocusManager.instance.applyFocusChangesIfNeeded();
     }
-    return KeyEventResult.ignored;
+  }
+
+  void handleRemoteNavigation(String command) {
+    final direction = switch (command) {
+      'up' => (LogicalKeyboardKey.arrowUp, TraversalDirection.up),
+      'down' => (LogicalKeyboardKey.arrowDown, TraversalDirection.down),
+      'left' => (LogicalKeyboardKey.arrowLeft, TraversalDirection.left),
+      'right' => (LogicalKeyboardKey.arrowRight, TraversalDirection.right),
+      _ => null,
+    };
+    if (direction == null && command != 'activate') return;
+    final focusManager = FocusManager.instance;
+    focusManager.applyFocusChangesIfNeeded();
+    final home = homeKey.currentState;
+    if (data?['shell'] == true && home != null && home.acceptsFocus) {
+      home.recoverFocus();
+      if (direction != null) {
+        home.navigate(direction.$1);
+        return;
+      }
+    } else if (menuActive) {
+      recoverPopupFocus();
+    }
+    final target = focusManager.primaryFocus;
+    final targetContext = target?.context;
+    // A page from Android may be pending its first frame. Never act on the
+    // previous screen while the new page or dialog takes focus.
+    if (targetContext == null ||
+        ModalRoute.of(targetContext)?.isCurrent != true ||
+        (menuActive && !target!.ancestors.contains(menuScope))) return;
+    if (direction != null) {
+      Actions.maybeInvoke(targetContext, DirectionalFocusIntent(direction.$2));
+    } else {
+      Actions.maybeInvoke(targetContext, const ActivateIntent());
+    }
   }
 
   final menuScope = FocusScopeNode(debugLabel: 'menu-scope');
@@ -102,6 +141,9 @@ class _GeniePageState extends State<GeniePage> {
       }
       if (call.method == 'filesChanged') homeKey.currentState?.filesChanged();
       if (call.method == 'back') back();
+      if (call.method == 'remoteNavigation' && call.arguments is String) {
+        handleRemoteNavigation(call.arguments as String);
+      }
       if (call.method == 'enter') {
         if (data?['shell'] == true) {
           homeKey.currentState?.restore();
