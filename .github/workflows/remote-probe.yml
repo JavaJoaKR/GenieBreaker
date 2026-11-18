@@ -1,0 +1,63 @@
+name: GenieBreaker remote diagnostic
+on:
+  push:
+    branches: ['codex/ma4000-remote-probe']
+    paths: ['tools/remote-probe/**', '.github/workflows/remote-probe.yml']
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Compile standalone native APK
+        run: |
+          build_tools="$ANDROID_HOME/build-tools/35.0.0"
+          android_jar="$ANDROID_HOME/platforms/android-35/android.jar"
+          work=$(mktemp -d)
+          mkdir -p "$work/classes" "$work/dex"
+          javac -source 8 -target 8 -bootclasspath "$android_jar" -d "$work/classes" tools/remote-probe/ProbeActivity.java
+          "$build_tools/d8" --min-api 26 --lib "$android_jar" --output "$work/dex" $(find "$work/classes" -name '*.class')
+          "$build_tools/aapt2" link -I "$android_jar" --manifest tools/remote-probe/AndroidManifest.xml -o "$work/unsigned.apk"
+          zip -j "$work/unsigned.apk" "$work/dex/classes.dex"
+          "$build_tools/zipalign" -f 4 "$work/unsigned.apk" "$work/aligned.apk"
+          base64 --decode development-keystore.base64 > "$work/probe.jks"
+          "$build_tools/apksigner" sign --ks "$work/probe.jks" --ks-key-alias geniebreaker --ks-pass pass:android --key-pass pass:android --out GenieBreaker-Remote-Diagnostic.apk "$work/aligned.apk"
+          "$build_tools/apksigner" verify GenieBreaker-Remote-Diagnostic.apk
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Check Android focus and input readout
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb shell wm size 1920x1080
+            adb shell wm density 320
+            adb install GenieBreaker-Remote-Diagnostic.apk
+            adb shell am start -W -n kr.javajoa.geniebreaker.remoteprobe/.ProbeActivity
+            adb shell input keyevent 20 22 23
+            adb shell uiautomator dump /sdcard/probe.xml
+            adb shell cat /sdcard/probe.xml | grep -q '포커스 4   ·   확인 4'
+            adb shell cat /sdcard/probe.xml | grep -q 'KEYCODE_DPAD_CENTER'
+      - name: Publish separate diagnostic APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "remote-diagnostic-${GITHUB_RUN_NUMBER}" GenieBreaker-Remote-Diagnostic.apk \
+            --target "$GITHUB_SHA" --title "GenieBreaker 리모컨 진단" --prerelease --latest=false \
+            --notes "별도 네이티브 진단 앱입니다. TV 홈에서 열고 아래, 오른쪽, 위, 왼쪽, 확인을 한 번씩 누르세요. 입력은 화면에만 표시하며 일반 앱 업데이트에는 포함되지 않습니다."
