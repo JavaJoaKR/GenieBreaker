@@ -81,7 +81,7 @@ jobs:
             cat app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt 2>/dev/null || true
             exit 1
           }
-          gradle --build-cache :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+          gradle --build-cache :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest -PciTvDebug=true
       - name: Package and check APKs
         id: package
         run: bash .github/scripts/package-ci-apks.sh
