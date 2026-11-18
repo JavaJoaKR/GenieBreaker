@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:genie_ui/main.dart';
+import 'package:genie_ui/tv_dialogs.dart';
 
 Map<String, dynamic> shell({List<Map>? devices, List<Map>? apps}) => {
   'shell': true, 'version': 'test', 'permission': true, 'enabled': true,
@@ -325,6 +326,76 @@ void main() {
     FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     expect(focus, 'nav:apps'); expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Window focus return never moves selection out of the open dialog', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    final context = tester.element(find.text('GenieBreaker'));
+    final dialog = promptName(context, '폴더 이름', '새 폴더');
+    await tester.pumpAndSettle();
+    final inputFocus = FocusManager.instance.primaryFocus;
+    expect(inputFocus?.context?.widget, isNotNull);
+    expect(MediaQuery.of(tester.element(find.byType(TextFormField))).navigationMode, NavigationMode.directional);
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui',
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('enter')), (_) {});
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(inputFocus));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(inputFocus));
+    Navigator.of(tester.element(find.byType(TextFormField))).pop();
+    await tester.pumpAndSettle(); await dialog;
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, 'nav:apps');
+  });
+
+  testWidgets('Idle Android focus return schedules a frame and preserves newer remote selection', (tester) async {
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
+    expect(tester.binding.hasScheduledFrame, false);
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui',
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('enter')), (_) {});
+    expect(tester.binding.hasScheduledFrame, true);
+    await tester.pumpAndSettle(); expect(focus, 'nav:apps');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'nav:shortcuts');
+  });
+
+  testWidgets('Confirm after focus loss restores its saved control and activates once', (tester) async {
+    var opened = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'appSettings') opened++;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(focus, 'shortcut:apps'); expect(opened, 1);
+  });
+
+  testWidgets('Popup remembers the selected row across window focus loss and first arrow recovery', (tester) async {
+    final choices = <int>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'choose') choices.add(call.arguments as int);
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(
+      const MethodCall('page', {'title': '동작 선택', 'pageId': 'remote-menu', 'items': ['첫 번째', '두 번째', '세 번째']})), (_) {});
+    await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'remote-menu:item-1');
+    FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui',
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('enter')), (_) {});
+    await tester.pumpAndSettle(); expect(focus, 'remote-menu:item-1');
+    FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'remote-menu:item-2');
+    await arrow(tester, LogicalKeyboardKey.select); expect(choices, [2]);
   });
 
 }
