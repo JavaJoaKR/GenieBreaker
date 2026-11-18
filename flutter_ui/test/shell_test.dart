@@ -460,11 +460,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('GenieBreaker 잠금'), findsOneWidget);
     expect(find.text('블루투스'), findsNothing);
-    for (final digit in ['0', '1', '1', '1', '1']) {
-      await tester.tap(find.widgetWithText(OutlinedButton, digit));
-      await tester.pump();
-    }
-    await tester.tap(find.widgetWithText(FilledButton, '확인'));
+    await tester.enterText(find.byType(TextField), '0a1111');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(submitted, '01111');
   });

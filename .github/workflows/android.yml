@@ -69,4 +69,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
-          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "GenieBreaker build ${GITHUB_RUN_NUMBER}" --prerelease --notes "자동 개발 빌드. 검색·페어링 지원. 공개 개발용 키로 서명되며 MA4000 실기기 검증 전입니다. [channel:${GITHUB_REF_NAME}]"
+          cp "dist/GenieBreaker-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk" dist/GenieBreaker.apk
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "GenieBreaker build ${GITHUB_RUN_NUMBER}" --latest --notes "자동 개발 빌드. 공개 개발용 키로 서명되며 MA4000 실기기 검증 전입니다. [channel:${GITHUB_REF_NAME}]"

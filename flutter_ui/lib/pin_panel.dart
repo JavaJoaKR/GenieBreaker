@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'tv_focus.dart';
 import 'tv_theme.dart';
 
-/// On-screen PIN entry for remotes with only a D-pad and an OK button.
+/// Numeric PIN entry via the TV keyboard, including physical remote digits.
 class PinPanel extends StatefulWidget {
   const PinPanel({
     super.key,
@@ -25,23 +26,18 @@ class PinPanel extends StatefulWidget {
 }
 
 class _PinPanelState extends State<PinPanel> {
-  String pin = '';
+  final input = TextEditingController();
   bool busy = false;
   String? error;
 
-  void edit(String digit) {
-    if (busy) return;
-    setState(() {
-      error = null;
-      if (digit.isEmpty) {
-        if (pin.isNotEmpty) pin = pin.substring(0, pin.length - 1);
-      } else if (pin.length < widget.maximum) {
-        pin += digit;
-      }
-    });
+  @override
+  void dispose() {
+    input.dispose();
+    super.dispose();
   }
 
   Future<void> submit() async {
+    final pin = input.text;
     if (busy || pin.length < widget.minimum) return;
     setState(() => busy = true);
     var accepted = false;
@@ -54,17 +50,11 @@ class _PinPanelState extends State<PinPanel> {
     setState(() {
       busy = false;
       if (!accepted) {
-        pin = '';
+        input.clear();
         error ??= 'PIN이 일치하지 않습니다.';
       }
     });
   }
-
-  Widget digit(String value) => OutlinedButton(
-    autofocus: value == '1',
-    onPressed: () => edit(value),
-    child: Text(value),
-  );
 
   @override
   Widget build(BuildContext context) => Center(
@@ -82,35 +72,42 @@ class _PinPanelState extends State<PinPanel> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(widget.title, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    error ?? (pin.isEmpty ? 'PIN 입력' : '●' * pin.length),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: error == null ? ink : Theme.of(context).colorScheme.error),
+                const SizedBox(height: 12),
+                Actions(
+                  actions: {
+                    ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+                      submit();
+                      return null;
+                    }),
+                  },
+                  child: TextField(
+                    controller: input,
+                    autofocus: true,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(widget.maximum),
+                    ],
+                    decoration: InputDecoration(labelText: 'PIN', errorText: error),
+                    onChanged: (_) {
+                      if (error != null) setState(() => error = null);
+                    },
+                    onSubmitted: (_) => submit(),
                   ),
                 ),
-                for (final row in ['123', '456', '789'])
-                  Row(
-                    children: [
-                      for (final value in row.split(''))
-                        Expanded(child: Padding(padding: const EdgeInsets.all(2), child: digit(value))),
-                    ],
-                  ),
+                const SizedBox(height: 12),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => edit(''),
-                        child: const Icon(Icons.backspace_outlined, semanticLabel: '한 자리 지우기'),
-                      ),
-                    ),
-                    Expanded(child: digit('0')),
-                    Expanded(child: FilledButton(onPressed: submit, child: const Text('확인'))),
+                    if (widget.onCancel != null)
+                      TextButton(onPressed: widget.onCancel, child: const Text('취소')),
+                    FilledButton(onPressed: submit, child: const Text('확인')),
                   ],
                 ),
-                if (widget.onCancel != null)
-                  TextButton(onPressed: widget.onCancel, child: const Text('취소')),
               ],
             ),
           ),
