@@ -52,7 +52,7 @@ class _GeniePageState extends State<GeniePage> {
     if (!menuActive || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
       return KeyEventResult.ignored;
     }
-    if (!const {
+    if (!const [
       LogicalKeyboardKey.arrowUp,
       LogicalKeyboardKey.arrowDown,
       LogicalKeyboardKey.arrowLeft,
@@ -61,7 +61,7 @@ class _GeniePageState extends State<GeniePage> {
       LogicalKeyboardKey.enter,
       LogicalKeyboardKey.numpadEnter,
       LogicalKeyboardKey.gameButtonA,
-    }.contains(event.logicalKey)) {
+    ].contains(event.logicalKey)) {
       return KeyEventResult.ignored;
     }
     final current = FocusManager.instance.primaryFocus;
