@@ -13,26 +13,34 @@ if [[ "$ANDROID10_COMPAT" == true ]]; then
 fi
 
 python3 - "$standard" "$ANDROID10_COMPAT" <<'PY'
+from pathlib import Path
 from sys import argv
 from zipfile import ZipFile
 
 apks = [
-    (argv[1], {"armeabi-v7a"}),
-    ("tv-apks/release.apk", {"x86_64"}),
+    (argv[1], {"armeabi-v7a"}, ("libapp.so", "libflutter.so")),
+    ("tv-apks/release.apk", {"x86_64"}, ("libapp.so", "libflutter.so")),
+    ("tv-apks/debug.apk", {"x86_64"}, ("libflutter.so",)),
 ]
 if argv[2] == "true":
-    apks.append(("dist/GenieBreaker-Android10.apk", {"armeabi-v7a", "arm64-v8a", "x86_64"}))
+    apks.append(("dist/GenieBreaker-Android10.apk", {"armeabi-v7a", "arm64-v8a", "x86_64"}, ("libapp.so", "libflutter.so")))
 
-for apk, expected in apks:
+for apk, expected, required in apks:
     with ZipFile(apk) as archive:
         libraries = set(archive.namelist())
     actual = {name.split("/")[1] for name in libraries if name.startswith("lib/") and name.endswith(".so")}
     if actual != expected:
         raise SystemExit(f"{apk}: expected {sorted(expected)}, found {sorted(actual)}")
     for abi in expected:
-        for library in ("libapp.so", "libflutter.so"):
+        for library in required:
             if f"lib/{abi}/{library}" not in libraries:
                 raise SystemExit(f"{apk}: missing {abi}/{library}")
+
+# The clone and APK editor instrumented tests use this APK as their input.
+debug_size = Path("tv-apks/debug.apk").stat().st_size
+if debug_size > 200 * 1024 * 1024:
+    raise SystemExit(f"tv-apks/debug.apk exceeds the APK workshop size limit: {debug_size} bytes")
+print(f"x64 debug test APK: {debug_size} bytes")
 PY
 
 tools="$ANDROID_HOME/build-tools/35.0.0"

@@ -2,6 +2,7 @@ plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
 def tvReleaseSmoke = providers.gradleProperty('tvReleaseSmoke').map { it == 'true' }.getOrElse(false)
 def android10Compat = providers.gradleProperty('android10Compat').map { it == 'true' }.getOrElse(false)
 def ciAbiSplits = providers.gradleProperty('ciAbiSplits').map { it == 'true' }.getOrElse(false)
+def ciTvDebug = providers.gradleProperty('ciTvDebug').map { it == 'true' }.getOrElse(false)
 android {
     namespace 'kr.javajoa.geniebreaker'
     compileSdk 35
@@ -12,7 +13,8 @@ android {
         minSdk 26
         if (!ciAbiSplits) {
             ndk {
-                abiFilters 'armeabi-v7a', 'x86_64'
+                abiFilters 'x86_64'
+                if (!ciTvDebug) abiFilters 'armeabi-v7a'
                 if (android10Compat) abiFilters 'arm64-v8a'
             }
         }
@@ -72,6 +74,12 @@ dependencies {
 }
 
 androidComponents {
+    onVariants(selector().withBuildType('debug')) { variant ->
+        if (ciTvDebug) {
+            // Keep the APK workshop fixture below its source-size limit.
+            variant.packaging.jniLibs.excludes.addAll(['**/armeabi-v7a/**', '**/arm64-v8a/**'])
+        }
+    }
     onVariants(selector().withBuildType('release')) { variant ->
         // Keep the normal release ARM32 even when the AAR also contains compatibility targets.
         if (!ciAbiSplits && !android10Compat) variant.packaging.jniLibs.excludes.add('**/arm64-v8a/**')
