@@ -112,6 +112,8 @@ class MainActivity : FlutterActivity() {
             "update" -> updater.click()
             "diagnostics" -> showDiagnostics()
             "appSettings" -> openAppSettings()
+            "accountSettings" -> showAccountSettings()
+            "addAccount" -> showAddAccount()
             "homeSettings" -> {
                 if (!openHomeSettings(this)) TvMenus.notice(this, "TV 설정에서 기본 홈 앱을 선택하세요.")
             }
@@ -224,6 +226,18 @@ class MainActivity : FlutterActivity() {
     }
     private fun openAppSettings() {
         if (!openAppsScreen(this)) TvMenus.notice(this, "이 TV에서는 앱 목록을 직접 열 수 없습니다. TV 설정에서 앱을 여세요.")
+    }
+    private fun showAccountSettings() {
+        if (!openAccountSettings(this)) {
+            TvMenus.notice(this, "계정 목록을 바로 열 수 없습니다. TV 설정에서 ‘계정’을 여세요.")
+        }
+    }
+    private fun showAddAccount() {
+        if (openAddAccount(this)) return
+        TvMenus.show(
+            this, "계정 추가", listOf("취소", "계정 목록 열기"),
+            "이 TV에서는 계정 목록에서 ‘계정 추가’를 선택하세요."
+        ) { index -> if (index == 1) showAccountSettings() }
     }
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)

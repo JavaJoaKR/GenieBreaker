@@ -59,6 +59,10 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accessibility');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:home');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'homeSettings');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:accounts');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accountSettings');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:add-account');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'addAccount');
     expect(find.text('넷플릭스 열기'), findsNothing);
     expect(find.text('리모컨 접근성 서비스'), findsNothing);
     await arrow(tester, LogicalKeyboardKey.arrowLeft);

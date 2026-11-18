@@ -34,6 +34,13 @@ internal fun openAppsScreen(context: Context): Boolean =
 internal fun openAccessibilityScreen(context: Context): Boolean =
     openScreen(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
+internal fun openAccountSettings(context: Context): Boolean =
+    openScreen(context, Intent(Settings.ACTION_SYNC_SETTINGS)) ||
+        openScreen(context, Intent("android.settings.ACCOUNT_SYNC_SETTINGS"))
+
+internal fun openAddAccount(context: Context): Boolean =
+    openScreen(context, Intent(Settings.ACTION_ADD_ACCOUNT))
+
 internal fun openAppDetails(context: Context, pkg: String): Boolean =
     openScreen(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", pkg, null)))
 
