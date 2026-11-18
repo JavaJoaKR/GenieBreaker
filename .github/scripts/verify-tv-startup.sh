@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'echo "Startup verification failed at line $LINENO" >&2' ERR
 pkg=kr.javajoa.geniebreaker
 target=com.android.settings
 home_component() {
@@ -37,14 +38,29 @@ adb shell cmd appops write-settings
 # A normal power-menu reboot lets PackageManager persist the newly installed app's
 # first-launch state before BOOT_COMPLETED is dispatched on the next boot.
 sleep 12
-adb shell sync
-adb shell svc power reboot || true
-adb wait-for-disconnect
-adb wait-for-device
-for attempt in {1..60}; do
-  [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]] && break
+timeout 15s adb shell sync
+previous_boot=$(timeout 10s adb shell settings get global boot_count | tr -d '\r')
+[[ "$previous_boot" =~ ^[0-9]+$ ]]
+echo "Requesting emulator reboot from boot $previous_boot"
+timeout 15s adb shell svc power reboot || true
+# ADB may reconnect before wait-for-disconnect starts. Observe a new boot
+# instead of waiting forever for a disconnect edge that has already passed.
+reboot_deadline=$((SECONDS + 180))
+reboot_ready=false
+while (( SECONDS < reboot_deadline )); do
+  current_boot=$(timeout 5s adb shell settings get global boot_count 2>/dev/null | tr -d '\r' || true)
+  completed=$(timeout 5s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+  if [[ "$current_boot" =~ ^[0-9]+$ && "$current_boot" -gt "$previous_boot" && "$completed" == 1 ]]; then
+    reboot_ready=true
+    break
+  fi
   sleep 2
 done
+if [[ "$reboot_ready" != true ]]; then
+  echo 'Emulator did not complete a new boot within 180 seconds' >&2
+  exit 1
+fi
+echo "Emulator completed boot $current_boot"
 adb shell wm dismiss-keyguard
 wait_for_settings reboot
 [[ "$(home_component)" == "$original_home" ]]

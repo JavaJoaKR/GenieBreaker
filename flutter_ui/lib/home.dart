@@ -48,6 +48,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   FocusNode node(String id) => nodes.putIfAbsent(id, () => FocusNode(debugLabel: id));
   String? get focused => FocusManager.instance.primaryFocus?.debugLabel;
   bool get onSidebar => focused?.startsWith('nav:') == true;
+  bool get acceptsFocus => mounted && !widget.obscured && ModalRoute.of(context)?.isCurrent == true;
   @override
   void initState() {
     super.initState();
@@ -64,7 +65,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     if (oldWidget.obscured && !widget.obscured) return;
     if (!widget.obscured)
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || widget.obscured) return;
+        if (!acceptsFocus) return;
         final current = FocusManager.instance.primaryFocus;
         if (current == null ||
             current == contentScope ||
@@ -76,7 +77,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && !widget.obscured) {
+    if (state == AppLifecycleState.resumed && acceptsFocus) {
       restore();
       call('refreshShell');
       if (tab == 'files') refreshFiles();
@@ -105,9 +106,11 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
 
   void restore({String? target}) {
-    final wanted = target ?? lastSurfaceFocus ?? remembered[tab];
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.obscured) return;
+      if (!acceptsFocus) return;
+      // Read the latest selection after rendering, including arrows received
+      // between the Android focus callback and this frame.
+      final wanted = target ?? lastSurfaceFocus ?? remembered[tab];
       if (wanted != null && nodes[wanted]?.context != null) {
         focus(wanted);
       } else {
@@ -115,6 +118,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       }
       FocusManager.instance.applyFocusChangesIfNeeded();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void enter() {
@@ -252,9 +256,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
 
   KeyEventResult rescueFocus(KeyEvent event) {
-    if (!mounted ||
-        widget.obscured ||
-        ModalRoute.of(context)?.isCurrent != true ||
+    if (!acceptsFocus ||
         (event is! KeyDownEvent && event is! KeyRepeatEvent))
       return KeyEventResult.ignored;
     if (![
@@ -262,19 +264,25 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       LogicalKeyboardKey.arrowDown,
       LogicalKeyboardKey.arrowLeft,
       LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.select,
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.numpadEnter,
+      LogicalKeyboardKey.gameButtonA,
     ].contains(event.logicalKey))
       return KeyEventResult.ignored;
     final id = focused;
     if (id != null && nodes[id]?.context != null && nodes[id]!.canRequestFocus)
       return KeyEventResult.ignored;
     // Losing Android surface focus must not consume the first directional press.
-    focus('nav:$tab');
+    final saved = lastSurfaceFocus;
+    focus(saved != null && nodes[saved]?.context != null ? saved : 'nav:$tab');
     FocusManager.instance.applyFocusChangesIfNeeded();
+    // Let activation continue through the focused control's own shortcuts.
     return key(contentScope, event);
   }
 
   KeyEventResult key(FocusNode _, KeyEvent event) {
-    if (widget.obscured || (event is! KeyDownEvent && event is! KeyRepeatEvent))
+    if (!acceptsFocus || (event is! KeyDownEvent && event is! KeyRepeatEvent))
       return KeyEventResult.ignored;
     final key = event.logicalKey;
     final id = focused;
