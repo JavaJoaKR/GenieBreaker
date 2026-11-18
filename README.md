@@ -15,7 +15,9 @@ KT GenieTV MA4000 / MARUSYS, Android 14용 블루투스·듀얼앱 관리 도구
 - **설정 → 앱 잠금**에서 4~8자리 PIN을 설정하면 다른 앱으로 전환할 때 즉시 잠깁니다. 리모컨 숫자 버튼이나 TV의 기본 키보드로 입력합니다. 복구용 마스터 PIN은 현재 앱 버전의 점을 뺀 숫자입니다. 예를 들어 `0.1.111`은 `01111`입니다. 현재 버전을 아는 사람도 잠금을 풀 수 있습니다.
 - **설정**: 업데이트 확인과 문제 기록을 제공합니다.
 
-[최신 APK 다운로드](https://github.com/JavaJoaKR/GenieBreaker/releases/latest/download/GenieBreaker.apk) 또는 앱 설정의 업데이트를 사용하세요. [이전 버전](https://github.com/JavaJoaKR/GenieBreaker/releases)
+[최신 APK 다운로드](https://github.com/JavaJoaKR/GenieBreaker/releases/latest/download/GenieBreaker.apk) · [이전 버전](https://github.com/JavaJoaKR/GenieBreaker/releases)
+
+Android TV의 Downloader 앱에서는 코드 **`1047463`**을 입력하세요. 설치한 뒤에는 GenieBreaker의 **설정 → 업데이트 확인**에서도 업데이트할 수 있습니다.
 
 ## 듀얼앱 처리
 
