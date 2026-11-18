@@ -8,8 +8,8 @@ GenieBreaker는 AI가 그어 놓은 선을 하나씩 지우고, 작업대에 새
 
 ## 설치
 
-실제 배포판은 Android TV용 유틸리티입니다. 설치와 기능 설명은 사용 가이드에서 확인할 수 있습니다.
+실제 배포판은 Android TV용 유틸리티입니다.
 
 - [항상 최신 APK 다운로드](https://github.com/JavaJoaKR/GenieBreaker/releases/latest/download/GenieBreaker.apk)
 - Android TV Downloader 코드 **`1047463`**
-- [TV 사용 가이드](docs/tv-guide.md) · [이전 버전](https://github.com/JavaJoaKR/GenieBreaker/releases)
+- [이전 버전](https://github.com/JavaJoaKR/GenieBreaker/releases)

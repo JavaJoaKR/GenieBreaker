@@ -11,6 +11,22 @@ import java.util.concurrent.Executors
 internal object SessionInstaller {
     const val RESULT_ACTION = "kr.javajoa.geniebreaker.INSTALL_RESULT"
     fun state(context: Context) = context.getSharedPreferences("install_results", Context.MODE_PRIVATE)
+
+    fun resultFor(context: Context, packageName: String): String? {
+        val results = state(context)
+        return results.getString("result:$packageName", null)
+            ?: results.getString("result", null)?.takeIf {
+                it.lineSequence().drop(1).firstOrNull() == "대상: $packageName"
+            }
+    }
+
+    fun recordResult(context: Context, packageName: String, message: String) {
+        state(context).edit().remove("progress")
+            .putString("result", message)
+            .putString("result:$packageName", message)
+            .apply()
+    }
+
     fun submit(context: Context, apk: File, expectedPackage: String) {
         val app = context.applicationContext
         state(app).edit().putString("progress", "설치 파일을 준비하고 있습니다").remove("result").apply()
@@ -44,7 +60,7 @@ internal object SessionInstaller {
                 }
             } catch (error: Exception) {
                 val code = Diagnostics.record(app, "Install", error)
-                state(app).edit().remove("progress").putString("result", "설치 요청 실패 [$code]\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}").apply()
+                recordResult(app, expectedPackage, "설치 요청 실패 [$code]\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}")
             } finally {
                 if (id >= 0 && !committed) try { app.packageManager.packageInstaller.abandonSession(id) } catch (_: Exception) { }
                 FileWork.pending.decrementAndGet()
@@ -68,7 +84,7 @@ class InstallResultReceiver : BroadcastReceiver() {
                 context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (error: Exception) {
                 val code = Diagnostics.record(context, "Installer confirmation", error)
-                SessionInstaller.state(context).edit().remove("progress").putString("result", "설치 확인 화면을 열지 못했습니다 [$code]\n${error.message}").apply()
+                SessionInstaller.recordResult(context, expected, "설치 확인 화면을 열지 못했습니다 [$code]\n대상: $expected\n${error.message}")
             }
             return
         }
@@ -86,6 +102,6 @@ class InstallResultReceiver : BroadcastReceiver() {
         }
         val result = "$explanation\n대상: $expected\n상태: $status / $legacy\n${if (other != null) "충돌 앱: $other\n" else ""}$message"
         val code = Diagnostics.record(context, "Install", if (status == PackageInstaller.STATUS_SUCCESS) null else IllegalStateException())
-        SessionInstaller.state(context).edit().remove("progress").putString("result", if (status == PackageInstaller.STATUS_SUCCESS) result else "$result\n[$code]").apply()
+        SessionInstaller.recordResult(context, expected, if (status == PackageInstaller.STATUS_SUCCESS) result else "$result\n[$code]")
     }
 }

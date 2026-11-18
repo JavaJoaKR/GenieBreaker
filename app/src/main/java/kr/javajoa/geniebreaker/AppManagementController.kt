@@ -62,8 +62,10 @@ internal class AppManagementController(
     private fun choose(pkg: PackageInfo) {
         if (busy) return
         val record = duals.record(pkg.packageName) ?: duals.all().firstOrNull { it.target == pkg.packageName }
+        val isNetflix = (record?.source ?: pkg.packageName) == NetflixCompatibility.PACKAGE
         val actions = mutableListOf<Pair<String, () -> Unit>>()
         val label = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: pkg.packageName
+        if (isNetflix) actions += "넷플릭스 듀얼앱 상태" to { showNetflixStatus(record) }
         if (record != null && duals.isInstalled(record.target)) {
             actions += "듀얼앱 실행" to { launch(record.target) }
             if (record != null && duals.isInstalled(record.source)) actions += "듀얼앱 다시 만들기" to { create(pm.getPackageInfo(record.source, 0)) }
@@ -79,9 +81,56 @@ internal class AppManagementController(
         if (record != null && duals.file(record).exists()) actions += "듀얼앱 APK 저장" to { export(record.id) }
         if (pkg.applicationInfo?.flags?.and(ApplicationInfo.FLAG_SYSTEM) == 0) actions += "원본 앱 제거" to { uninstall(record?.source ?: pkg.packageName) }
         actions += "앱 정보" to { notice("${pkg.packageName}\n버전 ${pkg.versionName}") }
-        if (installState.contains("result")) actions += "설치 결과" to { notice(installState.getString("result", "") ?: "") }
+        if (!isNetflix && installState.contains("result")) actions += "설치 결과" to { notice(installState.getString("result", "") ?: "") }
         TvMenus.show(activity, label, actions.map { it.first }) { index -> actions.getOrNull(index)?.second?.invoke() }
     }
+
+    private fun installedPackage(packageName: String): PackageInfo? = try {
+        pm.getPackageInfo(packageName, 0)
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
+    }
+
+    private fun appStatus(pkg: PackageInfo?): String {
+        if (pkg == null) return "미설치"
+        val application = pkg.applicationInfo
+        val launchState = when {
+            application == null -> "상태 확인 불가"
+            !application.enabled -> "사용 중지됨"
+            application.flags and ApplicationInfo.FLAG_SUSPENDED != 0 -> "시스템에서 일시중지됨"
+            launchIntent(activity, pkg.packageName) == null -> "실행 항목 없음"
+            else -> "실행 항목 있음"
+        }
+        val version = pkg.versionName?.let { " · 버전 $it" }.orEmpty()
+        return "설치됨 · $launchState$version"
+    }
+
+    private fun showNetflixStatus(record: DualApp?) {
+        val originalPackage = NetflixCompatibility.PACKAGE
+        val original = installedPackage(originalPackage)
+        val clone = record?.let { installedPackage(it.target) }
+        val apkReady = record != null && duals.file(record).isFile
+        val result = record?.let { SessionInstaller.resultFor(activity, it.target) }
+        val message = listOf(
+            "원본 앱 · ${appStatus(original)}",
+            "듀얼앱 · ${appStatus(clone)}",
+            "듀얼앱 APK · ${if (apkReady) "준비됨" else "없음"}",
+            "최근 설치 결과 · ${result?.lineSequence()?.firstOrNull() ?: "기록 없음"}",
+            "‘실행 항목 있음’은 Android가 앱의 실행 화면을 찾았다는 뜻입니다."
+        ).joinToString("\n")
+        val actions = mutableListOf<Pair<String, () -> Unit>>("닫기" to {})
+        if (original != null) {
+            actions += "원본 앱 시스템 설정" to {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", originalPackage, null))
+                if (!openScreen(activity, intent)) notice("원본 앱 설정 화면을 열 수 없습니다.")
+            }
+        }
+        if (result != null) actions += "설치 결과 자세히" to { notice(result) }
+        TvMenus.show(activity, "넷플릭스 듀얼앱 상태", actions.map { it.first }, message) { index ->
+            actions[index].second()
+        }
+    }
+
     private fun create(pkg: PackageInfo) {
         if (busy) return
         val netflix = pkg.packageName == NetflixCompatibility.PACKAGE
