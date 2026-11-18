@@ -38,8 +38,9 @@ class TvControlsTest {
 
     private val key = KeyEvent.KEYCODE_PROG_RED
     private fun event(action: Int, key: Int, repeat: Int = 0, flags: Int = 0,
-                      down: Long = 0, device: Int = 1, scan: Int = 0, modifiers: Int = 0) =
-        KeyEvent(down, down + 10, action, key, repeat, modifiers, device, scan, flags, InputDevice.SOURCE_DPAD)
+                      down: Long = 0, device: Int = 1, scan: Int = 0, modifiers: Int = 0,
+                      source: Int = InputDevice.SOURCE_DPAD) =
+        KeyEvent(down, down + 10, action, key, repeat, modifiers, device, scan, flags, source)
 
     @Test fun configureEmulatorBoot() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -87,19 +88,40 @@ class TvControlsTest {
     }
     @Test fun foregroundCaptureHandlesVendorKeyAndReleasesOwnership() {
         val custom = 779
+        val appShortcut = KeyEvent.KEYCODE_FEATURED_APP_1
         val captured = mutableListOf<Int>()
         RemoteCapture.choose = { code -> captured.add(code); true }
         try {
             assertFalse(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = 398)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, appShortcut)))
             RemoteCapture.choose = null
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom, repeat = 1)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, custom)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_UNKNOWN, scan = 398)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, appShortcut)))
             assertFalse(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom)))
-            assertEquals(listOf(custom, key), captured)
+            assertEquals(listOf(custom, key, appShortcut), captured)
         } finally { RemoteCapture.choose = null }
+    }
+    @Test fun remoteScanBindingRunsOnReleaseAndPreservesSystemAndKeyboardInput() {
+        val presses = ButtonPresses<Int>()
+        val actions = mutableListOf<Int>()
+        val scan = 0x273
+        val binding = 0x10000 + scan
+        fun press(event: KeyEvent) = presses.handle(event, { it }, { actions.add(it) })
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = scan,
+            device = -1, source = InputDevice.SOURCE_KEYBOARD)))
+        for (reserved in listOf(103, 114, 116, 0x160, 0x161, 0x164, 0x220, 0x274)) {
+            assertFalse("Reserved scan code $reserved",
+                press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = reserved)))
+        }
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN, scan = scan)))
+        assertTrue(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = scan)))
+        assertTrue(actions.isEmpty())
+        assertTrue(press(event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_UNKNOWN, scan = scan)))
+        assertEquals(listOf(binding), actions)
     }
     @Test fun startupSelectionSkipsCurrentBootAndHandsOffOnceOnNextBoot() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

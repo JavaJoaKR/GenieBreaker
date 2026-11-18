@@ -55,6 +55,8 @@ class RemoteInputTest {
         val input = ParcelFileDescriptor.AutoCloseOutputStream(pipes[1])
         val prefs = tvPreferences(activity)
         val red = KeyEvent.KEYCODE_PROG_RED
+        val vodScan = 0x273
+        val vodBinding = 0x10000 + vodScan
         fun send(line: String) { input.write((line + "\n").toByteArray()); input.flush() }
         fun press(code: Int) {
             send("""{"id":1,"command":"inject","events":[1,$code,1,0,0,0]}""")
@@ -84,9 +86,24 @@ class RemoteInputTest {
                 assertTrue(activity.dispatchKeyEvent(KeyEvent(down, down, KeyEvent.ACTION_DOWN, red, 0)))
                 assertTrue(activity.dispatchKeyEvent(KeyEvent(down, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, red, 0)))
             }
-            awaitMenu(activity, null)
+            awaitMenu(activity, "빨간색")
+            awaitFocus(activity, "item-0")
             assertTrue(prefs.getBoolean("buttonRegistered.$red", false))
             assertFalse(prefs.contains("button.$red"))
+            press(158)
+            awaitMenu(activity, null)
+
+            press(314)
+            awaitMenu(activity, "버튼 추가")
+            awaitFocus(activity, "item-0")
+            unmappedRemoteKey(activity, vodScan)
+            awaitMenu(activity, "리모컨 버튼 $vodScan")
+            awaitFocus(activity, "item-0")
+            press(108)
+            awaitFocus(activity, "item-1")
+            press(314)
+            awaitMenu(activity, null)
+            assertEquals("home", prefs.getString("button.$vodBinding", null))
 
             val choice = AtomicInteger(-1)
             instrumentation.runOnMainSync {
@@ -113,7 +130,8 @@ class RemoteInputTest {
             )).use { it.readBytes() }
             throw error
         } finally {
-            prefs.edit().remove("buttonRegistered.$red").apply()
+            prefs.edit().remove("buttonRegistered.$red").remove("buttonRegistered.$vodBinding")
+                .remove("button.$vodBinding").remove("buttonLabel.$vodBinding").apply()
             input.close()
             pipes[0].close()
             instrumentation.runOnMainSync { activity.finish() }

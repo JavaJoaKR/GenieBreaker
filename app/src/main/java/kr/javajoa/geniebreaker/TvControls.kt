@@ -3,6 +3,8 @@ package kr.javajoa.geniebreaker
 import android.app.Activity
 import android.content.Intent
 import android.os.Build
+import android.view.KeyEvent
+import android.widget.Toast
 
 internal class TvControls(
     private val owner: Activity,
@@ -14,16 +16,32 @@ internal class TvControls(
     private val bindings = RemoteBindings(owner)
     private val remoteAccessibility = RemoteAccessibility(owner, ::refresh)
     private var capturePage: String? = null
+    private var captureHint: Toast? = null
     private var state = emptyMap<String, Any>()
     private val capture: (Int) -> Boolean = { key ->
-        if (capturePage != null && capturePage == pageId() && owner.hasWindowFocus()) {
+        if (isCapturing()) {
             capturePage = null
+            captureHint?.cancel()
+            captureHint = null
             bindings.register(key)
             closeMenu()
+            edit(key)
             refresh()
             true
         } else false
     }
+
+    private fun isCapturing() = capturePage != null && capturePage == pageId() && owner.hasWindowFocus()
+
+    fun showUnsupportedButton(event: KeyEvent) {
+        if (!isCapturing() || event.action != KeyEvent.ACTION_DOWN || event.repeatCount != 0 ||
+            event.isCanceled || event.keyCode == KeyEvent.KEYCODE_BACK || !isRemoteInput(event)) return
+        captureHint?.cancel()
+        val key = KeyEvent.keyCodeToString(event.keyCode).removePrefix("KEYCODE_")
+        captureHint = Toast.makeText(owner, "등록할 수 없는 버튼입니다 ($key / ${event.scanCode}).", Toast.LENGTH_SHORT)
+        captureHint?.show()
+    }
+
     fun resume() {
         RemoteCapture.choose = capture
         remoteAccessibility.start()
@@ -32,6 +50,8 @@ internal class TvControls(
     }
     fun pause() {
         remoteAccessibility.stop()
+        captureHint?.cancel()
+        captureHint = null
         if (RemoteCapture.choose === capture) RemoteCapture.choose = null
     }
     fun snapshot(): Map<String, Any> = state
@@ -77,7 +97,10 @@ internal class TvControls(
         }
     }
     fun chooseButton() {
-        TvMenus.show(owner, "버튼 추가", listOf("취소"), "추가할 리모컨 버튼을 누르세요.")
+        TvMenus.show(
+            owner, "버튼 추가", listOf("취소"),
+            "추가할 리모컨 버튼을 누르세요. 전원·볼륨 등 TV가 직접 처리하는 버튼은 입력이 전달되지 않을 수 있습니다."
+        )
         capturePage = pageId()
     }
     fun edit(key: Int) {

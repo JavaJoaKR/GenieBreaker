@@ -33,7 +33,7 @@ Android permission, pairing, picker and installer screens remain system-owned.
   package/path/device identities, official Material icons plus actual app icons,
   bounded modal surface with pinned actions and prominent local error codes.
 - No decorative media. Bundled Material icons are tree-shaken. Installed app icons
-  are read locally, resized to 64px, and displayed in grayscale.
+  are read locally, resized to 64px, and displayed in their original colors.
 
 ## Layout and interaction
 

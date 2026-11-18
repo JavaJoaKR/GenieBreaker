@@ -163,6 +163,7 @@ class MainActivity : FlutterActivity() {
         if (!preview && hasWindowFocus() && intent.hasCategory(Intent.CATEGORY_HOME)) StartupApps.launchFromHome(this)
     }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (!appLock.locked && RemoteCapture.handle(event)) return true
         // Handle remote navigation at the window before Flutter's keyboard
         // embedder can drop or misclassify a firmware key event.
         val bridge = channel
@@ -176,7 +177,7 @@ class MainActivity : FlutterActivity() {
             }
             if (event.action == KeyEvent.ACTION_UP) return true
         }
-        if (!appLock.locked && RemoteCapture.handle(event)) return true
+        if (!appLock.locked) controls.showUnsupportedButton(event)
         return super.dispatchKeyEvent(event)
     }
 
