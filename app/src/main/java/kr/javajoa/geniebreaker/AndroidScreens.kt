@@ -1,8 +1,10 @@
 package kr.javajoa.geniebreaker
 
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 
@@ -40,6 +42,21 @@ internal fun openAccountSettings(context: Context): Boolean =
 
 internal fun openAddAccount(context: Context): Boolean =
     openScreen(context, Intent(Settings.ACTION_ADD_ACCOUNT))
+
+internal fun openTvUpdateSettings(context: Context): Boolean {
+    // Android TV used this action before it became a public SDK constant.
+    val update = Intent("android.settings.SYSTEM_UPDATE_SETTINGS")
+    val handlers = context.packageManager.queryIntentActivities(
+        update, PackageManager.MATCH_SYSTEM_ONLY or PackageManager.MATCH_DEFAULT_ONLY
+    )
+    return handlers.asSequence()
+        .filter { it.priority > 0 && it.activityInfo.exported }
+        .sortedByDescending { it.priority }
+        .any {
+            val activity = it.activityInfo
+            openScreen(context, Intent(update).setComponent(ComponentName(activity.packageName, activity.name)))
+        } || openScreen(context, Intent(Settings.ACTION_DEVICE_INFO_SETTINGS))
+}
 
 internal fun openAppDetails(context: Context, pkg: String): Boolean =
     openScreen(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", pkg, null)))
