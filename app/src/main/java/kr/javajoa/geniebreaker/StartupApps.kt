@@ -78,7 +78,7 @@ internal object StartupApps {
         val banner = TextView(visual).apply {
             text = app.getString(R.string.startup_opening, prefs.getString("startupLabel", ""))
             setTextColor(android.graphics.Color.WHITE)
-            setBackgroundColor(android.graphics.Color.rgb(26, 44, 65))
+            setBackgroundColor(android.graphics.Color.rgb(34, 34, 34))
             val gap = (12 * resources.displayMetrics.density).toInt()
             setPadding(gap, gap, gap, gap)
         }

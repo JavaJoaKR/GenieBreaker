@@ -129,7 +129,7 @@ class ShellFrame extends StatelessWidget {
                           Text(
                             contextLabel!,
                             style: const TextStyle(
-                              color: blue,
+                              color: accentTone,
                               fontWeight: FontWeight.w600,
                               fontSize: 15,
                             ),
@@ -146,7 +146,7 @@ class ShellFrame extends StatelessWidget {
                           error!,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.orangeAccent),
+                          style: const TextStyle(color: ink, fontWeight: FontWeight.w600),
                         ),
                       ),
                     Expanded(child: child),

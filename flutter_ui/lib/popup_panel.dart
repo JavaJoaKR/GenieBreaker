@@ -89,14 +89,14 @@ class PopupPanel extends StatelessWidget {
                   child: Text(
                     '오류 코드  $errorCode',
                     key: const ValueKey('error-code'),
-                    style: const TextStyle(color: blue, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: const TextStyle(color: accentTone, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),
               const SizedBox(height: 8),
               Flexible(fit: FlexFit.loose, child: body),
               if (footer != null) ...[
                 const SizedBox(height: 8),
-                const Divider(height: 1, color: Color(0xff293a53)),
+                const Divider(height: 1, color: divider),
                 const SizedBox(height: 8),
                 footer!,
               ],

@@ -262,14 +262,14 @@ class _GeniePageState extends State<GeniePage> {
           if (error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
+              child: Text(error!, style: const TextStyle(color: ink, fontWeight: FontWeight.w600)),
             ),
           if (configure) ...[
             if (cloneOptions.containsKey('netflixCompatibility'))
               RemoteTile(
                 '넷플릭스 전용 패치',
                 icon: Icons.extension_outlined,
-                accent: const Color(0xffffd39a),
+                accent: accentTone,
                 key: const ValueKey('netflixCompatibility'),
                 focusNode: menuNode('netflixCompatibility'),
                 onFocus: () => remember('netflixCompatibility'),
@@ -417,7 +417,7 @@ class _GeniePageState extends State<GeniePage> {
         FilledButton(
           focusNode: menuNode('item-1'),
           onFocusChange: (value) { if (value) remember('item-1'); },
-          style: danger ? FilledButton.styleFrom(backgroundColor: const Color(0xffffb4ab)) : null,
+          style: danger ? FilledButton.styleFrom(backgroundColor: ink) : null,
           onPressed: working ? null : () => perform('choose', 1),
           child: Text(items[1]),
         ),
@@ -433,7 +433,7 @@ class _GeniePageState extends State<GeniePage> {
           child: GestureDetector(
             key: const ValueKey('popup-barrier'),
             onTap: () => perform('close'),
-            child: const ColoredBox(color: Color(0x99050b14)),
+            child: const ColoredBox(color: Color(0x99000000)),
           ),
         ),
         SafeArea(

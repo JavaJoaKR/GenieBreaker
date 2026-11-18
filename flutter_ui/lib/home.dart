@@ -790,13 +790,13 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               '${files['cut'] == true ? '이동' : '복사'}: ${files['clipboard']}',
-              style: const TextStyle(color: blue),
+              style: const TextStyle(color: accentTone),
             ),
           ),
         if (listingError != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(listingError!, style: const TextStyle(color: Colors.orangeAccent)),
+            child: Text(listingError!, style: const TextStyle(color: ink, fontWeight: FontWeight.w600)),
           ),
         if (busy) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
         if (location.isEmpty)

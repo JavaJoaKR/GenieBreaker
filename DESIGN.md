@@ -1,8 +1,7 @@
 # GenieBreaker TV design
 
-A compact Android TV utility operated by a directional remote. Maintain the
-existing navy/blue identity. This is a migration and polish of the existing
-approved product direction, not a new visual-direction selection exercise.
+A compact Android TV utility operated by a directional remote. A dark grayscale
+palette uses luminance to distinguish the active tab, focus, and content.
 Design guidance: qiaomu-design (existing-direction craft and functional UI path).
 Visual restraint 3/10, motion 1/10, density 8/10.
 
@@ -16,13 +15,13 @@ Android permission, pairing, picker and installer screens remain system-owned.
 
 ## Design system
 
-- Canvas #0D1521, navigation #121F2F, panel #192738, raised #203044 and focus fill #304C6A.
-- Primary text #F4F6FB, secondary #B2BFD2 and action accent #AACAFF.
-- The sidebar uses a whole-surface #203B58 fill for the active tab and a brighter
-  #304C6A fill for focus. Content actions keep the 2dp focus outline.
+- Canvas #121212, navigation #1B1B1B, panel #222222, and raised #2A2A2A.
+- Primary text #F5F5F5, secondary #BDBDBD, and action accent #DDDDDD.
+- The sidebar uses a whole-surface #393939 fill for the active tab and a brighter
+  #5C5C5C fill for focus. Content actions keep the 2dp focus outline.
 - Linear donor: three luminance layers, one accent, quiet 1px structural borders.
   Apple donor: 2px focus outline, 8px spacing base, 400/500/600 type roles,
-  shadows reserved for modal depth. Translate to existing navy tokens; copy no
+  shadows reserved for modal depth. Translate to the grayscale palette; copy no
   proprietary typography or brand marks.
 - Korean system fonts avoid remote font requests and additional APK font assets.
   Headings 24–27; rows 17; metadata 12. Halve prior explicit radii:
@@ -32,8 +31,8 @@ Android permission, pairing, picker and installer screens remain system-owned.
 - Five deliberate details: full focus outline, distinct selected fill, persistent
   package/path/device identities, official Material icons plus actual app icons,
   bounded modal surface with pinned actions and prominent local error codes.
-- No decorative media. Bundled Material icons are tree-shaken; installed app icons
-  are read locally and resized to 64px. No app/device information is uploaded.
+- No decorative media. Bundled Material icons are tree-shaken. Installed app icons
+  are read locally, resized to 64px, and displayed in grayscale.
 
 ## Layout and interaction
 

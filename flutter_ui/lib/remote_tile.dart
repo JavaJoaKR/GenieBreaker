@@ -79,7 +79,7 @@ class _RemoteTileState extends State<RemoteTile> {
               color: focused
                   ? focusFill
                   : widget.selected
-                  ? const Color(0xff203b58)
+                  ? selectedFill
                   : widget.navigation
                   ? Colors.transparent
                   : raised,
@@ -102,14 +102,14 @@ class _RemoteTileState extends State<RemoteTile> {
                     height: 30,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: widget.danger ? const Color(0xff40292e) : const Color(0xff1c3453),
+                      color: widget.danger ? focusFill : selectedFill,
                       borderRadius: BorderRadius.circular(4.5),
                     ),
                     child:
                         widget.leading ??
                         Icon(
                           widget.icon,
-                          color: widget.danger ? const Color(0xffffa4a4) : blue,
+                          color: widget.danger ? ink : accentTone,
                           size: 20,
                         ),
                   ),
@@ -128,7 +128,7 @@ class _RemoteTileState extends State<RemoteTile> {
                           fontSize: 17,
                           height: 1.3,
                           fontWeight: FontWeight.w500,
-                          color: widget.danger ? const Color(0xffffb6b6) : widget.accent ?? ink,
+                          color: widget.accent ?? ink,
                         ),
                       ),
                       if (widget.subtitle?.isNotEmpty == true) ...[
@@ -145,14 +145,14 @@ class _RemoteTileState extends State<RemoteTile> {
                 ),
                 if (widget.selected && !widget.navigation && widget.toggle == null) ...[
                   const SizedBox(width: 6),
-                  const Icon(Icons.check_rounded, size: 17, color: blue),
+                  const Icon(Icons.check_rounded, size: 17, color: accentTone),
                 ],
                 if (widget.toggle != null) ...[
                   const SizedBox(width: 16),
                   Icon(
                     widget.toggle! ? Icons.toggle_on_rounded : Icons.toggle_off_outlined,
                     size: 36,
-                    color: widget.toggle! ? blue : muted,
+                    color: widget.toggle! ? accentTone : muted,
                   ),
                 ],
               ],

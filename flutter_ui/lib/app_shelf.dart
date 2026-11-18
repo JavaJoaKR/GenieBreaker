@@ -4,6 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'remote_tile.dart';
 
+const _monochrome = ColorFilter.matrix([
+  0.213, 0.715, 0.072, 0, 0,
+  0.213, 0.715, 0.072, 0, 0,
+  0.213, 0.715, 0.072, 0, 0,
+  0, 0, 0, 1, 0,
+]);
+
 /// Partition the visible packages once for both layout and directional navigation.
 List<List<Map>> appRows(List apps, int columns) => [
   for (var i = 0; i < apps.length; i += columns)
@@ -52,13 +59,16 @@ class AppShelf extends StatelessWidget {
                         subtitle: app['detail'] as String?,
                         maxLabelLines: 1,
                         leading: app['icon'] is Uint8List && (app['icon'] as Uint8List).isNotEmpty
-                            ? Image.memory(
-                                app['icon'] as Uint8List,
-                                width: 28,
-                                height: 28,
-                                fit: BoxFit.contain,
-                                gaplessPlayback: true,
-                                errorBuilder: (_, _, _) => const Icon(Icons.android_rounded, size: 20),
+                            ? ColorFiltered(
+                                colorFilter: _monochrome,
+                                child: Image.memory(
+                                  app['icon'] as Uint8List,
+                                  width: 28,
+                                  height: 28,
+                                  fit: BoxFit.contain,
+                                  gaplessPlayback: true,
+                                  errorBuilder: (_, _, _) => const Icon(Icons.android_rounded, size: 20),
+                                ),
                               )
                             : null,
                         onTap: () => onOpen(app['id'] as String),
