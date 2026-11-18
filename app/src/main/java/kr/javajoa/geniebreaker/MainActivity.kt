@@ -98,6 +98,7 @@ class MainActivity : FlutterActivity() {
                     "setPin" -> { val saved = appLock.setPin(call.arguments as? String ?: ""); result.success(saved); publish() }
                     "disablePin" -> { val saved = appLock.disable(); result.success(saved); publish() }
                     "accessibility" -> { controls.accessibility(); result.success(null) }
+                    "remoteAccessibility" -> { controls.remoteAccessibility(); result.success(null) }
                     "chooseButton" -> { controls.chooseButton(); result.success(null) }
                     "editButton" -> { controls.edit((call.arguments as Number).toInt()); result.success(null) }
                     "chooseStartup" -> { controls.chooseStartup(); result.success(null) }

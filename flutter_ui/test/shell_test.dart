@@ -56,6 +56,8 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'appSettings');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:accessibility');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accessibility');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:remote-accessibility');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'remoteAccessibility');
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'homeSettings');
     await arrow(tester, LogicalKeyboardKey.arrowLeft);

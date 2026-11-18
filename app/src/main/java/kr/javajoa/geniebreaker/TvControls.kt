@@ -44,6 +44,14 @@ internal class TvControls(private val owner: Activity, private val pageId: () ->
         if (!openScreen(owner, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
             TvMenus.notice(owner, "이 TV에서는 접근성 설정을 직접 열 수 없습니다. TV 설정에서 접근성을 여세요.")
     }
+    fun remoteAccessibility() {
+        val component = ComponentName(owner, RemoteButtonService::class.java)
+        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, component.flattenToString())
+        // Some TV firmware exposes this detail screen, while AOSP may restrict
+        // it to system apps. The user can always choose the service in Settings.
+        if (!openScreen(owner, details)) accessibility()
+    }
     fun chooseButton() {
         val keys = remoteButtons.keys.toList()
         TvMenus.show(owner, "리모컨 버튼 선택", remoteButtons.values.toList(), "지정할 버튼을 직접 누르거나 목록에서 선택하세요.") { edit(keys[it]) }
