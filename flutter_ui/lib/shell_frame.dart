@@ -43,6 +43,7 @@ class ShellFrame extends StatelessWidget {
 
   static double gutter(bool compact) => compact ? 10 : 14;
   static double railWidth(bool compact) => compact ? 146 : 174;
+  static double outerHorizontal(bool compact) => compact ? 18 : 24;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +51,10 @@ class ShellFrame extends StatelessWidget {
     return ColoredBox(
       color: canvas,
       child: Padding(
-        padding: EdgeInsets.all(gap),
+        padding: EdgeInsets.symmetric(
+          horizontal: outerHorizontal(compact),
+          vertical: compact ? 14 : 18,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

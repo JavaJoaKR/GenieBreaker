@@ -34,7 +34,7 @@
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
         </receiver>
         <service android:name=".StartupWakeService" android:exported="false" android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Launch the television app selected by the user on wake while wake automation is explicitly enabled" />
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Launch the television app selected by the user on wake while wake automation is enabled" />
         </service>
         <receiver android:name=".InstallResultReceiver" android:exported="false" />
         <provider android:name=".UpdateProvider" android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true" />

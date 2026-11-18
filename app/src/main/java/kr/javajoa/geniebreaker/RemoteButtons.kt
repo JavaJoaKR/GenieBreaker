@@ -80,13 +80,26 @@ internal class ButtonPresses {
 
 class RemoteButtonService : AccessibilityService() {
     private val presses = ButtonPresses()
+    companion object {
+        internal var connected = false
+            private set
+        internal var connectionChanged: (() -> Unit)? = null
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
+        connected = true
+        connectionChanged?.invoke()
         if (BuildConfig.DEBUG) android.util.Log.i("GenieRemoteTest", "Remapping service connected")
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
     override fun onInterrupt() = presses.clear()
-    override fun onDestroy() { presses.clear(); super.onDestroy() }
+    override fun onDestroy() {
+        presses.clear()
+        connected = false
+        connectionChanged?.invoke()
+        super.onDestroy()
+    }
     override fun onKeyEvent(event: KeyEvent): Boolean {
         // A user explicitly opened the foreground button chooser. Prefer capture over its old binding.
         if (RemoteCapture.handle(event)) return true

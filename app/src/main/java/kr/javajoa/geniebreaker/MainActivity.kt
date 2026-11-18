@@ -17,7 +17,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var apps: AppManagementController
     private lateinit var files: FileController
     private lateinit var controls: TvControls
-    private val accessibilityListener = AccessibilityManager.AccessibilityStateChangeListener { controls.resume() }
+    private val accessibilityListener = AccessibilityManager.AccessibilityStateChangeListener { controls.refresh() }
     private lateinit var updater: AppUpdater
     private lateinit var appLock: AppLock
     private var updateLabel = "업데이트 확인"
@@ -34,7 +34,7 @@ class MainActivity : FlutterActivity() {
         apps = AppManagementController(this, { pkg, label -> controls.selectStartup(pkg, label) }, ::publish)
         files = FileController(this) { channel?.invokeMethod("filesChanged", null) }
         updater = AppUpdater(this) { text, _ -> updateLabel = text; publish() }
-        controls = TvControls(this, { menus?.current()?.get("pageId") as? String }, ::publish)
+        controls = TvControls(this, { menus?.current()?.get("pageId") as? String }, { menus?.back() }, ::publish)
         super.onCreate(savedInstanceState)
         window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
         fun disableNativeFocusOverlay(view: android.view.View) {
@@ -91,7 +91,6 @@ class MainActivity : FlutterActivity() {
                     "update" -> { updater.click(); result.success(null) }
                     "diagnostics" -> { showDiagnostics(); result.success(null) }
                     "appSettings" -> { openAppSettings(); result.success(null) }
-                    "openNetflix" -> { openNetflix(); result.success(null) }
                     "homeSettings" -> {
                         if (!openHomeSettings(this)) TvMenus.notice(this, "TV 설정에서 기본 홈 앱을 선택하세요.")
                         result.success(null)
@@ -99,7 +98,7 @@ class MainActivity : FlutterActivity() {
                     "setPin" -> { val saved = appLock.setPin(call.arguments as? String ?: ""); result.success(saved); publish() }
                     "disablePin" -> { val saved = appLock.disable(); result.success(saved); publish() }
                     "accessibility" -> { controls.accessibility(); result.success(null) }
-                    "remoteAccessibility" -> { controls.remoteAccessibility(); result.success(null) }
+                    "mappingSettings" -> { controls.mappingSettings(); result.success(null) }
                     "chooseButton" -> { controls.chooseButton(); result.success(null) }
                     "editButton" -> { controls.edit((call.arguments as Number).toInt()); result.success(null) }
                     "chooseStartup" -> { controls.chooseStartup(); result.success(null) }
@@ -238,15 +237,6 @@ class MainActivity : FlutterActivity() {
     }
     private fun openAppSettings() {
         if (!openAppsScreen(this)) TvMenus.notice(this, "이 TV에서는 앱 목록을 직접 열 수 없습니다. TV 설정에서 앱을 여세요.")
-    }
-    private fun openNetflix() {
-        val pkg = NetflixCompatibility.PACKAGE
-        if (launchPackage(this, pkg)) return
-        val store = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg"))
-            .setPackage("com.android.vending")
-        if (!openScreen(this, store)) {
-            TvMenus.notice(this, "TV 홈 또는 Play 스토어에서 공식 넷플릭스 앱을 확인하세요.")
-        }
     }
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)

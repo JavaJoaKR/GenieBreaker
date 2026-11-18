@@ -19,6 +19,7 @@ import android.widget.TextView
 internal object StartupApps {
     fun boot(context: Context) = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
     fun allowed(context: Context) = Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(context)
+    fun wakeEnabled(context: Context) = tvPreferences(context).getBoolean("wake", true)
     fun permissionSettings(context: Context): Boolean =
         openScreen(context, Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))) ||
             openScreen(context, Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
@@ -33,7 +34,7 @@ internal object StartupApps {
     }
     fun due(context: Context, boot: Int, waking: Boolean): Boolean {
         val prefs = tvPreferences(context)
-        return prefs.contains("startup") && if (waking) prefs.getBoolean("wake", false)
+        return prefs.contains("startup") && if (waking) wakeEnabled(context)
             else boot >= 0 && boot != prefs.getInt("lastBoot", -1)
     }
     fun launchIfDue(context: Context, boot: Int, waking: Boolean = false): Boolean {

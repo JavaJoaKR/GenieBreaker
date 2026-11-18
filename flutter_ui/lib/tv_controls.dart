@@ -8,17 +8,10 @@ class TvAction {
 }
 
 List<TvAction> mappingActions(Map state) => [
-  TvAction(
-    'mapping:service',
-    '리모컨 접근성 서비스',
-    state['mappingActive'] == true ? '사용 중 · 접근성 설정 열기' : '접근성에서 GenieBreaker 버튼 맵핑을 켜세요',
-    Icons.accessibility_new_rounded,
-    'remoteAccessibility',
-  ),
   const TvAction(
     'mapping:add',
-    '버튼 지정',
-    '리모컨 버튼으로 앱을 열거나 홈·뒤로 등의 동작을 실행합니다',
+    '버튼 추가',
+    '리모컨에서 추가할 버튼을 누르세요',
     Icons.add_rounded,
     'chooseButton',
   ),
@@ -31,6 +24,17 @@ List<TvAction> mappingActions(Map state) => [
       'editButton',
       binding['key'] as int,
     ),
+  TvAction(
+    'mapping:service',
+    '버튼 맵핑 설정',
+    switch (state['mappingStatus']) {
+      'active' => '접근성 서비스 연결됨',
+      'connecting' => '접근성에서 켜짐 · 연결 대기 중',
+      _ => '지정한 동작을 실행하려면 접근성에서 켜세요',
+    },
+    Icons.settings_outlined,
+    'mappingSettings',
+  ),
 ];
 
 List<TvAction> startupActions(Map state) {
@@ -60,7 +64,11 @@ List<TvAction> startupActions(Map state) {
       TvAction(
         'startup:wake',
         '대기 해제 시에도 실행',
-        state['wake'] == true ? '켜짐 · 대기 해제 감지 중' : '꺼짐 · TV를 재부팅할 때만 실행',
+        state['wake'] == false
+            ? '꺼짐 · TV를 재부팅할 때만 실행'
+            : needsOverlay && state['hasOverlay'] != true
+            ? '켜짐 · 다른 앱 위에 표시 권한 필요'
+            : '켜짐 · TV가 대기 상태에서 깨어날 때 실행',
         Icons.wb_sunny_outlined,
         'toggleWake',
       ),

@@ -62,7 +62,7 @@ class StartupWakeService : Service() {
 
     companion object {
         private fun configured(context: Context) = tvPreferences(context).let {
-            it.contains("startup") && it.getBoolean("wake", false) && StartupApps.allowed(context)
+            it.contains("startup") && StartupApps.wakeEnabled(context) && StartupApps.allowed(context)
         }
         fun restore(context: Context, awaitUnlock: Boolean = false): Boolean {
             if (!awaitUnlock && !configured(context)) return false

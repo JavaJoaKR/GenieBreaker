@@ -18,8 +18,8 @@ Android permission, pairing, picker and installer screens remain system-owned.
 
 - Canvas #0D1521, navigation #121F2F, panel #192738, raised #203044 and focus fill #304C6A.
 - Primary text #F4F6FB, secondary #B2BFD2 and action accent #AACAFF.
-- Selected: subdued whole-surface #203B58 and a trailing check. The tab icon keeps its identity. Focused: 2 logical
-  pixel white full outline. No decorative left bars, glow or gradients.
+- The sidebar uses a whole-surface #203B58 fill for the active tab and a brighter
+  #304C6A fill for focus. Content actions keep the 2dp focus outline.
 - Linear donor: three luminance layers, one accent, quiet 1px structural borders.
   Apple donor: 2px focus outline, 8px spacing base, 400/500/600 type roles,
   shadows reserved for modal depth. Translate to existing navy tokens; copy no
@@ -37,18 +37,19 @@ Android permission, pairing, picker and installer screens remain system-owned.
 
 ## Layout and interaction
 
-- A 146–174dp navigation rail and 10–14dp outer gutters reserve most of the
+- A 146–174dp navigation rail and 18–24dp horizontal, 14–18dp vertical outer margins reserve most of the
   viewport for content. Its footer shows the installed version. Content headers
   can show a live item count or scan state.
 - Eight tabs: Bluetooth, apps, shortcuts, files, storage, mapping, startup and
   settings. Keep navigation and controls visible while each result list scrolls.
-- Up/Down in sidebar stays there. Right opens the chosen tab and restores its last
-  attached content focus. All edges clamp; no wrapping or diagonal list jumps.
+- Up/Down in the sidebar opens the focused tab while keeping focus in the rail.
+  Right restores that tab's last attached content focus. All edges clamp.
 - Bluetooth lists maintain their own columns even when lengths differ. Pinned
   counts and compact rows give devices the remaining height. Async names update
   keyed rows without replacing the focused identity.
-- Toolbars share a row with status at TV widths. The app grid determines its
-  columns from the available content width and keeps stable package keys.
+- Toolbars share a row with status at TV widths. The app grid sizes columns from
+  the available content width, with equal cards, fixed icon slots, and one-line
+  labels and status. Package keys keep focus stable.
 - Explorer provides connected-storage roots, folder navigation, sort, refresh,
   mkdir, copy, cut/paste, rename, delete, open/install and local details. Each row
   has a separately focusable file-actions button. Down from any toolbar action

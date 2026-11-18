@@ -53,6 +53,8 @@ class RemoteInputTest {
             .putExtra("ui_preview", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         val pipes = instrumentation.uiAutomation.executeShellCommandRw("uinput -")
         val input = ParcelFileDescriptor.AutoCloseOutputStream(pipes[1])
+        val prefs = tvPreferences(activity)
+        val red = KeyEvent.KEYCODE_PROG_RED
         fun send(line: String) { input.write((line + "\n").toByteArray()); input.flush() }
         fun press(code: Int) {
             send("""{"id":1,"command":"inject","events":[1,$code,1,0,0,0]}""")
@@ -68,20 +70,22 @@ class RemoteInputTest {
             // Up clamps at the first tab. Five down presses must reach button mapping.
             press(103)
             repeat(5) { press(108) }
-            press(353) // KEY_SELECT -> Android DPAD_CENTER, distinct from keyboard Enter.
-            SystemClock.sleep(250)
             press(106)
-            press(108)
             press(314) // A controller can report Android BUTTON_SELECT for OK.
-            awaitMenu(activity, "리모컨 버튼 선택")
+            awaitMenu(activity, "버튼 추가")
             awaitFocus(activity, "item-0")
             press(158)
             awaitMenu(activity, null)
             unmappedRemoteKey(activity, 0x160) // Linux KEY_OK without an Android layout entry.
-            awaitMenu(activity, "리모컨 버튼 선택")
+            awaitMenu(activity, "버튼 추가")
             awaitFocus(activity, "item-0")
-            press(158)
+            instrumentation.runOnMainSync {
+                assertTrue(activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, red)))
+                assertTrue(activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, red)))
+            }
             awaitMenu(activity, null)
+            assertTrue(prefs.getBoolean("buttonRegistered.$red", false))
+            assertFalse(prefs.contains("button.$red"))
 
             val choice = AtomicInteger(-1)
             instrumentation.runOnMainSync {
@@ -108,6 +112,7 @@ class RemoteInputTest {
             )).use { it.readBytes() }
             throw error
         } finally {
+            prefs.edit().remove("buttonRegistered.$red").apply()
             input.close()
             pipes[0].close()
             instrumentation.runOnMainSync { activity.finish() }

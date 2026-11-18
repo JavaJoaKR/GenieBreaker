@@ -40,7 +40,7 @@ internal class MenuController(private val activity: Activity, private val publis
             "breadcrumbs" to pages.dropLast(1).map { it.title }, "depth" to pages.size,
             "cloneOptions" to (page.optionsAction != null), "options" to page.options)
     }
-    private fun back() { pages.removeLastOrNull(); if (pages.isEmpty()) dismiss() else publish(snapshot()) }
+    fun back() { pages.removeLastOrNull(); if (pages.isEmpty()) dismiss() else publish(snapshot()) }
     fun current(): Map<String, Any>? = if (pages.isEmpty()) null else snapshot()
     fun clear() { pages.clear() }
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
