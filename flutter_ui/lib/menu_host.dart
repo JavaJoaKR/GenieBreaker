@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'home.dart';
 import 'platform_bridge.dart';
 import 'popup_panel.dart';
@@ -25,22 +26,66 @@ class _GeniePageState extends State<GeniePage> {
   FocusNode node(String key) => focusNodes.putIfAbsent(key, () => FocusNode(debugLabel: key));
   String get pageId => '${data?['pageId'] ?? 'root'}';
   FocusNode menuNode(String key) => node('$pageId:$key');
-  void remember(String key) => bridge.invokeMethod<void>('focus', key);
+  void remember(String key) {
+    data?['focusKey'] = key;
+    bridge.invokeMethod<void>('focus', key);
+  }
+  bool get menuActive =>
+      mounted && data != null && data?['shell'] != true && ModalRoute.of(context)?.isCurrent == true;
+  FocusNode? get rememberedFocus {
+    final key = data?['focusKey'] as String?;
+    final initial = data?['cloneOptions'] == true
+        ? (cloneOptions.containsKey('netflixCompatibility') ? 'netflixCompatibility' : 'renameApp')
+        : 'item-${data?['focus'] ?? 0}';
+    return focusNodes['$pageId:${key?.isNotEmpty == true ? key : initial}'];
+  }
   void restoreFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || data?['shell'] == true) return;
-      final key = data?['focusKey'] as String?;
-      final initial = data?['cloneOptions'] == true
-          ? (cloneOptions.containsKey('netflixCompatibility') ? 'netflixCompatibility' : 'renameApp')
-          : 'item-${data?['focus'] ?? 0}';
-      final target = focusNodes['$pageId:${key?.isNotEmpty == true ? key : initial}'];
+      if (!menuActive) return;
+      final target = rememberedFocus;
       if (target?.context != null && target!.canRequestFocus) target.requestFocus();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
+
+  KeyEventResult recoverMenuFocus(KeyEvent event) {
+    if (!menuActive || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    if (!const {
+      LogicalKeyboardKey.arrowUp,
+      LogicalKeyboardKey.arrowDown,
+      LogicalKeyboardKey.arrowLeft,
+      LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.select,
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.numpadEnter,
+      LogicalKeyboardKey.gameButtonA,
+    }.contains(event.logicalKey)) {
+      return KeyEventResult.ignored;
+    }
+    final current = FocusManager.instance.primaryFocus;
+    if (current != null &&
+        current is! FocusScopeNode &&
+        current.context != null &&
+        current.canRequestFocus &&
+        current.ancestors.contains(menuScope)) {
+      return KeyEventResult.ignored;
+    }
+    final target = rememberedFocus;
+    if (target?.context != null && target!.canRequestFocus) {
+      target.requestFocus();
+      FocusManager.instance.applyFocusChangesIfNeeded();
+    }
+    return KeyEventResult.ignored;
+  }
+
+  final menuScope = FocusScopeNode(debugLabel: 'menu-scope');
 
   @override
   void initState() {
     super.initState();
+    FocusManager.instance.addEarlyKeyEventHandler(recoverMenuFocus);
     bridge.setMethodCallHandler((call) async {
       if (!mounted) return;
       if (call.method == 'shell') {
@@ -72,6 +117,8 @@ class _GeniePageState extends State<GeniePage> {
   @override
   void dispose() {
     bridge.setMethodCallHandler(null);
+    FocusManager.instance.removeEarlyKeyEventHandler(recoverMenuFocus);
+    menuScope.dispose();
     for (final node in focusNodes.values) {
       node.dispose();
     }
@@ -255,7 +302,7 @@ class _GeniePageState extends State<GeniePage> {
                 icon: data?['selected'] != null && data?['selected'] != -1
                     ? Icons.radio_button_unchecked
                     : actionIcon(items[i]),
-                onFocus: () => bridge.invokeMethod<void>('focus', i),
+                onFocus: () => remember('item-$i'),
                 onTap: () => perform('choose', i),
               ),
           ],
@@ -290,9 +337,16 @@ class _GeniePageState extends State<GeniePage> {
       return Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          OutlinedButton(onPressed: back, child: const Text('취소')),
+          OutlinedButton(
+            focusNode: menuNode('cancel'),
+            onFocusChange: (value) { if (value) remember('cancel'); },
+            onPressed: back,
+            child: const Text('취소'),
+          ),
           const SizedBox(width: 12),
           FilledButton(
+            focusNode: menuNode('build'),
+            onFocusChange: (value) { if (value) remember('build'); },
             onPressed: working ? null : () => perform('build', cloneOptions),
             child: const Text('듀얼앱 만들기'),
           ),
@@ -304,9 +358,17 @@ class _GeniePageState extends State<GeniePage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        OutlinedButton(autofocus: true, onPressed: () => perform('choose', 0), child: Text(items[0])),
+        OutlinedButton(
+          focusNode: menuNode('item-0'),
+          onFocusChange: (value) { if (value) remember('item-0'); },
+          autofocus: true,
+          onPressed: () => perform('choose', 0),
+          child: Text(items[0]),
+        ),
         const SizedBox(width: 12),
         FilledButton(
+          focusNode: menuNode('item-1'),
+          onFocusChange: (value) { if (value) remember('item-1'); },
           style: danger ? FilledButton.styleFrom(backgroundColor: const Color(0xffffb4ab)) : null,
           onPressed: working ? null : () => perform('choose', 1),
           child: Text(items[1]),
@@ -331,6 +393,7 @@ class _GeniePageState extends State<GeniePage> {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: FocusScope(
+                node: menuScope,
                 key: ValueKey(data == null ? 'loading' : data?['pageId'] ?? 'root'),
                 child: FocusTraversalGroup(
                   policy: TvFocusPolicy(),

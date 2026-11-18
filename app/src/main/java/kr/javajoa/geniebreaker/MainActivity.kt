@@ -90,7 +90,7 @@ class MainActivity : FlutterActivity() {
         }
         find(window.decorView)?.let { view ->
             view.isFocusable = true; view.isFocusableInTouchMode = true
-            if (!view.hasFocus()) view.requestFocus()
+            if (!view.isFocused) view.requestFocus()
         }
     }
     override fun onWindowFocusChanged(hasFocus: Boolean) {

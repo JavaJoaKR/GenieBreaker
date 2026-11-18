@@ -8,7 +8,11 @@ export 'remote_tile.dart' show RemoteTile;
 export 'menu_host.dart' show GeniePage;
 export 'popup_panel.dart' show PopupPanel;
 
-void main() => runApp(const GenieUI());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+  runApp(const GenieUI());
+}
 
 class GenieUI extends StatelessWidget {
   const GenieUI({super.key});
@@ -27,7 +31,7 @@ class GenieUI extends StatelessWidget {
             width: size.width,
             height: size.height,
             child: MediaQuery(
-              data: MediaQuery.of(context).copyWith(size: size),
+              data: MediaQuery.of(context).copyWith(size: size, navigationMode: NavigationMode.directional),
               child: child!,
             ),
           ),
