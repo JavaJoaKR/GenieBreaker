@@ -874,6 +874,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['shortcut:apps'],
                 ['shortcut:accessibility'],
                 ['shortcut:home'],
+                ['shortcut:accounts'],
+                ['shortcut:add-account'],
               ];
               content = scroll([
                 tile(
@@ -896,6 +898,18 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   () => call('homeSettings'),
                   subtitle: widget.data['controls']?['defaultHome'] == true ? '현재 기본 홈 · GenieBreaker' : null,
                   icon: Icons.home_outlined,
+                ),
+                tile(
+                  'shortcut:accounts',
+                  '장치 계정 목록',
+                  () => call('accountSettings'),
+                  icon: Icons.manage_accounts_outlined,
+                ),
+                tile(
+                  'shortcut:add-account',
+                  '계정 추가',
+                  () => call('addAccount'),
+                  icon: Icons.person_add_alt_1_outlined,
                 ),
               ]);
             default:
