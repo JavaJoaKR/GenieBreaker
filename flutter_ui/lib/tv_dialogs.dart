@@ -7,7 +7,7 @@ Future<T?> showTvDialog<T>(BuildContext context, Widget Function(BuildContext) p
   context: context,
   builder: (route) => Center(
     child: Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(12),
       child: FocusTraversalGroup(policy: TvFocusPolicy(), child: panel(route)),
     ),
   ),

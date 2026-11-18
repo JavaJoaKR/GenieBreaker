@@ -32,10 +32,10 @@ class AppShelf extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final app in row)
+              for (final (index, app) in row.indexed)
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                    padding: EdgeInsets.only(right: index + 1 < columns ? 5 : 0),
                     child: RemoteTile(
                       app['name'] as String,
                       key: ValueKey("app:${app['id']}"),
@@ -46,8 +46,8 @@ class AppShelf extends StatelessWidget {
                       leading: app['icon'] is Uint8List && (app['icon'] as Uint8List).isNotEmpty
                           ? Image.memory(
                               app['icon'] as Uint8List,
-                              width: 34,
-                              height: 34,
+                              width: 28,
+                              height: 28,
                               gaplessPlayback: true,
                             )
                           : null,

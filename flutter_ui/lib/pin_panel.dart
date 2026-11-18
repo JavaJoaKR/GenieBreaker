@@ -62,9 +62,9 @@ class _PinPanelState extends State<PinPanel> {
       constraints: const BoxConstraints(maxWidth: 340),
       child: Material(
         color: panel,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(modalRadius),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: FocusTraversalGroup(
             policy: TvFocusPolicy(),
             child: Column(
@@ -72,7 +72,7 @@ class _PinPanelState extends State<PinPanel> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(widget.title, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Actions(
                   actions: {
                     ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
@@ -99,7 +99,7 @@ class _PinPanelState extends State<PinPanel> {
                     onSubmitted: (_) => submit(),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [

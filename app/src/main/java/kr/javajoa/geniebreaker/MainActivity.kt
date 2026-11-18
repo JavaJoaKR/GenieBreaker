@@ -91,6 +91,7 @@ class MainActivity : FlutterActivity() {
                     "update" -> { updater.click(); result.success(null) }
                     "diagnostics" -> { showDiagnostics(); result.success(null) }
                     "appSettings" -> { openAppSettings(); result.success(null) }
+                    "openNetflix" -> { openNetflix(); result.success(null) }
                     "homeSettings" -> {
                         if (!openHomeSettings(this)) TvMenus.notice(this, "TV 설정에서 기본 홈 앱을 선택하세요.")
                         result.success(null)
@@ -237,6 +238,15 @@ class MainActivity : FlutterActivity() {
     }
     private fun openAppSettings() {
         if (!openAppsScreen(this)) TvMenus.notice(this, "이 TV에서는 앱 목록을 직접 열 수 없습니다. TV 설정에서 앱을 여세요.")
+    }
+    private fun openNetflix() {
+        val pkg = NetflixCompatibility.PACKAGE
+        if (launchPackage(this, pkg)) return
+        val store = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg"))
+            .setPackage("com.android.vending")
+        if (!openScreen(this, store)) {
+            TvMenus.notice(this, "TV 홈 또는 Play 스토어에서 공식 넷플릭스 앱을 확인하세요.")
+        }
     }
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)

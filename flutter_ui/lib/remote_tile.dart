@@ -40,7 +40,7 @@ class _RemoteTileState extends State<RemoteTile> {
   bool focused = false;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: widget.navigation ? 3 : 8),
+    padding: EdgeInsets.only(bottom: widget.navigation ? 2 : 5),
     child: FocusableActionDetector(
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
@@ -71,8 +71,8 @@ class _RemoteTileState extends State<RemoteTile> {
         child: GestureDetector(
           onTap: widget.onTap,
           child: Container(
-            constraints: BoxConstraints(minHeight: widget.navigation ? 46 : 58),
-            padding: EdgeInsets.symmetric(horizontal: widget.navigation ? 8 : 14, vertical: 8),
+            constraints: BoxConstraints(minHeight: widget.navigation ? 42 : 50),
+            padding: EdgeInsets.symmetric(horizontal: widget.navigation ? 7 : 10, vertical: 5),
             decoration: BoxDecoration(
               color: focused
                   ? focusFill
@@ -81,25 +81,25 @@ class _RemoteTileState extends State<RemoteTile> {
                   : widget.navigation
                   ? Colors.transparent
                   : raised,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(tileRadius),
               border: Border.all(color: focused ? ink : Colors.transparent, width: 2),
             ),
             child: Row(
               children: [
                 if (widget.accent != null) ...[
                   Icon(widget.icon, size: 24, color: widget.accent),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                 ] else if (widget.navigation) ...[
                   Icon(widget.icon, size: 21, color: widget.selected || focused ? ink : muted),
                   const SizedBox(width: 8),
                 ] else if (widget.toggle == null) ...[
                   Container(
-                    width: 34,
-                    height: 34,
+                    width: 30,
+                    height: 30,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: widget.danger ? const Color(0xff40292e) : const Color(0xff1c3453),
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(4.5),
                     ),
                     child:
                         widget.leading ??
@@ -109,7 +109,7 @@ class _RemoteTileState extends State<RemoteTile> {
                           size: 20,
                         ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                 ],
                 Expanded(
                   child: Column(
@@ -127,7 +127,7 @@ class _RemoteTileState extends State<RemoteTile> {
                         ),
                       ),
                       if (widget.subtitle?.isNotEmpty == true) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           widget.subtitle!,
                           maxLines: 2,

@@ -8,6 +8,7 @@ on:
       - 'app/build.gradle'
       - '.github/workflows/tv-ui.yml'
       - '.github/scripts/verify-tv-startup.sh'
+      - '.github/scripts/verify-tv-release-remote.sh'
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,6 +53,7 @@ jobs:
           script: |
             adb shell wm size 1920x1080
             adb shell wm density 320
+            bash .github/scripts/verify-tv-release-remote.sh
             gradle --no-daemon :app:connectedDebugAndroidTest || { adb pull /sdcard/Download/genie-remote-failure.png remote-failure.png || true; exit 1; }
             adb pull /sdcard/Download/genie-tv-ui.png tv-ui.png
             adb pull /sdcard/Download/genie-app-ui.png app-ui.png
@@ -73,6 +75,8 @@ jobs:
           name: TV-UI-review-${{ github.run_attempt }}
           path: |
             remote-failure.png
+            release-remote-before.png
+            release-remote-after.png
             tv-ui.png
             app-ui.png
             flutter-menu.png
