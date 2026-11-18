@@ -11,6 +11,7 @@ class RemoteTile extends StatefulWidget {
   final bool autofocus;
   final bool selected;
   final bool navigation;
+  final int maxLabelLines;
   final bool? toggle;
   final bool danger;
   final Color? accent;
@@ -26,6 +27,7 @@ class RemoteTile extends StatefulWidget {
     this.autofocus = false,
     this.selected = false,
     this.navigation = false,
+    this.maxLabelLines = 2,
     this.toggle,
     this.danger = false,
     this.accent,
@@ -82,7 +84,9 @@ class _RemoteTileState extends State<RemoteTile> {
                   ? Colors.transparent
                   : raised,
               borderRadius: BorderRadius.circular(tileRadius),
-              border: Border.all(color: focused ? ink : Colors.transparent, width: 2),
+              border: widget.navigation
+                  ? null
+                  : Border.all(color: focused ? ink : Colors.transparent, width: 2),
             ),
             child: Row(
               children: [
@@ -113,11 +117,12 @@ class _RemoteTileState extends State<RemoteTile> {
                 ],
                 Expanded(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         widget.title,
-                        maxLines: 2,
+                        maxLines: widget.maxLabelLines,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 17,
@@ -130,7 +135,7 @@ class _RemoteTileState extends State<RemoteTile> {
                         const SizedBox(height: 2),
                         Text(
                           widget.subtitle!,
-                          maxLines: 2,
+                          maxLines: widget.maxLabelLines,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: muted, fontSize: 12, height: 1.4),
                         ),
@@ -138,7 +143,7 @@ class _RemoteTileState extends State<RemoteTile> {
                     ],
                   ),
                 ),
-                if (widget.selected && widget.toggle == null) ...[
+                if (widget.selected && !widget.navigation && widget.toggle == null) ...[
                   const SizedBox(width: 6),
                   const Icon(Icons.check_rounded, size: 17, color: blue),
                 ],

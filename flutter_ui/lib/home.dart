@@ -47,6 +47,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   String sort = 'name';
   int columns = 3;
   int fileRequest = 0;
+  String? renderedTab;
   String? enteringTab;
   String? lastSurfaceFocus;
   String? modalOpener;
@@ -178,37 +179,38 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
 
   void select(String next, {bool enterContent = false}) {
-    if (tab == next) {
-      if (enterContent) enter();
+    if (tab != next) {
+      // Keep focus in the rail while the content subtree switches.
+      if (focused != 'nav:$next') focus('nav:$next');
+      enteringTab = null;
+      pendingKeys.clear();
+      setState(() {
+        tab = next;
+        error = null;
+      });
+      if (next == 'files') refreshFiles();
+      if (next == 'storage') loadStorage();
+      if (next == 'apps') call('refreshShell');
+    }
+    if (!enterContent || enteringTab == next) return;
+    if (renderedTab == next) {
+      enter();
       return;
     }
-    // Move focus before removing the old subtree; no detached focus target survives a tab switch.
-    focus('nav:$next');
-    enteringTab = enterContent ? next : null;
-    pendingKeys.clear();
-    setState(() {
-      tab = next;
-      error = null;
-    });
-    if (next == 'files') refreshFiles();
-    if (next == 'storage') loadStorage();
-    if (next == 'apps') call('refreshShell');
-    if (enterContent)
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || tab != next || enteringTab != next) return;
-        enteringTab = null;
-        final queued = List<LogicalKeyboardKey>.from(pendingKeys);
-        pendingKeys.clear();
-        if (widget.obscured) return;
-        enter();
-        // Focus changes normally settle in a microtask. Settle them before replaying
-        // keys that arrived while the new tab's first frame was being built.
+    enteringTab = next;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || tab != next || enteringTab != next) return;
+      enteringTab = null;
+      final queued = List<LogicalKeyboardKey>.from(pendingKeys);
+      pendingKeys.clear();
+      if (!acceptsFocus) return;
+      enter();
+      FocusManager.instance.applyFocusChangesIfNeeded();
+      for (final key in queued) {
+        navigate(key);
         FocusManager.instance.applyFocusChangesIfNeeded();
-        for (final key in queued) {
-          navigate(key);
-          FocusManager.instance.applyFocusChangesIfNeeded();
-        }
-      });
+      }
+    });
   }
 
   Future<void> loadStorage() async {
@@ -366,9 +368,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     if (onSidebar) {
       final index = tabs.indexOf(id.substring(4));
       if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
-        focus(
-          'nav:${tabs[(index + (key == LogicalKeyboardKey.arrowDown ? 1 : -1)).clamp(0, tabs.length - 1)]}',
-        );
+        final next = index + (key == LogicalKeyboardKey.arrowDown ? 1 : -1);
+        select(tabs[next.clamp(0, tabs.length - 1)]);
       } else if (key == LogicalKeyboardKey.arrowRight) {
         select(tabs[index], enterContent: true);
       }
@@ -896,7 +897,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 840 || constraints.maxHeight < 460;
           final contentWidth = constraints.maxWidth - ShellFrame.railWidth(compact) -
-              ShellFrame.gutter(compact) * 3;
+              ShellFrame.gutter(compact) - ShellFrame.outerHorizontal(compact) * 2;
           columns = (contentWidth / 200).floor().clamp(1, 6);
           Widget content;
           switch (tab) {
@@ -925,21 +926,16 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                     subtitle: action.detail,
                     icon: action.icon,
                   ),
-                const SizedBox(height: 8),
-                Text(
-                  mapping
-                      ? 'TV가 앱에 전달하는 버튼만 지정할 수 있습니다.'
-                      : '재부팅당 한 번 실행합니다. 리모컨으로 TV를 깨울 때도 실행하려면 대기 해제 옵션을 켜세요.',
-                  style: const TextStyle(color: muted),
-                ),
+                if (mapping) ...[
+                  const SizedBox(height: 8),
+                  const Text('TV가 앱에 전달하는 버튼을 지정할 수 있습니다.', style: TextStyle(color: muted)),
+                ],
               ]);
             case 'shortcuts':
               rows = [
                 ['shortcut:apps'],
                 ['shortcut:accessibility'],
-                ['shortcut:remote-accessibility'],
                 ['shortcut:home'],
-                ['shortcut:netflix'],
               ];
               content = scroll([
                 tile(
@@ -953,17 +949,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'shortcut:accessibility',
                   '접근성',
                   () => call('accessibility'),
-                  subtitle: '리모컨 서비스와 접근성 기능을 설정합니다',
+                  subtitle: 'Android TV 접근성 설정을 엽니다',
                   icon: Icons.accessibility_new_rounded,
-                ),
-                tile(
-                  'shortcut:remote-accessibility',
-                  '리모컨 접근성 서비스',
-                  () => call('remoteAccessibility'),
-                  subtitle: widget.data['controls']?['mappingActive'] == true
-                      ? 'GenieBreaker 버튼 맵핑 · 켜짐'
-                      : 'GenieBreaker 버튼 맵핑 · 꺼짐',
-                  icon: Icons.gamepad_outlined,
                 ),
                 tile(
                   'shortcut:home',
@@ -971,13 +958,6 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   () => call('homeSettings'),
                   subtitle: widget.data['controls']?['defaultHome'] == true ? '현재 기본 홈 · GenieBreaker' : null,
                   icon: Icons.home_outlined,
-                ),
-                tile(
-                  'shortcut:netflix',
-                  '넷플릭스 열기',
-                  () => call('openNetflix'),
-                  subtitle: '공식 TV 앱',
-                  icon: Icons.ondemand_video_outlined,
                 ),
               ]);
             default:
@@ -1020,10 +1000,11 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
               nodes.remove(id)?.dispose();
             }
           });
+          renderedTab = tab;
           final section = TvTab.values.byName(tab);
           final contextLabel = switch (section) {
             TvTab.bluetooth when widget.data['searching'] == true => '검색 중',
-            TvTab.mapping => '${(widget.data['controls']?['bindings'] as List? ?? []).length}개 지정',
+            TvTab.mapping => '${(widget.data['controls']?['bindings'] as List? ?? []).length}개 등록',
             TvTab.startup =>
               (widget.data['controls']?['startupName'] as String? ?? '').isEmpty
                   ? '사용 안 함'
@@ -1045,7 +1026,11 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
             contextLabel: contextLabel,
             error: error,
             onSelect: select,
-            onFocus: (id) => lastSurfaceFocus = id,
+            onFocus: (id) {
+              if (!acceptsFocus) return;
+              lastSurfaceFocus = id;
+              select(id.substring(4));
+            },
             child: content,
           );
         },

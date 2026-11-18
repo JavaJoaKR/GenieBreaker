@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'remote_tile.dart';
@@ -24,42 +26,54 @@ class AppShelf extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    key: const PageStorageKey('apps'),
-    child: Column(
-      children: [
-        for (final row in rows)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final (index, app) in row.indexed)
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(right: index + 1 < columns ? 5 : 0),
-                    child: RemoteTile(
-                      app['name'] as String,
-                      key: ValueKey("app:${app['id']}"),
-                      focusNode: node("app:${app['id']}"),
-                      onFocus: () => onFocus("app:${app['id']}"),
-                      icon: Icons.android_rounded,
-                      subtitle: app['detail'] as String?,
-                      leading: app['icon'] is Uint8List && (app['icon'] as Uint8List).isNotEmpty
-                          ? Image.memory(
-                              app['icon'] as Uint8List,
-                              width: 28,
-                              height: 28,
-                              gaplessPlayback: true,
-                            )
-                          : null,
-                      onTap: () => onOpen(app['id'] as String),
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final rowHeight = math.max(64.0, scaler.scale(17) * 1.3 + scaler.scale(12) * 1.4 + 23);
+    const gap = SizedBox(width: 6);
+    return SingleChildScrollView(
+      key: const PageStorageKey('apps'),
+      child: Column(
+        children: [
+          for (final row in rows)
+            SizedBox(
+              height: rowHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (index, app) in row.indexed) ...[
+                    if (index > 0) gap,
+                    Expanded(
+                      child: RemoteTile(
+                        app['name'] as String,
+                        key: ValueKey("app:${app['id']}"),
+                        focusNode: node("app:${app['id']}"),
+                        onFocus: () => onFocus("app:${app['id']}"),
+                        icon: Icons.android_rounded,
+                        subtitle: app['detail'] as String?,
+                        maxLabelLines: 1,
+                        leading: app['icon'] is Uint8List && (app['icon'] as Uint8List).isNotEmpty
+                            ? Image.memory(
+                                app['icon'] as Uint8List,
+                                width: 28,
+                                height: 28,
+                                fit: BoxFit.contain,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, _, _) => const Icon(Icons.android_rounded, size: 20),
+                              )
+                            : null,
+                        onTap: () => onOpen(app['id'] as String),
+                      ),
                     ),
-                  ),
-                ),
-              for (var missing = row.length; missing < columns; missing++)
-                const Expanded(child: SizedBox()),
-            ],
-          ),
-      ],
-    ),
-  );
+                  ],
+                  for (var missing = row.length; missing < columns; missing++) ...[
+                    gap,
+                    const Expanded(child: SizedBox.shrink()),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

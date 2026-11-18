@@ -57,12 +57,10 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'appSettings');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:accessibility');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accessibility');
-    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:remote-accessibility');
-    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'remoteAccessibility');
-    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:home');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'homeSettings');
-    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:netflix');
-    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'openNetflix');
+    expect(find.text('넷플릭스 열기'), findsNothing);
+    expect(find.text('리모컨 접근성 서비스'), findsNothing);
     await arrow(tester, LogicalKeyboardKey.arrowLeft);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'storage:refresh');
@@ -77,21 +75,24 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       calls.add(call);
       if (call.method == 'ready') return {...shell(), 'controls': {
-        'mappingActive': true, 'bindings': [{'key': 183, 'label': '빨간색', 'action': '홈 화면'}],
+        'mappingStatus': 'active', 'bindings': [{'key': 183, 'label': '빨간색', 'action': '홈 화면'}],
         'needsOverlay': true, 'canStart': false, 'startupName': '샘플 TV 앱',
       }};
       return null;
     });
     await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
     for (var i = 0; i < 5; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
-    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'mapping:service');
-    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
+    await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'mapping:add');
+    await arrow(tester, LogicalKeyboardKey.select);
     expect(calls.last.method, 'chooseButton');
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
     expect(calls.last.method, 'editButton'); expect(calls.last.arguments, 183);
+    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
+    expect(calls.last.method, 'mappingSettings');
     await arrow(tester, LogicalKeyboardKey.arrowLeft); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     expect(find.text('권한 필요'), findsOneWidget);
+    expect(find.text('켜짐 · 다른 앱 위에 표시 권한 필요'), findsOneWidget);
     for (final method in ['chooseStartup', 'startupPermission', 'toggleWake', 'testStartup', 'clearStartup']) {
       await arrow(tester, LogicalKeyboardKey.select); expect(calls.last.method, method);
       await arrow(tester, LogicalKeyboardKey.arrowDown);
@@ -266,11 +267,22 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(640, 360));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
-      if (call.method == 'ready') return shell(apps: [for (var i = 0; i < 5; i++) {'id': 'p$i', 'name': '긴 이름을 가진 TV 앱 $i', 'detail': ''}]);
+      if (call.method == 'ready') return shell(apps: [
+        for (var i = 0; i < 5; i++)
+          {'id': 'p$i', 'name': '긴 이름을 가진 TV 앱 $i', 'detail': i == 0 ? '듀얼앱 사용 중' : ''},
+      ]);
       return null;
     });
     await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
-    await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowRight);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, 'nav:apps');
+    expect(find.byKey(const ValueKey('app:p0')), findsOneWidget);
+    expect(find.byIcon(Icons.check_rounded), findsNothing);
+    final cardSize = tester.getSize(find.byKey(const ValueKey('app:p0')));
+    for (var i = 1; i < 5; i++) {
+      expect(tester.getSize(find.byKey(ValueKey('app:p$i'))), cardSize);
+    }
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
     expect(focus, 'apps:filter');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'app:p0');
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'app:p1');
@@ -288,7 +300,7 @@ void main() {
       return null;
     });
     await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
-    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
