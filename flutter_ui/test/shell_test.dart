@@ -60,6 +60,8 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'remoteAccessibility');
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'homeSettings');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:netflix');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'openNetflix');
     await arrow(tester, LogicalKeyboardKey.arrowLeft);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'storage:refresh');

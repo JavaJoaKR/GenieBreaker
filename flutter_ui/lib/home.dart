@@ -929,6 +929,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['shortcut:accessibility'],
                 ['shortcut:remote-accessibility'],
                 ['shortcut:home'],
+                ['shortcut:netflix'],
               ];
               content = scroll([
                 tile(
@@ -960,6 +961,13 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   () => call('homeSettings'),
                   subtitle: widget.data['controls']?['defaultHome'] == true ? '현재 기본 홈 · GenieBreaker' : null,
                   icon: Icons.home_outlined,
+                ),
+                tile(
+                  'shortcut:netflix',
+                  '넷플릭스 열기',
+                  () => call('openNetflix'),
+                  subtitle: '공식 TV 앱',
+                  icon: Icons.ondemand_video_outlined,
                 ),
               ]);
             default:
