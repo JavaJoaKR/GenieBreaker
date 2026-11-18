@@ -46,21 +46,21 @@ class RemoteInputTest {
         }
         try {
             instrumentation.setInTouchMode(true)
-            send("""{"id":1,"command":"register","name":"Genie D-pad Regression","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,352,158]}]}""")
+            send("""{"id":1,"command":"register","name":"Genie D-pad Regression","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,353,158]}]}""")
             SystemClock.sleep(1500)
             awaitLabel("기기 검색")
             // Up clamps at the first tab. Five down presses must reach button mapping.
             press(103)
             repeat(5) { press(108) }
-            press(352) // KEY_OK -> Android DPAD_CENTER, distinct from keyboard Enter.
+            press(353) // KEY_SELECT -> Android DPAD_CENTER, distinct from keyboard Enter.
             awaitLabel("버튼 지정")
             press(106)
             press(108)
-            press(352)
+            press(353)
             awaitLabel("리모컨 버튼 선택")
             press(158)
             awaitLabel("버튼 지정")
-            press(352)
+            press(353)
             awaitLabel("리모컨 버튼 선택")
             press(158)
 
@@ -78,7 +78,7 @@ class RemoteInputTest {
             SystemClock.sleep(300)
             instrumentation.runOnMainSync { dialog?.dismiss() }
             SystemClock.sleep(350)
-            press(352)
+            press(353)
             awaitChoice(choice, 1)
             assertFalse(activity.isFinishing)
         } finally {
