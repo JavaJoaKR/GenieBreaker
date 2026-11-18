@@ -49,6 +49,7 @@ class RemoteInputTest {
             instrumentation.setInTouchMode(true)
             send("""{"id":1,"command":"register","name":"Genie D-pad Regression","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,353,158]}]}""")
             SystemClock.sleep(2500)
+            assertFalse("Connecting a remote must preserve the Flutter activity", activity.isDestroyed)
             // Up clamps at the first tab. Five down presses must reach button mapping.
             press(103)
             repeat(5) { press(108) }

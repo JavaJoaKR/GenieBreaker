@@ -38,7 +38,7 @@
         </service>
         <receiver android:name=".InstallResultReceiver" android:exported="false" />
         <provider android:name=".UpdateProvider" android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true" />
-        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape" android:hardwareAccelerated="true" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:windowSoftInputMode="adjustResize">
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape" android:hardwareAccelerated="true" android:configChanges="orientation|keyboardHidden|keyboard|navigation|screenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
