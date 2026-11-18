@@ -1,6 +1,7 @@
 plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
 def tvReleaseSmoke = providers.gradleProperty('tvReleaseSmoke').map { it == 'true' }.getOrElse(false)
 def android10Compat = providers.gradleProperty('android10Compat').map { it == 'true' }.getOrElse(false)
+def ciAbiSplits = providers.gradleProperty('ciAbiSplits').map { it == 'true' }.getOrElse(false)
 android {
     namespace 'kr.javajoa.geniebreaker'
     compileSdk 35
@@ -9,9 +10,11 @@ android {
         applicationId 'kr.javajoa.geniebreaker'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         minSdk 26
-        ndk {
-            abiFilters 'armeabi-v7a', 'x86_64'
-            if (android10Compat) abiFilters 'arm64-v8a'
+        if (!ciAbiSplits) {
+            ndk {
+                abiFilters 'armeabi-v7a', 'x86_64'
+                if (android10Compat) abiFilters 'arm64-v8a'
+            }
         }
         targetSdk 35
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
@@ -32,11 +35,24 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // MA4000 is ARM32. Keep x86_64 only in debug/emulator builds.
-            ndk {
-                abiFilters.clear()
-                abiFilters 'armeabi-v7a'
-                if (tvReleaseSmoke || android10Compat) abiFilters 'x86_64'
-                if (android10Compat) abiFilters 'arm64-v8a'
+            if (!ciAbiSplits) {
+                ndk {
+                    abiFilters.clear()
+                    abiFilters 'armeabi-v7a'
+                    if (tvReleaseSmoke || android10Compat) abiFilters 'x86_64'
+                    if (android10Compat) abiFilters 'arm64-v8a'
+                }
+            }
+        }
+    }
+    if (ciAbiSplits) {
+        splits {
+            abi {
+                enable true
+                reset()
+                include 'armeabi-v7a', 'x86_64'
+                if (android10Compat) include 'arm64-v8a'
+                universalApk android10Compat
             }
         }
     }
@@ -58,7 +74,7 @@ dependencies {
 androidComponents {
     onVariants(selector().withBuildType('release')) { variant ->
         // Keep the normal release ARM32 even when the AAR also contains compatibility targets.
-        if (!android10Compat) variant.packaging.jniLibs.excludes.add('**/arm64-v8a/**')
-        if (!tvReleaseSmoke && !android10Compat) variant.packaging.jniLibs.excludes.add('**/x86_64/**')
+        if (!ciAbiSplits && !android10Compat) variant.packaging.jniLibs.excludes.add('**/arm64-v8a/**')
+        if (!ciAbiSplits && !tvReleaseSmoke && !android10Compat) variant.packaging.jniLibs.excludes.add('**/x86_64/**')
     }
 }

@@ -26,7 +26,9 @@ wait_for_settings() {
   adb logcat -d -s ActivityTaskManager AndroidRuntime WindowManager ActivityManager | grep -E '(geniebreaker|Background activity|com.android.settings/.Settings|FATAL EXCEPTION)' | tail -45 || true
   return 1
 }
-gradle --no-daemon :app:installDebug :app:installDebugAndroidTest
+if [[ "${1:-}" != --preinstalled ]]; then
+  gradle --no-daemon :app:installDebug :app:installDebugAndroidTest
+fi
 original_home=$(home_component)
 [[ "$original_home" == */* && "$original_home" != "$pkg/"* ]]
 adb shell appops set "$pkg" SYSTEM_ALERT_WINDOW allow
