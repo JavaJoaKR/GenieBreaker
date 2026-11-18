@@ -28,7 +28,7 @@ jobs:
       - name: Build and verify standalone APK
         run: |
           base64 --decode development-keystore.base64 > release.jks
-          gradle --no-daemon -p tv-device-info :assembleRelease :lintRelease
+          gradle --no-daemon -p tv-device-info :assembleRelease :lintRelease :install-check:assembleRelease :install-check:lintRelease
           mkdir -p dist
           apk=dist/TVDeviceInfo.apk
           cp tv-device-info/build/outputs/apk/release/tv-device-info-release.apk "$apk"
@@ -43,20 +43,26 @@ jobs:
             echo 'The device info APK must not request permissions.' >&2
             exit 1
           fi
-          stat -c '%n %s bytes' "$apk"
+          check_apk=dist/GenieBreakerInstallCheck-170.apk
+          cp tv-device-info/install-check/build/outputs/apk/release/install-check-release.apk "$check_apk"
+          "$tools/apksigner" verify --min-sdk-version 26 "$check_apk"
+          stat -c '%n %s bytes' "$apk" "$check_apk"
       - uses: actions/upload-artifact@v4
         with:
           name: TVDeviceInfo
-          path: dist/TVDeviceInfo.apk
+          path: dist/*.apk
       - name: Attach to the current release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag=$(gh release view --json tagName --jq '.tagName')
-          if [[ "$(gh release view "$tag" --json assets --jq 'any(.assets[]; .name == "TVDeviceInfo.apk")')" == false ]]; then
-            gh release upload "$tag" dist/TVDeviceInfo.apk
-          fi
+          assets=$(gh release view "$tag" --json assets --jq '.assets[].name')
+          for apk in dist/*.apk; do
+            if ! grep -Fxq "${apk##*/}" <<< "$assets"; then
+              gh release upload "$tag" "$apk"
+            fi
+          done
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
