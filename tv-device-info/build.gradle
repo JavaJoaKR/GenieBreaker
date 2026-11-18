@@ -1,0 +1,30 @@
+plugins { id 'com.android.application' version '8.9.2' }
+
+android {
+    namespace 'kr.javajoa.tvdeviceinfo'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'kr.javajoa.tvdeviceinfo'
+        minSdk 16
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file('../release.jks')
+            storePassword System.getenv('SIGNING_STORE_PASSWORD') ?: 'android'
+            keyAlias System.getenv('SIGNING_KEY_ALIAS') ?: 'geniebreaker'
+            keyPassword System.getenv('SIGNING_KEY_PASSWORD') ?: 'android'
+        }
+    }
+    buildTypes {
+        release { signingConfig signingConfigs.release }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
