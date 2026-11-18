@@ -1,14 +1,8 @@
 package kr.javajoa.geniebreaker
 
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Intent
-import android.database.ContentObserver
-import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
 
 internal class TvControls(
     private val owner: Activity,
@@ -17,18 +11,14 @@ internal class TvControls(
     private val changed: () -> Unit
 ) {
     private val prefs = tvPreferences(owner)
-    private val pm = owner.packageManager
+    private val bindings = RemoteBindings(owner)
+    private val remoteAccessibility = RemoteAccessibility(owner, ::refresh)
     private var capturePage: String? = null
     private var state = emptyMap<String, Any>()
-    private val service = ComponentName(owner, RemoteButtonService::class.java)
-    private val connectionChanged: () -> Unit = ::refresh
-    private val serviceObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean) = refresh()
-    }
     private val capture: (Int) -> Boolean = { key ->
         if (capturePage != null && capturePage == pageId() && owner.hasWindowFocus()) {
             capturePage = null
-            prefs.edit().putBoolean("buttonRegistered.$key", true).apply()
+            bindings.register(key)
             closeMenu()
             refresh()
             true
@@ -36,57 +26,35 @@ internal class TvControls(
     }
     fun resume() {
         RemoteCapture.choose = capture
-        RemoteButtonService.connectionChanged = connectionChanged
-        owner.contentResolver.registerContentObserver(
-            Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES), false, serviceObserver
-        )
+        remoteAccessibility.start()
         StartupWakeService.restore(owner)
         refresh()
     }
     fun pause() {
-        owner.contentResolver.unregisterContentObserver(serviceObserver)
-        if (RemoteButtonService.connectionChanged === connectionChanged) RemoteButtonService.connectionChanged = null
+        remoteAccessibility.stop()
         if (RemoteCapture.choose === capture) RemoteCapture.choose = null
     }
     fun snapshot(): Map<String, Any> = state
     fun refresh() {
-        val active = RemoteButtonService.connected
-        val enabled = try {
-            Settings.Secure.getString(owner.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-                .orEmpty().split(':').any { ComponentName.unflattenFromString(it) == service }
-        } catch (_: SecurityException) {
-            active
-        }
-        val mappingStatus = when {
-            active -> "active"
-            enabled -> "connecting"
-            else -> "off"
-        }
-        val bindings = prefs.all.keys.mapNotNull { pref ->
-            when {
-                pref.startsWith("button.") -> pref.substringAfter('.').toIntOrNull()
-                pref.startsWith("buttonRegistered.") -> pref.substringAfter('.').toIntOrNull()
-                else -> null
-            }
-        }.distinct().sorted().mapNotNull { key ->
-            val label = buttonLabel(key) ?: return@mapNotNull null
-            val action = prefs.getString("button.$key", null)
-            val actionLabel = if (action == null) "동작 미지정" else
-                buttonActions[action] ?: prefs.getString("buttonLabel.$key", null) ?: action.removePrefix("app:")
-            mapOf("key" to key, "label" to label, "action" to actionLabel)
-        }
         val defaultHome = isDefaultHome(owner)
         val hasOverlay = StartupApps.allowed(owner)
-        val next = mapOf("mappingStatus" to mappingStatus, "bindings" to bindings, "startupName" to (prefs.getString("startupLabel", null) ?: ""),
-            "needsOverlay" to (Build.VERSION.SDK_INT >= 29), "canStart" to (defaultHome || hasOverlay),
-            "hasOverlay" to hasOverlay, "defaultHome" to defaultHome, "wake" to StartupApps.wakeEnabled(owner))
+        val next = mapOf(
+            "mappingStatus" to remoteAccessibility.status(),
+            "bindings" to bindings.rows(),
+            "startupName" to prefs.getString("startupLabel", "").orEmpty(),
+            "needsOverlay" to (Build.VERSION.SDK_INT >= 29),
+            "canStart" to (defaultHome || hasOverlay),
+            "hasOverlay" to hasOverlay,
+            "defaultHome" to defaultHome,
+            "wake" to StartupApps.wakeEnabled(owner)
+        )
         if (next != state) {
             state = next
             changed()
         }
     }
     fun accessibility() {
-        if (!openScreen(owner, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+        if (!openAccessibilityScreen(owner))
             TvMenus.notice(owner, "이 TV에서는 접근성 설정을 직접 열 수 없습니다. TV 설정에서 접근성을 여세요.")
     }
     fun mappingSettings() {
@@ -103,8 +71,7 @@ internal class TvControls(
             when (index) {
                 0 -> accessibility()
                 1 -> {
-                    val info = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", owner.packageName, null))
-                    if (!openScreen(owner, info)) TvMenus.notice(owner, "TV 설정의 앱 목록에서 GenieBreaker를 선택하세요.")
+                    if (!openAppDetails(owner, owner.packageName)) TvMenus.notice(owner, "TV 설정의 앱 목록에서 GenieBreaker를 선택하세요.")
                 }
             }
         }
@@ -115,7 +82,7 @@ internal class TvControls(
     }
     fun edit(key: Int) {
         val title = buttonLabel(key) ?: return
-        val existing = prefs.getString("button.$key", null)
+        val existing = bindings.action(key)
         val actions = buttonActions.keys.toList()
         val labels = listOf("앱 실행") + buttonActions.values + listOf("버튼 삭제")
         TvMenus.show(owner, title, labels, "버튼을 한 번 눌렀을 때 실행할 동작", when {
@@ -131,20 +98,13 @@ internal class TvControls(
         }
     }
     private fun bind(key: Int, action: String?, label: String?) {
-        val update = prefs.edit().putString("button.$key", action).putString("buttonLabel.$key", label)
-        if (action == null) update.remove("buttonRegistered.$key")
-        update.apply()
+        bindings.set(key, action, label)
         refresh()
     }
     private fun chooseApp(title: String, apply: (String, String) -> Unit) {
-        val entries = listOf(Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER).flatMap {
-            pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(it), 0)
-        }.filter { it.activityInfo.exported && it.activityInfo.packageName != owner.packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
-            .sortedWith(compareBy({ it.second.lowercase() }, { it.first }))
+        val entries = launchableApps(owner)
         if (entries.isEmpty()) { TvMenus.notice(owner, "실행할 수 있는 앱이 없습니다."); return }
-        TvMenus.show(owner, title, entries.map { "${it.second}\n${it.first}" }) { i ->
+        TvMenus.show(owner, title, entries.map { "${it.label}\n${it.pkg}" }) { i ->
             val (pkg, name) = entries[i]
             apply(pkg, name)
         }

@@ -2,6 +2,7 @@ package kr.javajoa.geniebreaker
 
 import android.content.ContextWrapper
 import android.content.Intent
+import android.view.InputDevice
 import android.view.KeyEvent
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
@@ -36,8 +37,9 @@ class TvControlsTest {
     }
 
     private val key = KeyEvent.KEYCODE_PROG_RED
-    private fun event(action: Int, key: Int, repeat: Int = 0, flags: Int = 0) =
-        KeyEvent(0, 10, action, key, repeat, 0, 1, 0, flags)
+    private fun event(action: Int, key: Int, repeat: Int = 0, flags: Int = 0,
+                      down: Long = 0, device: Int = 1, scan: Int = 0, modifiers: Int = 0) =
+        KeyEvent(down, down + 10, action, key, repeat, modifiers, device, scan, flags, InputDevice.SOURCE_DPAD)
 
     @Test fun configureEmulatorBoot() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -53,7 +55,7 @@ class TvControlsTest {
             .putString("button.$key", "app:$target").putString("buttonLabel.$key", "설정").commit())
     }
     @Test fun ownedPressSurvivesRebindAndNeverRunsTwice() {
-        val presses = ButtonPresses()
+        val presses = ButtonPresses<String>()
         var binding: String? = "home"
         val actions = mutableListOf<String>()
         fun press(event: KeyEvent) = presses.handle(event, { binding }, { actions.add(it) })
@@ -70,6 +72,19 @@ class TvControlsTest {
             assertFalse(press(event(KeyEvent.ACTION_DOWN, reserved)))
         assertEquals(listOf("home"), actions)
     }
+    @Test fun pendingPressesFromTwoRemotesStayIndependentAfterInterrupt() {
+        val presses = ButtonPresses<String>()
+        val actions = mutableListOf<String>()
+        fun press(event: KeyEvent) = presses.handle(event, { "home" }, { actions.add(it) })
+        assertTrue(press(event(KeyEvent.ACTION_DOWN, key, down = 20, device = 1)))
+        assertTrue(press(event(KeyEvent.ACTION_DOWN, key, down = 21, device = 2)))
+        assertFalse(press(event(KeyEvent.ACTION_UP, key, down = 1, device = 1)))
+        presses.cancelActions()
+        assertTrue(press(event(KeyEvent.ACTION_UP, key, down = 20, device = 1)))
+        assertTrue(press(event(KeyEvent.ACTION_UP, key, down = 21, device = 2)))
+        assertTrue(actions.isEmpty())
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, key, modifiers = KeyEvent.META_CTRL_ON)))
+    }
     @Test fun foregroundCaptureHandlesVendorKeyAndReleasesOwnership() {
         val custom = 779
         val captured = mutableListOf<Int>()
@@ -77,11 +92,13 @@ class TvControlsTest {
         try {
             assertFalse(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = 398)))
             RemoteCapture.choose = null
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom, repeat = 1)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, custom)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_UNKNOWN, scan = 398)))
             assertFalse(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom)))
-            assertEquals(listOf(custom), captured)
+            assertEquals(listOf(custom, key), captured)
         } finally { RemoteCapture.choose = null }
     }
     @Test fun startupSelectionSkipsCurrentBootAndHandsOffOnceOnNextBoot() {

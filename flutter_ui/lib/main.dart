@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'menu_host.dart';
+import 'tv_focus.dart';
 import 'tv_theme.dart';
 
 export 'platform_bridge.dart' show bridge;
@@ -40,11 +40,7 @@ class GenieUI extends StatelessWidget {
     ),
     shortcuts: {
       ...WidgetsApp.defaultShortcuts,
-      const SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): const ActivateIntent(),
-      const SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false): const ActivateIntent(),
-      const SingleActivator(LogicalKeyboardKey.numpadEnter, includeRepeats: false):
-          const ActivateIntent(),
-      const SingleActivator(LogicalKeyboardKey.space, includeRepeats: false): const ActivateIntent(),
+      ...tvActivationShortcuts,
     },
     home: const GeniePage(),
   );

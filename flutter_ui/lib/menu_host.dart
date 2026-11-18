@@ -50,22 +50,7 @@ class _GeniePageState extends State<GeniePage> {
   }
 
   KeyEventResult recoverMenuFocus(KeyEvent event) {
-    if (!menuActive || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
-      return KeyEventResult.ignored;
-    }
-    if (!const [
-      LogicalKeyboardKey.arrowUp,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.arrowLeft,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.select,
-      LogicalKeyboardKey.enter,
-      LogicalKeyboardKey.numpadEnter,
-      LogicalKeyboardKey.gameButtonA,
-    ].contains(event.logicalKey)) {
-      return KeyEventResult.ignored;
-    }
-    recoverPopupFocus();
+    if (menuActive && isTvNavigationPress(event)) recoverPopupFocus();
     return KeyEventResult.ignored;
   }
 

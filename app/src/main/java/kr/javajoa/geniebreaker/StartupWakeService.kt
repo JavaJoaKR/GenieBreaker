@@ -36,7 +36,7 @@ class StartupWakeService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         val channel = "tv_wake"
         manager.createNotificationChannel(NotificationChannel(channel, getString(R.string.startup_wake), NotificationManager.IMPORTANCE_LOW))
-        startForeground(912, Notification.Builder(this, channel).setSmallIcon(R.drawable.icon)
+        startForeground(912, Notification.Builder(this, channel).setSmallIcon(R.drawable.logo_mark)
             .setContentTitle(getString(R.string.startup_wake)).setContentText(getString(R.string.startup_wake_notice))
             .setOngoing(true).build())
         waitingForWake = !getSystemService(PowerManager::class.java).isInteractive

@@ -2,11 +2,10 @@ package kr.javajoa.geniebreaker
 
 import android.content.*
 import android.os.Bundle
-import android.view.InputDevice
 import android.view.KeyEvent
-import android.view.accessibility.AccessibilityManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /** One Flutter surface owns all application UI and remote focus. Android owns device APIs only. */
@@ -17,7 +16,6 @@ class MainActivity : FlutterActivity() {
     private lateinit var apps: AppManagementController
     private lateinit var files: FileController
     private lateinit var controls: TvControls
-    private val accessibilityListener = AccessibilityManager.AccessibilityStateChangeListener { controls.refresh() }
     private lateinit var updater: AppUpdater
     private lateinit var appLock: AppLock
     private var updateLabel = "업데이트 확인"
@@ -55,66 +53,83 @@ class MainActivity : FlutterActivity() {
         menus = MenuController(this, { page -> if (!appLock.locked) channel?.invokeMethod("page", page) },
             { if (!appLock.locked) channel?.invokeMethod("dismiss", null) })
         TvMenus.attach(this, menus!!)
-        channel!!.setMethodCallHandler { call, result ->
-            try {
-                if (call.method == "ready") {
-                    uiReady = true
-                    result.success(snapshot())
-                    if (!appLock.locked) apps.refresh()
-                    return@setMethodCallHandler
-                }
-                if (call.method == "unlockPin") {
-                    val unlocked = resumed && hasWindowFocus() && appLock.unlock(call.arguments as? String ?: "")
-                    result.success(unlocked)
-                    if (unlocked) {
-                        menus?.clear()
-                        publishSession()
-                        apps.refresh()
-                    }
-                    return@setMethodCallHandler
-                }
-                if (appLock.locked) {
-                    result.error("locked", "GenieBreaker가 잠겨 있습니다.", null)
-                    return@setMethodCallHandler
-                }
-                if (menus?.handle(call, result) == true) return@setMethodCallHandler
-                if (files.handle(call, result)) return@setMethodCallHandler
-                when (call.method) {
-                    "refreshShell" -> { bluetooth.refresh(); apps.refresh(); result.success(null) }
-                    "scan" -> { bluetooth.discover(); result.success(null) }
-                    "permission" -> { bluetooth.requestAccess(); result.success(null) }
-                    "power" -> { bluetooth.enableBluetooth(); result.success(null) }
-                    "device" -> { bluetooth.choose(call.arguments as String); result.success(null) }
-                    "app" -> { apps.choose(call.arguments as String); result.success(null) }
-                    "appFilter" -> { apps.toggleDuals(); result.success(null) }
-                    "appView" -> { apps.viewOptions(); result.success(null) }
-                    "update" -> { updater.click(); result.success(null) }
-                    "diagnostics" -> { showDiagnostics(); result.success(null) }
-                    "appSettings" -> { openAppSettings(); result.success(null) }
-                    "homeSettings" -> {
-                        if (!openHomeSettings(this)) TvMenus.notice(this, "TV 설정에서 기본 홈 앱을 선택하세요.")
-                        result.success(null)
-                    }
-                    "setPin" -> { val saved = appLock.setPin(call.arguments as? String ?: ""); result.success(saved); publish() }
-                    "disablePin" -> { val saved = appLock.disable(); result.success(saved); publish() }
-                    "accessibility" -> { controls.accessibility(); result.success(null) }
-                    "mappingSettings" -> { controls.mappingSettings(); result.success(null) }
-                    "chooseButton" -> { controls.chooseButton(); result.success(null) }
-                    "editButton" -> { controls.edit((call.arguments as Number).toInt()); result.success(null) }
-                    "chooseStartup" -> { controls.chooseStartup(); result.success(null) }
-                    "startupPermission" -> { controls.startupPermission(); result.success(null) }
-                    "toggleWake" -> { controls.toggleWake(); result.success(null) }
-                    "testStartup" -> { controls.testStartup(); result.success(null) }
-                    "clearStartup" -> { controls.clearStartup(); result.success(null) }
-                    "exit" -> { if (!isDefaultHome(this)) finish(); result.success(null) }
-                    else -> result.notImplemented()
-                }
-            } catch (error: Exception) {
-                val code = Diagnostics.record(this, "UI request", error)
-                result.error("request", "요청을 처리하지 못했습니다. [$code]", null)
+        channel!!.setMethodCallHandler(::handleBridgeRequest)
+    }
+
+    private fun handleBridgeRequest(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            if (call.method == "ready") {
+                uiReady = true
+                result.success(snapshot())
+                if (!appLock.locked) apps.refresh()
+                return
             }
+            if (call.method == "unlockPin") {
+                val unlocked = resumed && hasWindowFocus() && appLock.unlock(call.arguments as? String ?: "")
+                result.success(unlocked)
+                if (unlocked) {
+                    menus?.clear()
+                    publishSession()
+                    apps.refresh()
+                }
+                return
+            }
+            if (appLock.locked) {
+                result.error("locked", "GenieBreaker가 잠겨 있습니다.", null)
+                return
+            }
+            if (menus?.handle(call, result) == true || files.handle(call, result)) return
+
+            when (call.method) {
+                "setPin", "disablePin" -> {
+                    val saved = if (call.method == "setPin") appLock.setPin(call.arguments as? String ?: "")
+                        else appLock.disable()
+                    result.success(saved)
+                    publish()
+                }
+                else -> if (handleShellAction(call)) result.success(null) else result.notImplemented()
+            }
+        } catch (error: Exception) {
+            val code = Diagnostics.record(this, "UI request", error)
+            result.error("request", "요청을 처리하지 못했습니다. [$code]", null)
         }
     }
+
+    private fun handleShellAction(call: MethodCall): Boolean {
+        when (call.method) {
+            "refreshShell" -> {
+                bluetooth.refresh()
+                apps.refresh()
+                controls.refresh()
+            }
+            "scan" -> bluetooth.discover()
+            "permission" -> bluetooth.requestAccess()
+            "power" -> bluetooth.enableBluetooth()
+            "device" -> bluetooth.choose(call.arguments as String)
+            "app" -> apps.choose(call.arguments as String)
+            "appFilter" -> apps.toggleDuals()
+            "appView" -> apps.viewOptions()
+            "update" -> updater.click()
+            "diagnostics" -> showDiagnostics()
+            "appSettings" -> openAppSettings()
+            "homeSettings" -> {
+                if (!openHomeSettings(this)) TvMenus.notice(this, "TV 설정에서 기본 홈 앱을 선택하세요.")
+            }
+            "accessibility" -> controls.accessibility()
+            "mappingSettings" -> controls.mappingSettings()
+            "chooseButton" -> controls.chooseButton()
+            "editButton" -> controls.edit((call.arguments as Number).toInt())
+            "chooseStartup" -> controls.chooseStartup()
+            "startupPermission" -> controls.startupPermission()
+            "toggleWake" -> controls.toggleWake()
+            "testStartup" -> controls.testStartup()
+            "clearStartup" -> controls.clearStartup()
+            "exit" -> if (!isDefaultHome(this)) finish()
+            else -> return false
+        }
+        return true
+    }
+
     private fun ensureFlutterFocus() {
         fun find(view: android.view.View): io.flutter.embedding.android.FlutterView? {
             if (view is io.flutter.embedding.android.FlutterView) return view
@@ -129,6 +144,7 @@ class MainActivity : FlutterActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
+            if (resumed) controls.refresh()
             ensureFlutterFocus()
             channel?.invokeMethod("enter", null)
             if (!preview && intent.hasCategory(Intent.CATEGORY_HOME)) StartupApps.launchFromHome(this)
@@ -157,33 +173,6 @@ class MainActivity : FlutterActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    private fun remoteNavigationCommand(event: KeyEvent): String? {
-        if (!event.hasNoModifiers()) return null
-        // Preserve editing shortcuts for an alphabetic keyboard. TV remotes
-        // with dedicated D-pad sources and controller buttons use the bridge.
-        val typingKeyboard = event.device?.keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC &&
-            !event.isFromSource(InputDevice.SOURCE_DPAD)
-        return when (event.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> if (typingKeyboard) null else "up"
-            KeyEvent.KEYCODE_DPAD_DOWN -> if (typingKeyboard) null else "down"
-            KeyEvent.KEYCODE_DPAD_LEFT -> if (typingKeyboard) null else "left"
-            KeyEvent.KEYCODE_DPAD_RIGHT -> if (typingKeyboard) null else "right"
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_SELECT -> "activate"
-            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> if (typingKeyboard) null else "activate"
-            // Linux input-event-codes.h. Only recover these when this device's
-            // key layout did not map them to an Android key code.
-            KeyEvent.KEYCODE_UNKNOWN -> when (event.scanCode) {
-                103 -> "up"
-                108 -> "down"
-                105 -> "left"
-                106 -> "right"
-                0x160, 0x161 -> "activate" // KEY_OK, KEY_SELECT
-                else -> null
-            }
-            else -> null
-        }
-    }
-
     private fun snapshot(): Map<String, Any> = if (appLock.locked) {
         mapOf("shell" to true, "locked" to true, "version" to BuildConfig.VERSION_NAME)
     } else bluetooth.snapshot() +
@@ -198,7 +187,6 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         resumed = true
-        getSystemService(AccessibilityManager::class.java).addAccessibilityStateChangeListener(accessibilityListener)
         controls.resume()
         if (!preview) updater.resume()
         apps.resume()
@@ -210,7 +198,6 @@ class MainActivity : FlutterActivity() {
             menus?.clear()
             publishSession()
         }
-        getSystemService(AccessibilityManager::class.java).removeAccessibilityStateChangeListener(accessibilityListener)
         controls.pause()
         super.onPause()
     }
