@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_shelf.dart';
+import 'file_entries.dart';
 import 'pin_panel.dart';
 import 'platform_bridge.dart';
 import 'popup_panel.dart';
@@ -9,6 +10,7 @@ import 'shell_frame.dart';
 import 'storage_summary.dart';
 import 'tv_dialogs.dart';
 import 'tv_controls.dart';
+import 'tv_focus.dart';
 import 'tv_theme.dart';
 
 typedef _Folder = ({String path, String name});
@@ -44,7 +46,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   Map<String, dynamic> storage = {};
   bool busy = false;
   String? error;
-  String sort = 'name';
+  FileSort sort = FileSort.name;
   int columns = 3;
   int fileRequest = 0;
   String? renderedTab;
@@ -298,20 +300,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
 
   KeyEventResult rescueFocus(KeyEvent event) {
-    if (!acceptsFocus ||
-        (event is! KeyDownEvent && event is! KeyRepeatEvent))
-      return KeyEventResult.ignored;
-    if (![
-      LogicalKeyboardKey.arrowUp,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.arrowLeft,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.select,
-      LogicalKeyboardKey.enter,
-      LogicalKeyboardKey.numpadEnter,
-      LogicalKeyboardKey.gameButtonA,
-    ].contains(event.logicalKey))
-      return KeyEventResult.ignored;
+    if (!acceptsFocus || !isTvNavigationPress(event)) return KeyEventResult.ignored;
     return recoverFocus() ? navigate(event.logicalKey) : KeyEventResult.ignored;
   }
 
@@ -340,12 +329,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         focus('nav:$tab');
         return KeyEventResult.handled;
       }
-      if ([
-        LogicalKeyboardKey.arrowUp,
-        LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.arrowLeft,
-        LogicalKeyboardKey.arrowRight,
-      ].contains(key)) {
+      if (tvArrowKeys.contains(key)) {
         if (pendingKeys.length < 8) pendingKeys.add(key);
         return KeyEventResult.handled;
       }
@@ -354,13 +338,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       back();
       return KeyEventResult.handled;
     }
-    if (![
-      LogicalKeyboardKey.arrowUp,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.arrowLeft,
-      LogicalKeyboardKey.arrowRight,
-    ].contains(key))
-      return KeyEventResult.ignored;
+    if (!tvArrowKeys.contains(key)) return KeyEventResult.ignored;
     if (id == null || (!onSidebar && !rows.any((r) => r.contains(id)))) {
       focus('nav:$tab');
       return KeyEventResult.handled;
@@ -717,13 +695,10 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
 
   Widget explorer() {
-    final entries = List<Map>.from(files['entries'] as List? ?? []);
-    entries.sort((a, b) {
-      if (a['directory'] != b['directory']) return a['directory'] == true ? -1 : 1;
-      if (sort == 'size') return ((b['bytes'] as num? ?? 0).compareTo(a['bytes'] as num? ?? 0));
-      if (sort == 'date') return ((b['modified'] as num? ?? 0).compareTo(a['modified'] as num? ?? 0));
-      return (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase());
-    });
+    final entries = sort.ordered(files['entries'] as List?);
+    final clipboard = files['clipboard'] as String? ?? '';
+    final writable = files['writable'] == true;
+    final canPaste = writable && clipboard.isNotEmpty;
     rows = [
       [
         if (_trail.isNotEmpty) 'files:up',
@@ -731,8 +706,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         'files:refresh',
         'files:sort',
         'files:pick',
-        if (files['writable'] == true) 'files:new',
-        if (files['writable'] == true && files['clipboard'] != '') 'files:paste',
+        if (writable) 'files:new',
+        if (canPaste) 'files:paste',
       ],
       for (final e in entries) ['file:${e['path']}', 'more:${e['path']}'],
     ];
@@ -761,35 +736,21 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           if (_trail.isNotEmpty) button('files:up', '상위 폴더', back),
           if (_trail.length > 1) button('files:roots', '저장소 목록', () => _browseTo([])),
           button('files:refresh', '새로고침', refreshFiles),
-          button(
-            'files:sort',
-            '정렬: ${sort == 'name'
-                ? '이름'
-                : sort == 'size'
-                ? '크기'
-                : '수정일'}',
-            () => setState(() {
-              sort = sort == 'name'
-                  ? 'size'
-                  : sort == 'size'
-                  ? 'date'
-                  : 'name';
-            }),
-          ),
+          button('files:sort', '정렬: ${sort.label}', () => setState(() => sort = sort.next)),
           button('files:pick', '저장소 연결', () => call('pick')),
-          if (files['writable'] == true)
+          if (writable)
             button('files:new', '새 폴더', () async {
               final name = await promptName(context, '새 폴더');
               if (mounted && name != null) await fileAction('mkdir', name: name);
             }),
-          if (files['writable'] == true && files['clipboard'] != '')
+          if (canPaste)
             button('files:paste', '붙여넣기', () => fileAction('paste')),
         ]),
-        if ((files['clipboard'] as String? ?? '').isNotEmpty)
+        if (clipboard.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              '${files['cut'] == true ? '이동' : '복사'}: ${files['clipboard']}',
+              '${files['cut'] == true ? '이동' : '복사'}: $clipboard',
               style: const TextStyle(color: accentTone),
             ),
           ),
@@ -808,43 +769,20 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
             ),
           ),
         Expanded(
-          child: entries.isEmpty
-              ? Center(
-                  child: listingError == null
-                      ? Text(emptyMessage, style: const TextStyle(color: muted))
-                      : null,
-                )
-              : scroll([
-                  for (final e in entries)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: tile(
-                            'file:${e['path']}',
-                            e['name'] as String,
-                            () {
-                              if (e['directory'] == true) {
-                                openFolder(e);
-                              } else {
-                                fileMenu(e);
-                              }
-                            },
-                            subtitle: e['detail'] as String?,
-                            icon: e['directory'] == true
-                                ? Icons.folder_outlined
-                                : Icons.insert_drive_file_outlined,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          focusNode: node('more:${e['path']}'),
-                          tooltip: '파일 작업',
-                          onPressed: () => fileMenu(e),
-                          icon: const Icon(Icons.more_horiz_rounded),
-                        ),
-                      ],
-                    ),
-                ]),
+          child: FileEntries(
+            entries: entries,
+            emptyMessage: listingError == null ? emptyMessage : null,
+            node: node,
+            onFocus: rememberContent,
+            onOpen: (entry) {
+              if (entry['directory'] == true) {
+                openFolder(entry);
+              } else {
+                fileMenu(entry);
+              }
+            },
+            onOptions: fileMenu,
+          ),
         ),
       ],
     );

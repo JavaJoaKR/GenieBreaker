@@ -81,14 +81,21 @@ if [[ -z "$previous" || "$previous" == null ]]; then services="$service"; else s
 adb shell settings put secure enabled_accessibility_services "$services"
 adb shell settings put secure accessibility_enabled 1
 adb shell input keyevent KEYCODE_HOME
-for attempt in {1..20}; do
-  if adb logcat -d -s GenieRemoteTest | grep -F 'Remapping service connected' >/dev/null; then break; fi
-  sleep 1
-done
-adb logcat -d -s GenieRemoteTest | grep -F 'Remapping service connected'
+wait_for_remote_connection() {
+  local message="$1" expected="$2" count
+  for attempt in {1..20}; do
+    count=$(adb logcat -d -s GenieRemoteTest | awk -v message="$message" 'index($0, message) {count++} END {print count+0}')
+    if (( count >= expected )); then return 0; fi
+    sleep 1
+  done
+  adb logcat -d -s GenieRemoteTest
+  return 1
+}
+
 # The shell input command dispatches at the framework level. A virtual USB remote
 # enters through InputReader and exercises the same accessibility filter as hardware.
-adb shell uinput - <<'REMOTE'
+press_red_key() {
+  adb shell uinput - <<'REMOTE'
 {"id":1,"command":"register","name":"Genie QA Remote","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,398]}]}
 {"id":1,"command":"delay","duration":1500}
 {"id":1,"command":"inject","events":[1,398,1,0,0,0]}
@@ -96,9 +103,27 @@ adb shell uinput - <<'REMOTE'
 {"id":1,"command":"inject","events":[1,398,0,0,0,0]}
 {"id":1,"command":"delay","duration":300}
 REMOTE
+}
+
+wait_for_remote_connection 'Remapping service connected' 1
+press_red_key
 wait_for_settings remote
 [[ "$(home_component)" == "$original_home" ]]
 echo 'Mapped red key opened the selected app from the original launcher.'
+
+if [[ -z "$previous" || "$previous" == null ]]; then
+  adb shell settings delete secure enabled_accessibility_services
+else
+  adb shell settings put secure enabled_accessibility_services "$previous"
+fi
+wait_for_remote_connection 'Remapping service disconnected' 1
+adb shell input keyevent KEYCODE_HOME
+adb shell settings put secure enabled_accessibility_services "$services"
+adb shell settings put secure accessibility_enabled 1
+wait_for_remote_connection 'Remapping service connected' 2
+press_red_key
+wait_for_settings remote-reconnect
+echo 'Mapped red key worked after disabling and re-enabling the accessibility service.'
 
 # Use the disposable emulator's HOME role to exercise foreground startup
 # with the overlay permission revoked, then restore the previous launcher.

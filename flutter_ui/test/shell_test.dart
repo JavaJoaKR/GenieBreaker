@@ -381,7 +381,7 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'nav:shortcuts');
   });
 
-  testWidgets('Confirm after focus loss restores its saved control and activates once', (tester) async {
+  testWidgets('Gamepad confirm after focus loss restores its saved control and activates once', (tester) async {
     var opened = 0;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return shell();
@@ -392,7 +392,7 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
-    await arrow(tester, LogicalKeyboardKey.select);
+    await arrow(tester, LogicalKeyboardKey.gameButtonA);
     expect(focus, 'shortcut:apps'); expect(opened, 1);
   });
 

@@ -17,6 +17,7 @@ Android permission, pairing, picker and installer screens remain system-owned.
 
 - Canvas #121212, navigation #1B1B1B, panel #222222, and raised #2A2A2A.
 - Primary text #F5F5F5, secondary #BDBDBD, and action accent #DDDDDD.
+- The launcher icon, TV banner, and notification share an angular G mark.
 - The sidebar uses a whole-surface #393939 fill for the active tab and a brighter
   #5C5C5C fill for focus. Content actions keep the 2dp focus outline.
 - Linear donor: three luminance layers, one accent, quiet 1px structural borders.

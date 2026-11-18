@@ -1,4 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+const tvArrowKeys = {
+  LogicalKeyboardKey.arrowUp,
+  LogicalKeyboardKey.arrowDown,
+  LogicalKeyboardKey.arrowLeft,
+  LogicalKeyboardKey.arrowRight,
+};
+
+const tvActivationShortcuts = <SingleActivator, ActivateIntent>{
+  SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): ActivateIntent(),
+  SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false): ActivateIntent(),
+  SingleActivator(LogicalKeyboardKey.numpadEnter, includeRepeats: false): ActivateIntent(),
+  SingleActivator(LogicalKeyboardKey.gameButtonA, includeRepeats: false): ActivateIntent(),
+  SingleActivator(LogicalKeyboardKey.space, includeRepeats: false): ActivateIntent(),
+};
+
+bool isTvNavigationPress(KeyEvent event) =>
+    (event is KeyDownEvent || event is KeyRepeatEvent) &&
+    (tvArrowKeys.contains(event.logicalKey) ||
+        tvActivationShortcuts.keys.any((key) => key.trigger == event.logicalKey));
 
 /// TV arrows move within the current row/column. Never wrap or jump diagonally.
 class TvFocusPolicy extends FocusTraversalPolicy {

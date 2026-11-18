@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'tv_focus.dart';
 import 'tv_theme.dart';
 
 class RemoteTile extends StatefulWidget {
@@ -53,11 +53,7 @@ class _RemoteTileState extends State<RemoteTile> {
           Scrollable.ensureVisible(context, alignment: .5, duration: Duration.zero);
         }
       },
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.select, includeRepeats: false): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.space, includeRepeats: false): ActivateIntent(),
-      },
+      shortcuts: tvActivationShortcuts,
       actions: {
         ActivateIntent: CallbackAction<ActivateIntent>(
           onInvoke: (_) {

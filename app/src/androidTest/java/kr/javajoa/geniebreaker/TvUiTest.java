@@ -3,6 +3,9 @@ package kr.javajoa.geniebreaker;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
@@ -14,6 +17,31 @@ import java.io.FileOutputStream;
 /** Runs against actual Android views on a 960x540dp landscape emulator. */
 @RunWith(AndroidJUnit4.class)
 public class TvUiTest {
+    @Test public void launcherAssetsRenderInGrayscale() {
+        android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        for (int resource : new int[] {R.drawable.icon, R.drawable.banner, R.drawable.logo_mark}) {
+            Drawable drawable = context.getDrawable(resource);
+            assertNotNull(drawable);
+            Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+            try {
+                drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
+                drawable.draw(new Canvas(bitmap));
+                int[] pixels = new int[bitmap.getWidth() * bitmap.getHeight()];
+                bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+                boolean hasVisibleMark = false;
+                for (int pixel : pixels) {
+                    if (Color.alpha(pixel) == 0) continue;
+                    assertEquals(Color.red(pixel), Color.green(pixel));
+                    assertEquals(Color.red(pixel), Color.blue(pixel));
+                    if (Color.red(pixel) > 175 && Color.alpha(pixel) > 200) hasVisibleMark = true;
+                }
+                assertTrue("Artwork must contain the visible logo", hasVisibleMark);
+            } finally {
+                bitmap.recycle();
+            }
+        }
+    }
+
     @Test public void testUpdateProviderRejectsOtherFilesAndWrites() throws Exception {
         android.content.Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         String prefix = "content://" + context.getPackageName() + ".updates";

@@ -30,6 +30,7 @@ List<TvAction> mappingActions(Map state) => [
     switch (state['mappingStatus']) {
       'active' => '접근성 서비스 연결됨',
       'connecting' => '접근성에서 켜짐 · 연결 대기 중',
+      'unknown' => '접근성 설정에서 서비스 상태를 확인하세요',
       _ => '지정한 동작을 실행하려면 접근성에서 켜세요',
     },
     Icons.settings_outlined,

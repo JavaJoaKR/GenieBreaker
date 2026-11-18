@@ -121,8 +121,7 @@ internal class AppManagementController(
         val actions = mutableListOf<Pair<String, () -> Unit>>("닫기" to {})
         if (original != null) {
             actions += "원본 앱 시스템 설정" to {
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", originalPackage, null))
-                if (!openScreen(activity, intent)) notice("원본 앱 설정 화면을 열 수 없습니다.")
+                if (!openAppDetails(activity, originalPackage)) notice("원본 앱 설정 화면을 열 수 없습니다.")
             }
         }
         if (result != null) actions += "설치 결과 자세히" to { notice(result) }
