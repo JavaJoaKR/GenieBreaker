@@ -84,12 +84,9 @@ class RemoteInputTest {
             awaitChoice(choice, 1)
             assertFalse(activity.isFinishing)
         } catch (error: AssertionError) {
-            instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
-                java.io.FileOutputStream("/sdcard/Download/genie-remote-failure.png").use {
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
-                }
-                bitmap.recycle()
-            }
+            ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
+                "screencap -p /sdcard/Download/genie-remote-failure.png"
+            )).use { it.readBytes() }
             val logs = ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("logcat -d -s GenieFocusTest flutter")).use {
                 it.bufferedReader().readText().lines().filter { line -> line.contains("GenieFocusTest") }.takeLast(35).joinToString("\n")
             }
