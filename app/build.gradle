@@ -3,9 +3,11 @@ def tvReleaseSmoke = providers.gradleProperty('tvReleaseSmoke').map { it == 'tru
 def android10Compat = providers.gradleProperty('android10Compat').map { it == 'true' }.getOrElse(false)
 def ciAbiSplits = providers.gradleProperty('ciAbiSplits').map { it == 'true' }.getOrElse(false)
 def ciTvDebug = providers.gradleProperty('ciTvDebug').map { it == 'true' }.getOrElse(false)
+def ciNdkVersion = providers.gradleProperty('ciNdkVersion').orNull
 android {
     namespace 'kr.javajoa.geniebreaker'
     compileSdk 35
+    if (ciNdkVersion != null) ndkVersion ciNdkVersion
     buildFeatures { buildConfig true }
     defaultConfig {
         applicationId 'kr.javajoa.geniebreaker'

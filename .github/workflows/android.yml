@@ -27,6 +27,7 @@ concurrency:
 env:
   BUILD_NUMBER: ${{ github.run_number }}
   FLUTTER_VERSION: '3.35.7'
+  ANDROID_NDK_VERSION: '27.3.13750724'
   ANDROID10_COMPAT: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[android10-compat]')) || (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[android10-compat]')) || (github.event_name == 'workflow_dispatch' && inputs.android10_compat) }}
 jobs:
   build:
@@ -43,7 +44,7 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;${{ env.ANDROID_NDK_VERSION }}'
           log-accepted-android-sdk-licenses: false
       - uses: subosito/flutter-action@v2
         with:
@@ -75,7 +76,10 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Build and lint Android APKs
+        env:
+          ORG_GRADLE_PROJECT_ciNdkVersion: ${{ env.ANDROID_NDK_VERSION }}
         run: |
+          test -x "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
           base64 --decode development-keystore.base64 > release.jks
           gradle --build-cache :app:assembleRelease :app:lintRelease -PciAbiSplits=true -Pandroid10Compat="$ANDROID10_COMPAT" || {
             cat app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt 2>/dev/null || true
