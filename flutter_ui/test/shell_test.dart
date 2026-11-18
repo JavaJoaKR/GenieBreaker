@@ -56,6 +56,8 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'appSettings');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:accessibility');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accessibility');
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'homeSettings');
     await arrow(tester, LogicalKeyboardKey.arrowLeft);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'storage:refresh');
@@ -433,6 +435,38 @@ void main() {
     expect(await dialog, true);
     expect(focus, 'shortcut:apps');
     expect(calls.where((call) => call == 'appSettings'), hasLength(1));
+  });
+
+  testWidgets('Locked session hides the shell and accepts a remote PIN with leading zero', (tester) async {
+    String? submitted;
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'unlockPin') {
+        submitted = call.arguments as String;
+        return true;
+      }
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    await messenger.handlePlatformMessage(
+      'genie/ui',
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('session', {'shell': true, 'locked': true}),
+      ),
+      (_) {},
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('GenieBreaker 잠금'), findsOneWidget);
+    expect(find.text('블루투스'), findsNothing);
+    for (final digit in ['0', '1', '1', '1', '1']) {
+      await tester.tap(find.widgetWithText(OutlinedButton, digit));
+      await tester.pump();
+    }
+    await tester.tap(find.widgetWithText(FilledButton, '확인'));
+    await tester.pumpAndSettle();
+    expect(submitted, '01111');
   });
 
 }

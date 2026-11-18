@@ -19,16 +19,19 @@ class MainActivity : FlutterActivity() {
     private lateinit var controls: TvControls
     private val accessibilityListener = AccessibilityManager.AccessibilityStateChangeListener { controls.resume() }
     private lateinit var updater: AppUpdater
+    private lateinit var appLock: AppLock
     private var updateLabel = "업데이트 확인"
     private var preview = false
     private var uiReady = false
+    private var resumed = false
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     override fun onCreate(savedInstanceState: Bundle?) {
         preview = BuildConfig.DEBUG && intent.getBooleanExtra("ui_preview", false)
         Diagnostics.install(applicationContext)
+        appLock = AppLock(this)
         bluetooth = BluetoothController(this, preview, ::publish)
         bluetooth.restore(savedInstanceState)
-        apps = AppManagementController(this) { publish() }
+        apps = AppManagementController(this, { pkg, label -> controls.selectStartup(pkg, label) }, ::publish)
         files = FileController(this) { channel?.invokeMethod("filesChanged", null) }
         updater = AppUpdater(this) { text, _ -> updateLabel = text; publish() }
         controls = TvControls(this, { menus?.current()?.get("pageId") as? String }, ::publish)
@@ -49,14 +52,34 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "genie/ui")
-        menus = MenuController(this, { page -> channel?.invokeMethod("page", page) }, { channel?.invokeMethod("dismiss", null) })
+        menus = MenuController(this, { page -> if (!appLock.locked) channel?.invokeMethod("page", page) },
+            { if (!appLock.locked) channel?.invokeMethod("dismiss", null) })
         TvMenus.attach(this, menus!!)
         channel!!.setMethodCallHandler { call, result ->
             try {
-                if (call.method != "ready" && menus?.handle(call, result) == true) return@setMethodCallHandler
+                if (call.method == "ready") {
+                    uiReady = true
+                    result.success(snapshot())
+                    if (!appLock.locked) apps.refresh()
+                    return@setMethodCallHandler
+                }
+                if (call.method == "unlockPin") {
+                    val unlocked = resumed && hasWindowFocus() && appLock.unlock(call.arguments as? String ?: "")
+                    result.success(unlocked)
+                    if (unlocked) {
+                        menus?.clear()
+                        publishSession()
+                        apps.refresh()
+                    }
+                    return@setMethodCallHandler
+                }
+                if (appLock.locked) {
+                    result.error("locked", "GenieBreaker가 잠겨 있습니다.", null)
+                    return@setMethodCallHandler
+                }
+                if (menus?.handle(call, result) == true) return@setMethodCallHandler
                 if (files.handle(call, result)) return@setMethodCallHandler
                 when (call.method) {
-                    "ready" -> { uiReady = true; result.success(snapshot()); apps.refresh() }
                     "refreshShell" -> { bluetooth.refresh(); apps.refresh(); result.success(null) }
                     "scan" -> { bluetooth.discover(); result.success(null) }
                     "permission" -> { bluetooth.requestAccess(); result.success(null) }
@@ -68,6 +91,12 @@ class MainActivity : FlutterActivity() {
                     "update" -> { updater.click(); result.success(null) }
                     "diagnostics" -> { showDiagnostics(); result.success(null) }
                     "appSettings" -> { openAppSettings(); result.success(null) }
+                    "homeSettings" -> {
+                        if (!openHomeSettings(this)) TvMenus.notice(this, "TV 설정에서 기본 홈 앱을 선택하세요.")
+                        result.success(null)
+                    }
+                    "setPin" -> { val saved = appLock.setPin(call.arguments as? String ?: ""); result.success(saved); publish() }
+                    "disablePin" -> { val saved = appLock.disable(); result.success(saved); publish() }
                     "accessibility" -> { controls.accessibility(); result.success(null) }
                     "chooseButton" -> { controls.chooseButton(); result.success(null) }
                     "editButton" -> { controls.edit((call.arguments as Number).toInt()); result.success(null) }
@@ -76,7 +105,7 @@ class MainActivity : FlutterActivity() {
                     "toggleWake" -> { controls.toggleWake(); result.success(null) }
                     "testStartup" -> { controls.testStartup(); result.success(null) }
                     "clearStartup" -> { controls.clearStartup(); result.success(null) }
-                    "exit" -> { finish(); result.success(null) }
+                    "exit" -> { if (!isDefaultHome(this)) finish(); result.success(null) }
                     else -> result.notImplemented()
                 }
             } catch (error: Exception) {
@@ -98,7 +127,16 @@ class MainActivity : FlutterActivity() {
     }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) { ensureFlutterFocus(); channel?.invokeMethod("enter", null) }
+        if (hasFocus) {
+            ensureFlutterFocus()
+            channel?.invokeMethod("enter", null)
+            if (!preview && intent.hasCategory(Intent.CATEGORY_HOME)) StartupApps.launchFromHome(this)
+        }
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (!preview && hasWindowFocus() && intent.hasCategory(Intent.CATEGORY_HOME)) StartupApps.launchFromHome(this)
     }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // Handle remote navigation at the window before Flutter's keyboard
@@ -114,7 +152,7 @@ class MainActivity : FlutterActivity() {
             }
             if (event.action == KeyEvent.ACTION_UP) return true
         }
-        if (RemoteCapture.handle(event)) return true
+        if (!appLock.locked && RemoteCapture.handle(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
@@ -145,16 +183,20 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun snapshot(): Map<String, Any> = bluetooth.snapshot() +
+    private fun snapshot(): Map<String, Any> = if (appLock.locked) {
+        mapOf("shell" to true, "locked" to true, "version" to BuildConfig.VERSION_NAME)
+    } else bluetooth.snapshot() +
         mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME,
-            "apps" to apps.snapshot(), "update" to updateLabel, "controls" to controls.snapshot()) +
+            "apps" to apps.snapshot(), "update" to updateLabel, "controls" to controls.snapshot(), "pinEnabled" to appLock.enabled) +
         (menus?.current()?.let { mapOf("menu" to it) } ?: emptyMap())
 
     private fun publish() { if (!isFinishing && !isDestroyed && ::apps.isInitialized) channel?.invokeMethod("shell", snapshot()) }
+    private fun publishSession() { channel?.invokeMethod("session", snapshot()) }
 
     override fun onStart() { super.onStart(); bluetooth.start() }
     override fun onResume() {
         super.onResume()
+        resumed = true
         getSystemService(AccessibilityManager::class.java).addAccessibilityStateChangeListener(accessibilityListener)
         controls.resume()
         if (!preview) updater.resume()
@@ -162,6 +204,11 @@ class MainActivity : FlutterActivity() {
         bluetooth.refresh()
     }
     override fun onPause() {
+        resumed = false
+        if (appLock.relock()) {
+            menus?.clear()
+            publishSession()
+        }
         getSystemService(AccessibilityManager::class.java).removeAccessibilityStateChangeListener(accessibilityListener)
         controls.pause()
         super.onPause()

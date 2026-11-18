@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_shelf.dart';
+import 'pin_panel.dart';
 import 'platform_bridge.dart';
 import 'popup_panel.dart';
 import 'remote_tile.dart';
@@ -135,6 +136,35 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       if (mounted && tab == origin) setState(() => error = requestError(e));
       return null;
     }
+  }
+
+  Future<String?> _askPin(String title) => showTvDialog<String>(
+    context,
+    (route) => PinPanel(
+      title: title,
+      onCancel: () => Navigator.pop(route),
+      onSubmit: (pin) async {
+        Navigator.pop(route, pin);
+        return true;
+      },
+    ),
+  );
+
+  Future<void> configurePin() async {
+    if (widget.data['pinEnabled'] == true) {
+      final accepted = await confirmAction(context, '앱 잠금 해제', '앱을 열 때 PIN을 묻지 않습니다.', '잠금 끄기');
+      if (mounted && accepted) await call('disablePin');
+      return;
+    }
+    final pin = await _askPin('새 PIN 입력 · 4–8자리');
+    if (!mounted || pin == null) return;
+    final confirmed = await _askPin('새 PIN 다시 입력');
+    if (!mounted || confirmed == null) return;
+    if (pin != confirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN이 일치하지 않습니다.')));
+      return;
+    }
+    await call('setPin', pin);
   }
 
   void select(String next, {bool enterContent = false}) {
@@ -865,6 +895,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
               rows = [
                 ['shortcut:apps'],
                 ['shortcut:accessibility'],
+                ['shortcut:home'],
               ];
               content = scroll([
                 tile(
@@ -881,11 +912,19 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   subtitle: '리모컨 서비스와 접근성 기능을 설정합니다',
                   icon: Icons.accessibility_new_rounded,
                 ),
+                tile(
+                  'shortcut:home',
+                  '기본 홈 앱 설정',
+                  () => call('homeSettings'),
+                  subtitle: widget.data['controls']?['defaultHome'] == true ? '현재 기본 홈 · GenieBreaker' : null,
+                  icon: Icons.home_outlined,
+                ),
               ]);
             default:
               rows = [
                 ['settings:update'],
                 ['settings:diagnostics'],
+                ['settings:lock'],
               ];
               content = scroll([
                 tile(
@@ -901,6 +940,13 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   () => call('diagnostics'),
                   subtitle: '기기 안에 저장된 오류 식별 코드',
                   icon: Icons.info_outline_rounded,
+                ),
+                tile(
+                  'settings:lock',
+                  '앱 잠금',
+                  configurePin,
+                  subtitle: widget.data['pinEnabled'] == true ? '켜짐' : '꺼짐',
+                  icon: Icons.lock_outline_rounded,
                 ),
               ]);
           }

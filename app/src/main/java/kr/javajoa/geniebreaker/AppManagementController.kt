@@ -11,7 +11,11 @@ import java.io.File
 import java.util.concurrent.Executors
 
 /** Android package operations, with immutable snapshots consumed by Flutter. */
-internal class AppManagementController(private val activity: Activity, private val changed: () -> Unit) {
+internal class AppManagementController(
+    private val activity: Activity,
+    private val selectStartup: (String, String) -> Unit,
+    private val changed: () -> Unit
+) {
     private val worker = Executors.newSingleThreadExecutor()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val pm = activity.packageManager
@@ -59,6 +63,7 @@ internal class AppManagementController(private val activity: Activity, private v
         if (busy) return
         val record = duals.record(pkg.packageName) ?: duals.all().firstOrNull { it.target == pkg.packageName }
         val actions = mutableListOf<Pair<String, () -> Unit>>()
+        val label = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: pkg.packageName
         if (record != null && duals.isInstalled(record.target)) {
             actions += "듀얼앱 실행" to { launch(record.target) }
             if (record != null && duals.isInstalled(record.source)) actions += "듀얼앱 다시 만들기" to { create(pm.getPackageInfo(record.source, 0)) }
@@ -68,11 +73,14 @@ internal class AppManagementController(private val activity: Activity, private v
             if (record != null && duals.isInstalled(record.source)) actions += "듀얼앱 다시 만들기" to { create(pm.getPackageInfo(record.source, 0)) }
         } else actions += "듀얼앱 만들기" to { create(pkg) }
         if (record == null || duals.isInstalled(record.source)) actions += "원본 앱 실행" to { launch(record?.source ?: pkg.packageName) }
+        if (launchIntent(activity, pkg.packageName) != null) {
+            actions += "시작 앱으로 설정" to { selectStartup(pkg.packageName, label) }
+        }
         if (record != null && duals.file(record).exists()) actions += "듀얼앱 APK 저장" to { export(record.id) }
         if (pkg.applicationInfo?.flags?.and(ApplicationInfo.FLAG_SYSTEM) == 0) actions += "원본 앱 제거" to { uninstall(record?.source ?: pkg.packageName) }
         actions += "앱 정보" to { notice("${pkg.packageName}\n버전 ${pkg.versionName}") }
         if (installState.contains("result")) actions += "설치 결과" to { notice(installState.getString("result", "") ?: "") }
-        TvMenus.show(activity, pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "앱 관리", actions.map { it.first }) { index -> actions.getOrNull(index)?.second?.invoke() }
+        TvMenus.show(activity, label, actions.map { it.first }) { index -> actions.getOrNull(index)?.second?.invoke() }
     }
     private fun create(pkg: PackageInfo) {
         if (busy) return

@@ -8,6 +8,33 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TvControlsTest {
+    @Test fun homeRegistrationAndPinSessionAreOptIn() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val homes = context.packageManager.queryIntentActivities(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+        )
+        assertTrue(homes.any { it.activityInfo.name == MainActivity::class.java.name })
+        assertFalse("Installing the app must not replace the current HOME", isDefaultHome(context))
+
+        val lock = AppLock(context)
+        try {
+            assertFalse(lock.enabled)
+            assertFalse(lock.setPin("012"))
+            assertTrue(lock.setPin("02468"))
+            assertFalse(lock.locked)
+            assertTrue(lock.relock())
+            assertTrue(lock.locked)
+            assertFalse(lock.unlock("99999"))
+            assertTrue(lock.unlock("02468"))
+            assertTrue(lock.relock())
+            assertTrue(lock.unlock(BuildConfig.VERSION_NAME.replace(".", "")))
+            assertTrue(AppLock(context).locked)
+        } finally {
+            assertTrue(lock.disable())
+        }
+    }
+
     private val key = KeyEvent.KEYCODE_PROG_RED
     private fun event(action: Int, key: Int, repeat: Int = 0, flags: Int = 0) =
         KeyEvent(0, 10, action, key, repeat, 0, 1, 0, flags)

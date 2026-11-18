@@ -33,8 +33,11 @@ internal class TvControls(private val owner: Activity, private val pageId: () ->
             val action = prefs.getString("button.$key", null) ?: return@mapNotNull null
             mapOf("key" to key, "label" to label, "action" to (buttonActions[action] ?: prefs.getString("buttonLabel.$key", null) ?: action.removePrefix("app:")))
         }
+        val defaultHome = isDefaultHome(owner)
+        val hasOverlay = StartupApps.allowed(owner)
         state = mapOf("mappingActive" to active, "bindings" to bindings, "startupName" to (prefs.getString("startupLabel", null) ?: ""),
-            "needsOverlay" to (Build.VERSION.SDK_INT >= 29), "canStart" to StartupApps.allowed(owner), "wake" to prefs.getBoolean("wake", false))
+            "needsOverlay" to (Build.VERSION.SDK_INT >= 29), "canStart" to (defaultHome || hasOverlay),
+            "hasOverlay" to hasOverlay, "defaultHome" to defaultHome, "wake" to prefs.getBoolean("wake", false))
         changed()
     }
     fun accessibility() {
@@ -80,7 +83,12 @@ internal class TvControls(private val owner: Activity, private val pageId: () ->
             apply(pkg, name)
         }
     }
-    fun chooseStartup() = chooseApp("시작 앱 선택") { pkg, label ->
+    fun chooseStartup() = chooseApp("시작 앱 선택", ::selectStartup)
+    fun selectStartup(pkg: String, label: String) {
+        if (launchIntent(owner, pkg) == null) {
+            TvMenus.notice(owner, "실행할 수 없는 앱입니다.")
+            return
+        }
         StartupApps.select(owner, pkg, label)
         refresh()
     }
