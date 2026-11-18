@@ -282,6 +282,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
 
   KeyEventResult key(FocusNode _, KeyEvent event) {
+    assert(() { debugPrint('GenieFocusTest logical=${event.logicalKey.keyId} focused=$focused'); return true; }());
     if (!acceptsFocus || (event is! KeyDownEvent && event is! KeyRepeatEvent))
       return KeyEventResult.ignored;
     final key = event.logicalKey;

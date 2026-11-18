@@ -98,6 +98,7 @@ class MainActivity : FlutterActivity() {
         if (hasFocus) { ensureFlutterFocus(); channel?.invokeMethod("enter", null) }
     }
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (preview && event.keyCode in 19..23) android.util.Log.d("GenieFocusTest", "navigation=${event.keyCode} action=${event.action} window=${hasWindowFocus()}")
         if (RemoteCapture.handle(event)) return true
         if (event.action == android.view.KeyEvent.ACTION_DOWN && event.keyCode in setOf(
                 android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,

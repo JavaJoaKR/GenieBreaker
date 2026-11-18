@@ -52,7 +52,7 @@ jobs:
           script: |
             adb shell wm size 1920x1080
             adb shell wm density 320
-            gradle --no-daemon :app:connectedDebugAndroidTest
+            gradle --no-daemon :app:connectedDebugAndroidTest || { adb pull /sdcard/Download/genie-remote-failure.png remote-failure.png || true; exit 1; }
             adb pull /sdcard/Download/genie-tv-ui.png tv-ui.png
             adb pull /sdcard/Download/genie-app-ui.png app-ui.png
             adb pull /sdcard/Download/genie-flutter-menu.png flutter-menu.png
@@ -72,6 +72,7 @@ jobs:
         with:
           name: TV-UI-review-${{ github.run_attempt }}
           path: |
+            remote-failure.png
             tv-ui.png
             app-ui.png
             flutter-menu.png
