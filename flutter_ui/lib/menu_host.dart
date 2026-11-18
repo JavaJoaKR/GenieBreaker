@@ -225,9 +225,9 @@ class _GeniePageState extends State<GeniePage> {
   }
 
   Widget messageBox(String message) => Container(
-    margin: const EdgeInsets.only(bottom: 14),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(color: canvas, borderRadius: BorderRadius.circular(12)),
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(color: canvas, borderRadius: BorderRadius.circular(insetRadius)),
     constraints: const BoxConstraints(maxHeight: 180),
     child: SingleChildScrollView(
       child: Text(message, style: const TextStyle(color: muted, fontSize: 15, height: 1.5)),
@@ -439,7 +439,7 @@ class _GeniePageState extends State<GeniePage> {
         SafeArea(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(12),
               child: FocusScope(
                 node: menuScope,
                 key: ValueKey(data == null ? 'loading' : data?['pageId'] ?? 'root'),

@@ -25,8 +25,8 @@ class PopupPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ConstrainedBox(
     constraints: BoxConstraints(
-      maxWidth: wide ? 660 : 490,
-      maxHeight: MediaQuery.sizeOf(context).height - 64,
+      maxWidth: wide ? 670 : 510,
+      maxHeight: MediaQuery.sizeOf(context).height - 32,
     ),
     child: Material(
       key: const ValueKey('popup-surface'),
@@ -34,15 +34,15 @@ class PopupPanel extends StatelessWidget {
       surfaceTintColor: Colors.transparent,
       elevation: 24,
       shadowColor: Colors.black54,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(modalRadius),
       clipBehavior: Clip.antiAlias,
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border.all(color: divider),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(modalRadius),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -92,12 +92,12 @@ class PopupPanel extends StatelessWidget {
                     style: const TextStyle(color: blue, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               Flexible(fit: FlexFit.loose, child: body),
               if (footer != null) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 8),
                 const Divider(height: 1, color: Color(0xff293a53)),
-                const SizedBox(height: 14),
+                const SizedBox(height: 8),
                 footer!,
               ],
             ],

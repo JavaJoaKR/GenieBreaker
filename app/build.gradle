@@ -1,4 +1,5 @@
 plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
+def tvReleaseSmoke = providers.gradleProperty('tvReleaseSmoke').map { it == 'true' }.getOrElse(false)
 android {
     namespace 'kr.javajoa.geniebreaker'
     compileSdk 35
@@ -27,7 +28,11 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // MA4000 is ARM32. Keep x86_64 only in debug/emulator builds.
-            ndk { abiFilters.clear(); abiFilters 'armeabi-v7a' }
+            ndk {
+                abiFilters.clear()
+                abiFilters 'armeabi-v7a'
+                if (tvReleaseSmoke) abiFilters 'x86_64'
+            }
         }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
@@ -48,6 +53,6 @@ dependencies {
 androidComponents {
     onVariants(selector().withBuildType('release')) { variant ->
         // Flutter AARs bundle both targets; merged default ABI filters are additive.
-        variant.packaging.jniLibs.excludes.add('**/x86_64/**')
+        if (!tvReleaseSmoke) variant.packaging.jniLibs.excludes.add('**/x86_64/**')
     }
 }

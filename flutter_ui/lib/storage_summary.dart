@@ -9,8 +9,8 @@ class StorageSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final fraction = (storage['usedFraction'] as num?)?.toDouble().clamp(0.0, 1.0);
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(panelRadius)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -26,13 +26,13 @@ class StorageSummary extends StatelessWidget {
               Text('전체 ${storage['total'] ?? '—'}', style: const TextStyle(color: muted, fontSize: 15)),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           LinearProgressIndicator(
             value: fraction ?? 0,
             minHeight: 6,
             color: blue,
             backgroundColor: divider,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(2),
             semanticsLabel: '사용 중인 저장공간',
             semanticsValue: fraction == null ? '불러오는 중' : '${(fraction * 100).round()}%',
           ),

@@ -41,9 +41,12 @@ class ShellFrame extends StatelessWidget {
     required this.onSelect,
   });
 
+  static double gutter(bool compact) => compact ? 10 : 14;
+  static double railWidth(bool compact) => compact ? 146 : 174;
+
   @override
   Widget build(BuildContext context) {
-    final gap = compact ? 14.0 : 24.0;
+    final gap = gutter(compact);
     return ColoredBox(
       color: canvas,
       child: Padding(
@@ -52,19 +55,19 @@ class ShellFrame extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              width: compact ? 158 : 192,
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-              decoration: BoxDecoration(color: railSurface, borderRadius: BorderRadius.circular(16)),
+              width: railWidth(compact),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+              decoration: BoxDecoration(color: railSurface, borderRadius: BorderRadius.circular(railRadius)),
               child: FocusScope(
                 node: sidebarScope,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Padding(
-                      padding: EdgeInsets.fromLTRB(12, 2, 0, 14),
+                      padding: EdgeInsets.fromLTRB(9, 2, 0, 9),
                       child: Text(
                         'GenieBreaker',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -.6),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -.6),
                       ),
                     ),
                     Expanded(
@@ -88,7 +91,7 @@ class ShellFrame extends StatelessWidget {
                     ),
                     if (version.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 0, 0),
+                        padding: const EdgeInsets.fromLTRB(9, 6, 0, 0),
                         child: Text('v$version', style: const TextStyle(color: muted, fontSize: 12)),
                       ),
                   ],
@@ -110,7 +113,7 @@ class ShellFrame extends StatelessWidget {
                             child: Text(
                               tab.title,
                               style: TextStyle(
-                                fontSize: compact ? 26 : 30,
+                                fontSize: compact ? 24 : 27,
                                 height: 1.2,
                                 letterSpacing: -.6,
                                 fontWeight: FontWeight.w700,
@@ -129,9 +132,9 @@ class ShellFrame extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 7),
                     const Divider(height: 1, color: divider),
-                    SizedBox(height: compact ? 10 : 16),
+                    SizedBox(height: compact ? 7 : 10),
                     if (error != null)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),

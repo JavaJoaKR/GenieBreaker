@@ -457,17 +457,40 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     onPressed: action,
     child: Text(title),
   );
-  Widget toolbar(List<Widget> children) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: SingleChildScrollView(
+  Widget toolbar(List<Widget> children, {String? status}) {
+    final actions = SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          for (final child in children) Padding(padding: const EdgeInsets.only(right: 10), child: child),
+          for (final child in children) Padding(padding: const EdgeInsets.only(right: 6), child: child),
         ],
       ),
-    ),
-  );
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: status == null || status.isEmpty
+          ? actions
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final note = Text(status, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: muted));
+                if (constraints.maxWidth < 540) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [actions, const SizedBox(height: 4), note],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(flex: 3, child: actions),
+                    const SizedBox(width: 6),
+                    Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: note)),
+                  ],
+                );
+              },
+            ),
+    );
+  }
   Widget scroll(List<Widget> children) => SingleChildScrollView(
     key: PageStorageKey(tab),
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
@@ -508,40 +531,47 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           : Icons.bluetooth_rounded,
     );
     Widget group(String title, List<Map> list) => Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(panelRadius)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('$title  ·  ${list.length}', style: const TextStyle(fontSize: 18)),
-          const SizedBox(height: 14),
-          if (list.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Text('표시할 기기가 없습니다', style: TextStyle(color: muted)),
+          const SizedBox(height: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (list.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Text('표시할 기기가 없습니다', style: TextStyle(color: muted)),
+                    ),
+                  ...list.map(device),
+                ],
+              ),
             ),
-          ...list.map(device),
+          ),
         ],
       ),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(widget.data['status'] as String? ?? '', style: const TextStyle(color: muted)),
-        const SizedBox(height: 16),
         toolbar([
           button('bt:scan', widget.data['searching'] == true ? '검색 중지' : '기기 검색', () => call('scan')),
           if (actions.contains('bt:permission'))
             button('bt:permission', '권한 허용', () => call('permission')),
           if (actions.contains('bt:power')) button('bt:power', '블루투스 켜기', () => call('power')),
-        ]),
+        ], status: widget.data['status'] as String?),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: SingleChildScrollView(child: group('내 기기', registered))),
-              const SizedBox(width: 16),
-              Expanded(child: SingleChildScrollView(child: group('새 기기', nearby))),
+              Expanded(child: group('내 기기', registered)),
+              const SizedBox(width: 8),
+              Expanded(child: group('새 기기', nearby)),
             ],
           ),
         ),
@@ -552,6 +582,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   Widget apps() {
     final appData = widget.data['apps'] as Map? ?? {};
     final items = (appData['items'] as List? ?? []).cast<Map>();
+    final status = appData['status'] as String?;
     final shelf = appRows(items, columns);
     rows = [
       ['apps:filter', 'apps:view'],
@@ -563,9 +594,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         toolbar([
           button('apps:filter', appData['duals'] == true ? '모든 앱' : '내 듀얼앱', () => call('appFilter')),
           button('apps:view', '보기 설정', () => call('appView')),
-        ]),
-        Text(appData['status'] as String? ?? '', style: const TextStyle(color: muted)),
-        const SizedBox(height: 14),
+        ], status: status == '앱을 선택해 듀얼앱을 만드세요' ? null : status),
         Expanded(
           child: items.isEmpty
               ? Center(
@@ -820,7 +849,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     return scroll([
       toolbar([button('storage:refresh', '새로고침', loadStorage)]),
       StorageSummary(storage),
-      const SizedBox(height: 18),
+      const SizedBox(height: 10),
       for (final item in [
         ('apks', '듀얼앱 설치파일', 'apkSize'),
         ('updates', '업데이트 다운로드', 'updateSize'),
@@ -855,7 +884,10 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       onKeyEvent: key,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          columns = ((constraints.maxWidth - 240) / 220).floor().clamp(1, 5);
+          final compact = constraints.maxWidth < 840 || constraints.maxHeight < 460;
+          final contentWidth = constraints.maxWidth - ShellFrame.railWidth(compact) -
+              ShellFrame.gutter(compact) * 3;
+          columns = (contentWidth / 200).floor().clamp(1, 6);
           Widget content;
           switch (tab) {
             case 'bluetooth':
@@ -988,7 +1020,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           return ShellFrame(
             tab: section,
             version: widget.data['version'] as String? ?? '',
-            compact: constraints.maxWidth < 840 || constraints.maxHeight < 460,
+            compact: compact,
             node: node,
             sidebarScope: sidebarScope,
             contentScope: contentScope,

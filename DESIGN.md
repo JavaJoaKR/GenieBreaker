@@ -4,7 +4,7 @@ A compact Android TV utility operated by a directional remote. Maintain the
 existing navy/blue identity. This is a migration and polish of the existing
 approved product direction, not a new visual-direction selection exercise.
 Design guidance: qiaomu-design (existing-direction craft and functional UI path).
-Visual restraint 3/10, motion 1/10, density 6/10.
+Visual restraint 3/10, motion 1/10, density 8/10.
 
 ## Functional contract
 
@@ -25,7 +25,8 @@ Android permission, pairing, picker and installer screens remain system-owned.
   shadows reserved for modal depth. Translate to existing navy tokens; copy no
   proprietary typography or brand marks.
 - Korean system fonts avoid remote font requests and additional APK font assets.
-  Headings 24–30; rows 17; metadata 12; 4px component / 8px section rhythm.
+  Headings 24–27; rows 17; metadata 12. Halve prior explicit radii:
+  tiles and action buttons 5, highlights inset 6, panels 7, rail 8, modals 9.
 - Whole application rendered at 0.90 of its previous logical size, with matching
   viewport and hit testing. This never alters Android's global density setting.
 - Five deliberate details: full focus outline, distinct selected fill, persistent
@@ -36,14 +37,18 @@ Android permission, pairing, picker and installer screens remain system-owned.
 
 ## Layout and interaction
 
-- A compact navigation rail anchors the six screens. Its footer shows the installed version. Content headers can show a live item count or scan state.
-- Full-height fixed sidebar; independently scrollable content. Six tabs:
-  Bluetooth, apps, shortcuts, files, storage, settings.
+- A 146–174dp navigation rail and 10–14dp outer gutters reserve most of the
+  viewport for content. Its footer shows the installed version. Content headers
+  can show a live item count or scan state.
+- Eight tabs: Bluetooth, apps, shortcuts, files, storage, mapping, startup and
+  settings. Keep navigation and controls visible while each result list scrolls.
 - Up/Down in sidebar stays there. Right opens the chosen tab and restores its last
   attached content focus. All edges clamp; no wrapping or diagonal list jumps.
-- Bluetooth lists maintain their own columns even when lengths differ. Async
-  names update keyed rows without replacing the focused identity.
-- App grid uses stable package keys, adaptive columns and explicit directions.
+- Bluetooth lists maintain their own columns even when lengths differ. Pinned
+  counts and compact rows give devices the remaining height. Async names update
+  keyed rows without replacing the focused identity.
+- Toolbars share a row with status at TV widths. The app grid determines its
+  columns from the available content width and keeps stable package keys.
 - Explorer provides connected-storage roots, folder navigation, sort, refresh,
   mkdir, copy, cut/paste, rename, delete, open/install and local details. Each row
   has a separately focusable file-actions button. Down from any toolbar action
