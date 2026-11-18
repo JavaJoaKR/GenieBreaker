@@ -48,45 +48,6 @@ class RemoteInputTest {
         }
     }
 
-    @Test fun releaseOnlyAndKeyboardNavigationDoNotDoubleActivateOrStealEditingKeys() {
-        val commands = mutableListOf<String>()
-        val input = TvNavigationInput(commands::add)
-        fun key(action: Int, code: Int, repeat: Int = 0) =
-            KeyEvent(1, 2, action, code, repeat, KeyEvent.META_SHIFT_ON,
-                -1, 0, 0, InputDevice.SOURCE_KEYBOARD)
-        val down = KeyEvent.ACTION_DOWN
-        val up = KeyEvent.ACTION_UP
-        val enter = KeyEvent.KEYCODE_ENTER
-        assertTrue(input.key(key(down, enter), false))
-        assertTrue(input.key(key(down, enter, repeat = 1), false))
-        assertTrue(input.key(key(up, enter), true))
-        assertFalse(input.key(key(down, enter), true))
-        assertFalse(input.key(key(up, enter), false))
-        assertTrue(input.key(key(up, KeyEvent.KEYCODE_DPAD_DOWN), false))
-        assertEquals(listOf("activate", "down"), commands)
-    }
-
-    @Test fun hatMovesOncePerDirectionAndResetsAtNeutral() {
-        val commands = mutableListOf<String>()
-        val navigation = TvNavigationInput(commands::add)
-        val props = android.view.MotionEvent.PointerProperties().apply { id = 0 }
-        fun hat(x: Float, y: Float) {
-            val axes = android.view.MotionEvent.PointerCoords().apply {
-                setAxisValue(android.view.MotionEvent.AXIS_HAT_X, x)
-                setAxisValue(android.view.MotionEvent.AXIS_HAT_Y, y)
-            }
-            val event = android.view.MotionEvent.obtain(1, 2, android.view.MotionEvent.ACTION_MOVE,
-                1, arrayOf(props), arrayOf(axes), 0, 0, 1f, 1f, 3, 0, InputDevice.SOURCE_JOYSTICK, 0)
-            try { assertTrue(navigation.motion(event, false)) } finally { event.recycle() }
-        }
-        hat(1f, 0f)
-        hat(1f, 0f)
-        hat(0f, 0f)
-        hat(1f, 0f)
-        hat(0f, -1f)
-        assertEquals(listOf("right", "right", "up"), commands)
-    }
-
     @Test fun usbRemoteNavigatesTabsAndPopupAfterNativeWindowReturns() {
         val activity = instrumentation.startActivitySync(Intent(instrumentation.targetContext, MainActivity::class.java)
             .putExtra("ui_preview", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity

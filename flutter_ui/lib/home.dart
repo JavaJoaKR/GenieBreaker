@@ -13,6 +13,12 @@ import 'tv_theme.dart';
 
 typedef _Folder = ({String path, String name});
 
+class _HomeFocusNode extends FocusNode {
+  _HomeFocusNode(this.id) : super(debugLabel: id);
+
+  final String id;
+}
+
 /// Stable focus identities and explicit arrows keep async device/app updates from stealing focus.
 class AppHome extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -46,8 +52,12 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   String? modalOpener;
   final pendingKeys = <LogicalKeyboardKey>[];
   List<List<String>> rows = [];
-  FocusNode node(String id) => nodes.putIfAbsent(id, () => FocusNode(debugLabel: id));
-  String? get focused => FocusManager.instance.primaryFocus?.debugLabel;
+  FocusNode node(String id) => nodes.putIfAbsent(id, () => _HomeFocusNode(id));
+  String? get focused {
+    // Flutter omits debugLabel in release builds. Navigation needs a runtime ID.
+    final current = FocusManager.instance.primaryFocus;
+    return current is _HomeFocusNode && identical(nodes[current.id], current) ? current.id : null;
+  }
   bool get onSidebar => focused?.startsWith('nav:') == true;
   bool get acceptsFocus => mounted && !widget.obscured && ModalRoute.of(context)?.isCurrent == true;
   @override

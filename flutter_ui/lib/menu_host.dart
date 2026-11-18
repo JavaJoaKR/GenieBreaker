@@ -121,21 +121,11 @@ class _GeniePageState extends State<GeniePage> {
   }
 
   final menuScope = FocusScopeNode(debugLabel: 'menu-scope');
-  bool editingText = false;
-
-  void reportTextFocus() {
-    final context = FocusManager.instance.primaryFocus?.context;
-    final editing = context?.findAncestorStateOfType<EditableTextState>() != null;
-    if (editing == editingText) return;
-    editingText = editing;
-    bridge.invokeMethod<void>('remoteEditing', editing);
-  }
 
   @override
   void initState() {
     super.initState();
     FocusManager.instance.addEarlyKeyEventHandler(recoverMenuFocus);
-    FocusManager.instance.addListener(reportTextFocus);
     bridge.setMethodCallHandler((call) async {
       if (!mounted) return;
       if (call.method == 'shell') {
@@ -175,7 +165,6 @@ class _GeniePageState extends State<GeniePage> {
   @override
   void dispose() {
     bridge.setMethodCallHandler(null);
-    FocusManager.instance.removeListener(reportTextFocus);
     FocusManager.instance.removeEarlyKeyEventHandler(recoverMenuFocus);
     menuScope.dispose();
     for (final node in focusNodes.values) {

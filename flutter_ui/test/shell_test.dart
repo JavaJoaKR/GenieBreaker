@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:genie_ui/home.dart';
 import 'package:genie_ui/main.dart';
 import 'package:genie_ui/tv_dialogs.dart';
 
@@ -404,7 +405,7 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(choices, [2]);
   });
 
-  testWidgets('Android remote commands move and activate the foreground control', (tester) async {
+  testWidgets('Android remote navigation works without debug labels and respects foreground dialogs', (tester) async {
     final calls = <String>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return shell();
@@ -422,11 +423,19 @@ void main() {
 
     await tester.pumpWidget(const GenieUI());
     await tester.pumpAndSettle();
-    expect(focus, 'nav:bluetooth');
+    final home = tester.state<AppHomeState>(find.byType(AppHome));
+    void clearDebugLabels() {
+      for (final node in home.nodes.values) {
+        node.debugLabel = null;
+      }
+    }
+    clearDebugLabels();
+    expect(home.focused, 'nav:bluetooth');
     await remote('down');
     await remote('down');
     await remote('right');
-    expect(focus, 'shortcut:apps');
+    clearDebugLabels();
+    expect(home.focused, 'shortcut:apps');
     await remote('activate');
     expect(calls.where((call) => call == 'appSettings'), hasLength(1));
 
@@ -437,7 +446,7 @@ void main() {
     await remote('activate');
     expect(find.text('계속하시겠습니까?'), findsNothing);
     expect(await dialog, true);
-    expect(focus, 'shortcut:apps');
+    expect(home.focused, 'shortcut:apps');
     expect(calls.where((call) => call == 'appSettings'), hasLength(1));
   });
 
