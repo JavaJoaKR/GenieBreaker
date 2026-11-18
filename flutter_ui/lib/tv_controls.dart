@@ -13,7 +13,7 @@ List<TvAction> mappingActions(Map state) => [
     '리모컨 접근성 서비스',
     state['mappingActive'] == true ? '사용 중 · 접근성 설정 열기' : '접근성에서 GenieBreaker 버튼 맵핑을 켜세요',
     Icons.accessibility_new_rounded,
-    'accessibility',
+    'remoteAccessibility',
   ),
   const TvAction(
     'mapping:add',

@@ -895,6 +895,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
               rows = [
                 ['shortcut:apps'],
                 ['shortcut:accessibility'],
+                ['shortcut:remote-accessibility'],
                 ['shortcut:home'],
               ];
               content = scroll([
@@ -911,6 +912,15 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   () => call('accessibility'),
                   subtitle: '리모컨 서비스와 접근성 기능을 설정합니다',
                   icon: Icons.accessibility_new_rounded,
+                ),
+                tile(
+                  'shortcut:remote-accessibility',
+                  '리모컨 접근성 서비스',
+                  () => call('remoteAccessibility'),
+                  subtitle: widget.data['controls']?['mappingActive'] == true
+                      ? 'GenieBreaker 버튼 맵핑 · 켜짐'
+                      : 'GenieBreaker 버튼 맵핑 · 꺼짐',
+                  icon: Icons.gamepad_outlined,
                 ),
                 tile(
                   'shortcut:home',
