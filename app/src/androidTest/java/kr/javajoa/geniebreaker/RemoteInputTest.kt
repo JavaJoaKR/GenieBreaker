@@ -80,8 +80,9 @@ class RemoteInputTest {
             awaitMenu(activity, "버튼 추가")
             awaitFocus(activity, "item-0")
             instrumentation.runOnMainSync {
-                assertTrue(activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, red)))
-                assertTrue(activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, red)))
+                val down = SystemClock.uptimeMillis()
+                assertTrue(activity.dispatchKeyEvent(KeyEvent(down, down, KeyEvent.ACTION_DOWN, red, 0)))
+                assertTrue(activity.dispatchKeyEvent(KeyEvent(down, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, red, 0)))
             }
             awaitMenu(activity, null)
             assertTrue(prefs.getBoolean("buttonRegistered.$red", false))
