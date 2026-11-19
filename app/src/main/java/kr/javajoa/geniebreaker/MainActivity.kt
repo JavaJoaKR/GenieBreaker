@@ -64,7 +64,7 @@ class MainActivity : FlutterActivity() {
                 if (!appLock.locked) apps.refresh()
                 return
             }
-            if (call.method == "unlockPin") {
+            if (call.method == "unlockApp") {
                 val unlocked = resumed && hasWindowFocus() && appLock.unlock(call.arguments as? String ?: "")
                 result.success(unlocked)
                 if (unlocked) {
@@ -81,9 +81,8 @@ class MainActivity : FlutterActivity() {
             if (menus?.handle(call, result) == true || files.handle(call, result)) return
 
             when (call.method) {
-                "setPin", "disablePin" -> {
-                    val saved = if (call.method == "setPin") appLock.setPin(call.arguments as? String ?: "")
-                        else appLock.disable()
+                "enableLock", "disableLock" -> {
+                    val saved = if (call.method == "enableLock") appLock.enable() else appLock.disable()
                     result.success(saved)
                     publish()
                 }
@@ -113,7 +112,6 @@ class MainActivity : FlutterActivity() {
             "diagnostics" -> showDiagnostics()
             "appSettings" -> openAppSettings()
             "accountSettings" -> showAccountSettings()
-            "addAccount" -> showAddAccount()
             "tvUpdateSettings" -> {
                 if (!openTvUpdateSettings(this)) {
                     TvMenus.notice(this, "TV 설정의 ‘정보’에서 시스템 업데이트를 확인하세요.")
@@ -183,8 +181,8 @@ class MainActivity : FlutterActivity() {
     private fun snapshot(): Map<String, Any> = if (appLock.locked) {
         mapOf("shell" to true, "locked" to true, "version" to BuildConfig.VERSION_NAME)
     } else bluetooth.snapshot() +
-        mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME,
-            "apps" to apps.snapshot(), "update" to updateLabel, "controls" to controls.snapshot(), "pinEnabled" to appLock.enabled) +
+        mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME, "buildCommit" to BuildConfig.BUILD_COMMIT,
+            "apps" to apps.snapshot(), "update" to updateLabel, "controls" to controls.snapshot(), "lockEnabled" to appLock.enabled) +
         (menus?.current()?.let { mapOf("menu" to it) } ?: emptyMap())
 
     private fun publish() { if (!isFinishing && !isDestroyed && ::apps.isInitialized) channel?.invokeMethod("shell", snapshot()) }
@@ -236,13 +234,6 @@ class MainActivity : FlutterActivity() {
         if (!openAccountSettings(this)) {
             TvMenus.notice(this, "계정 목록을 바로 열 수 없습니다. TV 설정에서 ‘계정’을 여세요.")
         }
-    }
-    private fun showAddAccount() {
-        if (openAddAccount(this)) return
-        TvMenus.show(
-            this, "계정 추가", listOf("취소", "계정 목록 열기"),
-            "이 TV에서는 계정 목록에서 ‘계정 추가’를 선택하세요."
-        ) { index -> if (index == 1) showAccountSettings() }
     }
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)

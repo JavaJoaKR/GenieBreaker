@@ -35,16 +35,30 @@ internal class RemoteAccessibility(private val context: Context, private val cha
     private val resolver = context.contentResolver
     private var watching = false
     private var observingSettings = false
-    private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val refresh = Runnable {
+        if (watching) {
+            try {
+                changed()
+            } catch (error: RuntimeException) {
+                Diagnostics.record(context, "Accessibility status refresh", error)
+            }
+        }
+    }
+    private val scheduleRefresh: () -> Unit = {
+        handler.removeCallbacks(refresh)
+        handler.post(refresh)
+    }
+    private val observer = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean) {
-            if (watching) changed()
+            if (watching) scheduleRefresh()
         }
     }
 
     fun start() {
         if (watching) return
         watching = true
-        RemoteServiceConnection.addListener(changed)
+        RemoteServiceConnection.addListener(scheduleRefresh)
         for (setting in listOf(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, Settings.Secure.ACCESSIBILITY_ENABLED)) {
             try {
                 resolver.registerContentObserver(Settings.Secure.getUriFor(setting), false, observer)
@@ -58,7 +72,8 @@ internal class RemoteAccessibility(private val context: Context, private val cha
     fun stop() {
         if (!watching) return
         watching = false
-        RemoteServiceConnection.removeListener(changed)
+        RemoteServiceConnection.removeListener(scheduleRefresh)
+        handler.removeCallbacks(refresh)
         if (observingSettings) {
             observingSettings = false
             resolver.unregisterContentObserver(observer)
@@ -68,9 +83,9 @@ internal class RemoteAccessibility(private val context: Context, private val cha
     fun status(): String {
         if (RemoteServiceConnection.connected) return "active"
         return try {
-            val enabled = Settings.Secure.getInt(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1 &&
-                Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-                    .orEmpty().split(':').any { ComponentName.unflattenFromString(it) == component }
+            // During rebind the global bit can lag behind the per-service selection.
+            val enabled = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+                .orEmpty().split(':').any { ComponentName.unflattenFromString(it) == component }
             if (enabled) "connecting" else "off"
         } catch (_: SecurityException) {
             "unknown"

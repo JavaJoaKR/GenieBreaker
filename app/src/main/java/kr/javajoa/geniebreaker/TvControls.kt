@@ -91,7 +91,7 @@ internal class TvControls(
             owner,
             "버튼 맵핑 설정",
             listOf("접근성 설정", "GenieBreaker 앱 정보", "닫기"),
-            "접근성에서 ‘GenieBreaker 버튼 맵핑’을 켜세요. OS가 제한된 설정을 표시하면 앱 정보의 더보기에서 ‘제한된 설정 허용’을 확인하세요."
+            "접근성에서 ‘GenieBreaker 버튼 맵핑’을 켜세요. TV가 ‘제한된 설정’을 표시하거나 스위치가 다시 꺼지면 앱 정보의 더보기에서 ‘제한된 설정 허용’을 확인하세요."
         ) { index ->
             when (index) {
                 0 -> accessibility()

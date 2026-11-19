@@ -9,7 +9,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TvControlsTest {
-    @Test fun homeRegistrationAndPinSessionAreOptIn() {
+    @Test fun homeRegistrationAndLockSessionAreOptIn() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val homes = context.packageManager.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
@@ -21,18 +21,49 @@ class TvControlsTest {
         val lock = AppLock(context)
         try {
             assertFalse(lock.enabled)
-            assertFalse(lock.setPin("012"))
-            assertTrue(lock.setPin("02468"))
+            assertTrue(lock.enable())
             assertFalse(lock.locked)
             assertTrue(lock.relock())
             assertTrue(lock.locked)
-            assertFalse(lock.unlock("99999"))
-            assertTrue(lock.unlock("02468"))
+            assertFalse(lock.unlock(BuildConfig.BUILD_COMMIT.dropLast(1)))
+            assertTrue(lock.unlock(BuildConfig.BUILD_COMMIT.uppercase(java.util.Locale.ROOT)))
             assertTrue(lock.relock())
-            assertTrue(lock.unlock(BuildConfig.VERSION_NAME.replace(".", "")))
             assertTrue(AppLock(context).locked)
         } finally {
             assertTrue(lock.disable())
+        }
+    }
+
+    @Test fun legacyLockStaysEnabledAndUsesTheCurrentCommit() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("app_lock", android.content.Context.MODE_PRIVATE)
+        assertTrue(prefs.edit().putString("pin", "legacy-record").commit())
+        val lock = AppLock(context)
+        try {
+            assertTrue(lock.locked)
+            assertTrue(lock.unlock(BuildConfig.BUILD_COMMIT))
+            assertTrue(prefs.getBoolean("enabled", false))
+            assertFalse(prefs.contains("pin"))
+            assertTrue(AppLock(context).locked)
+        } finally {
+            assertTrue(lock.disable())
+        }
+    }
+
+    @Test fun malformedSavedBindingDoesNotBlockOtherButtons() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = tvPreferences(context)
+        val red = KeyEvent.KEYCODE_PROG_RED
+        val green = KeyEvent.KEYCODE_PROG_GREEN
+        assertTrue(prefs.edit().putInt("button.$red", 1).putString("button.$green", "home").commit())
+        val bindings = RemoteBindings(context)
+        try {
+            assertNull(bindings.action(red))
+            assertEquals("home", bindings.action(green))
+            bindings.set(red, "back", null)
+            assertEquals("back", bindings.action(red))
+        } finally {
+            prefs.edit().remove("button.$red").remove("button.$green").apply()
         }
     }
 

@@ -61,10 +61,9 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'homeSettings');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:accounts');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'accountSettings');
-    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:add-account');
-    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'addAccount');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:tv-update');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'tvUpdateSettings');
+    expect(find.text('계정 추가'), findsNothing);
     expect(find.text('넷플릭스 열기'), findsNothing);
     expect(find.text('리모컨 접근성 서비스'), findsNothing);
     await arrow(tester, LogicalKeyboardKey.arrowLeft);
@@ -468,12 +467,35 @@ void main() {
     expect(calls.where((call) => call == 'appSettings'), hasLength(1));
   });
 
-  testWidgets('Locked session hides the shell and accepts a remote PIN with leading zero', (tester) async {
+  testWidgets('Lock enables from settings with one selection', (tester) async {
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      calls.add(call);
+      if (call.method == 'ready') return {...shell(), 'buildCommit': '0Abc42'};
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 8; i++) {
+      await arrow(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(focus, 'nav:settings');
+    expect(find.textContaining('0Abc42'), findsOneWidget);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, 'settings:lock');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(calls.where((call) => call.method == 'enableLock'), hasLength(1));
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('Locked session hides the shell and accepts a six-character commit code', (tester) async {
     String? submitted;
     final messenger = tester.binding.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return shell();
-      if (call.method == 'unlockPin') {
+      if (call.method == 'unlockApp') {
         submitted = call.arguments as String;
         return true;
       }
@@ -491,10 +513,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('GenieBreaker 잠금'), findsOneWidget);
     expect(find.text('블루투스'), findsNothing);
-    await tester.enterText(find.byType(TextField), '0a1111');
+    await tester.enterText(find.byType(TextField), '0AbF19');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(submitted, '01111');
+    expect(submitted, '0AbF19');
   });
 
 }

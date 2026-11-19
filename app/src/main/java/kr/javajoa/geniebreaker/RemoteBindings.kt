@@ -16,7 +16,12 @@ internal val buttonActions = linkedMapOf(
 internal class RemoteBindings(context: Context) {
     private val prefs = tvPreferences(context)
 
-    fun action(key: Int): String? = prefs.getString("button.$key", null)?.takeIf(::validAction)
+    fun action(key: Int): String? = try {
+        prefs.getString("button.$key", null)?.takeIf(::validAction)
+    } catch (_: ClassCastException) {
+        // Ignore a malformed saved value. The user can still replace that binding.
+        null
+    }
 
     fun register(key: Int) {
         prefs.edit().putBoolean("buttonRegistered.$key", true).apply()
