@@ -1,0 +1,85 @@
+name: Build Installer APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'installer/**'
+      - '.github/workflows/installer.yml'
+      - 'development-keystore.base64'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build and verify Installer
+        run: |
+          base64 --decode development-keystore.base64 > release.jks
+          gradle --build-cache -p installer :assembleRelease :lintRelease
+          cp installer/build/outputs/apk/release/geniebreaker-installer-release.apk Installer.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --min-sdk-version 26 --print-certs Installer.apk > installer-signature.txt
+          grep -F 'Signer #1 certificate SHA-256 digest: 220c3aaef3109278f7a8a8efb3baa8b802880a7c15d988fa7a39a30452fbe069' installer-signature.txt
+          entries=$(unzip -Z1 Installer.apk)
+          if grep -q '^lib/' <<< "$entries"; then
+            echo 'Expected an architecture-independent installer.' >&2
+            exit 1
+          fi
+          sha256sum Installer.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Installer
+          path: Installer.apk
+          if-no-files-found: error
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: Installer
+          path: ${{ runner.temp }}/genie-installer
+      - name: Publish Installer.apk to the repository root
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            git diff --exit-code "$GITHUB_SHA" HEAD -- installer .github/workflows/installer.yml development-keystore.base64
+            cp "$RUNNER_TEMP/genie-installer/Installer.apk" Installer.apk
+            git add -f -- Installer.apk
+            if git diff --cached --quiet; then
+              exit 0
+            fi
+            git commit -m 'Publish Installer.apk'
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+          exit 1
