@@ -1,6 +1,5 @@
 plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
 def tvReleaseSmoke = providers.gradleProperty('tvReleaseSmoke').map { it == 'true' }.getOrElse(false)
-def android10Compat = providers.gradleProperty('android10Compat').map { it == 'true' }.getOrElse(false)
 def ciAbiSplits = providers.gradleProperty('ciAbiSplits').map { it == 'true' }.getOrElse(false)
 def ciTvDebug = providers.gradleProperty('ciTvDebug').map { it == 'true' }.getOrElse(false)
 def ciNdkVersion = providers.gradleProperty('ciNdkVersion').orNull
@@ -28,7 +27,6 @@ android {
             ndk {
                 abiFilters 'x86_64'
                 if (!ciTvDebug) abiFilters 'armeabi-v7a'
-                if (android10Compat) abiFilters 'arm64-v8a'
             }
         }
         targetSdk 35
@@ -55,8 +53,7 @@ android {
                 ndk {
                     abiFilters.clear()
                     abiFilters 'armeabi-v7a'
-                    if (tvReleaseSmoke || android10Compat) abiFilters 'x86_64'
-                    if (android10Compat) abiFilters 'arm64-v8a'
+                    if (tvReleaseSmoke) abiFilters 'x86_64'
                 }
             }
         }
@@ -67,8 +64,6 @@ android {
                 enable true
                 reset()
                 include 'armeabi-v7a', 'x86_64'
-                if (android10Compat) include 'arm64-v8a'
-                universalApk android10Compat
             }
         }
     }
@@ -96,7 +91,7 @@ androidComponents {
     }
     onVariants(selector().withBuildType('release')) { variant ->
         // Keep the normal release ARM32 even when the AAR also contains compatibility targets.
-        if (!ciAbiSplits && !android10Compat) variant.packaging.jniLibs.excludes.add('**/arm64-v8a/**')
-        if (!ciAbiSplits && !tvReleaseSmoke && !android10Compat) variant.packaging.jniLibs.excludes.add('**/x86_64/**')
+        if (!ciAbiSplits) variant.packaging.jniLibs.excludes.add('**/arm64-v8a/**')
+        if (!ciAbiSplits && !tvReleaseSmoke) variant.packaging.jniLibs.excludes.add('**/x86_64/**')
     }
 }

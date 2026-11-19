@@ -8,11 +8,7 @@ cp "$release/app-armeabi-v7a-release.apk" "$standard"
 cp "$release/app-x86_64-release.apk" tv-apks/release.apk
 cp app/build/outputs/apk/debug/app-debug.apk tv-apks/debug.apk
 cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk tv-apks/instrumentation.apk
-if [[ "$ANDROID10_COMPAT" == true ]]; then
-  cp "$release/app-universal-release.apk" dist/GenieBreaker-Android10.apk
-fi
-
-python3 - "$standard" "$ANDROID10_COMPAT" <<'PY'
+python3 - "$standard" <<'PY'
 from pathlib import Path
 from sys import argv
 from zipfile import ZipFile
@@ -22,9 +18,6 @@ apks = [
     ("tv-apks/release.apk", {"x86_64"}, ("libapp.so", "libflutter.so")),
     ("tv-apks/debug.apk", {"x86_64"}, ("libflutter.so",)),
 ]
-if argv[2] == "true":
-    apks.append(("dist/GenieBreaker-Android10.apk", {"armeabi-v7a", "arm64-v8a", "x86_64"}, ("libapp.so", "libflutter.so")))
-
 for apk, expected, required in apks:
     with ZipFile(apk) as archive:
         libraries = set(archive.namelist())
@@ -61,4 +54,3 @@ done
     unzip -l "$apk" | awk '/lib\/.*\.so$/ { print $4, $1 }'
   done | tee NATIVE_LIBS.txt
 )
-echo "android10=$ANDROID10_COMPAT" >> "$GITHUB_OUTPUT"

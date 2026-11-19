@@ -10,11 +10,6 @@ on:
       - '**/*.md'
       - 'docs/**'
   workflow_dispatch:
-    inputs:
-      android10_compat:
-        description: Build and verify the Android 10 compatibility APK
-        type: boolean
-        default: false
 permissions:
   contents: read
 concurrency:
@@ -24,13 +19,10 @@ env:
   BUILD_NUMBER: ${{ github.run_number }}
   FLUTTER_VERSION: '3.35.7'
   ANDROID_NDK_VERSION: '27.3.13750724'
-  ANDROID10_COMPAT: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[android10-compat]')) || (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[android10-compat]')) || (github.event_name == 'workflow_dispatch' && inputs.android10_compat) }}
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    outputs:
-      android10: ${{ steps.package.outputs.android10 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -59,14 +51,12 @@ jobs:
           path: |
             flutter_ui/build/host/outputs/repo
             build-symbols
-          key: genie-aar-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-${{ env.ANDROID10_COMPAT }}-${{ hashFiles('flutter_ui/lib/**', 'flutter_ui/pubspec.yaml', 'flutter_ui/pubspec.lock') }}
+          # Keep the cache key for the existing ARM32 and x64 AARs.
+          key: genie-aar-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-false-${{ hashFiles('flutter_ui/lib/**', 'flutter_ui/pubspec.yaml', 'flutter_ui/pubspec.lock') }}
       - name: Build Flutter AARs
         if: steps.flutter-aar.outputs.cache-hit != 'true'
         working-directory: flutter_ui
-        run: |
-          targets=android-arm,android-x64
-          if [[ "$ANDROID10_COMPAT" == true ]]; then targets+=,android-arm64; fi
-          flutter build aar --no-profile --target-platform "$targets" --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
+        run: flutter build aar --no-profile --target-platform android-arm,android-x64 --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
@@ -76,13 +66,12 @@ jobs:
         run: |
           test -x "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
           base64 --decode development-keystore.base64 > release.jks
-          gradle --build-cache :app:assembleRelease :app:lintRelease -PciAbiSplits=true -Pandroid10Compat="$ANDROID10_COMPAT" || {
+          gradle --build-cache :app:assembleRelease :app:lintRelease -PciAbiSplits=true || {
             cat app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt 2>/dev/null || true
             exit 1
           }
           gradle --build-cache :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest -PciTvDebug=true
       - name: Package and check APKs
-        id: package
         run: bash .github/scripts/package-ci-apks.sh
       - uses: actions/upload-artifact@v4
         with:
@@ -106,34 +95,9 @@ jobs:
     needs: build
     uses: ./.github/workflows/tv-ui.yml
 
-  android10:
-    needs: build
-    if: needs.build.outputs.android10 == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: GenieBreaker-${{ github.run_number }}
-      - name: Enable emulator acceleration
-        run: bash .github/scripts/enable-emulator-acceleration.sh
-      - name: Verify Android 10 compatibility APK
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 29
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash .github/scripts/verify-android10-release.sh
-
   publish:
-    needs: [build, android10]
-    if: >-
-      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-      needs.build.result == 'success' &&
-      (needs.android10.result == 'success' || needs.android10.result == 'skipped')
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -151,7 +115,4 @@ jobs:
           cp "dist/GenieBreaker-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk" dist/GenieBreaker.apk
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
           notes="자동 개발 빌드. 공개 개발용 키로 서명되며 MA4000 실기기 검증 전입니다. [channel:${GITHUB_REF_NAME}]"
-          if [[ "$ANDROID10_COMPAT" == true ]]; then
-            notes+=$'\n\nGenieBreaker-Android10.apk는 Android 10용 임시 호환 빌드입니다. ARM32, ARM64, x86_64를 포함합니다.'
-          fi
           gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "GenieBreaker build ${GITHUB_RUN_NUMBER}" --latest --notes "$notes"
