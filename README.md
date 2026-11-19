@@ -20,7 +20,6 @@ GenieBreaker는 Android TV의 APK 설치와 앱·파일 관리를 지원한다. 
 
 ## 설치
 
-- **설치 프로그램 사용** · [Installer.apk](https://raw.githubusercontent.com/JavaJoaKR/GenieBreaker/main/Installer.apk)를 TV에 설치한다. 앱에서 **최신 버전 설치**를 선택하고 Android의 설치 확인 화면에서 진행한다.
-- **APK 파일로 설치** · [최신 APK](https://github.com/JavaJoaKR/GenieBreaker/releases/latest/download/GenieBreaker.apk)를 내려받아 TV에서 연다.
-- **Downloader로 설치** · TV의 Downloader 앱에 코드 `1047463`을 입력한 뒤 다운로드한 APK를 설치한다.
+- **설치 프로그램으로 설치** · [Installer.apk](https://github.com/JavaJoaKR/GenieBreaker/raw/refs/heads/main/Installer.apk)를 받거나 TV의 Downloader에 코드 `3523959`를 입력한다. 설치 프로그램을 연 뒤 **최신 버전 설치**를 선택한다.
+- **GenieBreaker APK로 직접 설치** · [최신 APK](https://github.com/JavaJoaKR/GenieBreaker/releases/latest/download/GenieBreaker.apk)를 받거나 TV의 Downloader에 코드 `1047463`을 입력한 뒤 APK를 설치한다.
 - [이전 버전과 변경 내역](https://github.com/JavaJoaKR/GenieBreaker/releases)
