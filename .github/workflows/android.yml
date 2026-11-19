@@ -5,14 +5,10 @@ on:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
-      - 'tv-device-info/**'
-      - '.github/workflows/tv-device-info.yml'
   pull_request:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
-      - 'tv-device-info/**'
-      - '.github/workflows/tv-device-info.yml'
   workflow_dispatch:
     inputs:
       android10_compat:
@@ -31,7 +27,6 @@ env:
   ANDROID10_COMPAT: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[android10-compat]')) || (github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[android10-compat]')) || (github.event_name == 'workflow_dispatch' && inputs.android10_compat) }}
 jobs:
   build:
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[device-info-only]')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
