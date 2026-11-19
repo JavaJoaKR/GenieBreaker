@@ -71,7 +71,9 @@ private fun isRemoteSource(source: Int): Boolean =
 
 internal fun isRemoteInput(event: KeyEvent): Boolean = isRemoteSource(event.source) ||
     event.device?.let { device ->
-        isRemoteSource(device.sources) || device.keyboardType == InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC
+        // The virtual keyboard advertises remote-capable sources for injected events.
+        !device.isVirtual &&
+            (isRemoteSource(device.sources) || device.keyboardType == InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC)
     } == true
 
 private fun isRemoteShortcutScan(scan: Int): Boolean =
