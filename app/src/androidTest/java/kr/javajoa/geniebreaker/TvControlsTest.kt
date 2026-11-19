@@ -69,7 +69,8 @@ class TvControlsTest {
         binding = "back"
         assertTrue(press(event(KeyEvent.ACTION_DOWN, key)))
         assertTrue(press(event(KeyEvent.ACTION_UP, key, flags = KeyEvent.FLAG_CANCELED)))
-        for (reserved in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_VOLUME_UP))
+        for (reserved in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_A,
+            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_VOICE_ASSIST))
             assertFalse(press(event(KeyEvent.ACTION_DOWN, reserved)))
         assertEquals(listOf("home"), actions)
     }
@@ -89,6 +90,8 @@ class TvControlsTest {
     @Test fun foregroundCaptureHandlesVendorKeyAndReleasesOwnership() {
         val custom = 779
         val appShortcut = KeyEvent.KEYCODE_FEATURED_APP_1
+        val mediaShortcut = KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD
+        val extraButton = KeyEvent.KEYCODE_BUTTON_16
         val captured = mutableListOf<Int>()
         RemoteCapture.choose = { code -> captured.add(code); true }
         try {
@@ -96,13 +99,17 @@ class TvControlsTest {
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = 398)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, appShortcut)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, mediaShortcut)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, extraButton)))
             RemoteCapture.choose = null
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom, repeat = 1)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, custom)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_UNKNOWN, scan = 398)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, appShortcut)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, mediaShortcut)))
+            assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, extraButton)))
             assertFalse(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom)))
-            assertEquals(listOf(custom, key, appShortcut), captured)
+            assertEquals(listOf(custom, key, appShortcut, mediaShortcut, extraButton), captured)
         } finally { RemoteCapture.choose = null }
     }
     @Test fun remoteScanBindingRunsOnReleaseAndPreservesSystemAndKeyboardInput() {
@@ -121,7 +128,12 @@ class TvControlsTest {
         assertTrue(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = scan)))
         assertTrue(actions.isEmpty())
         assertTrue(press(event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_UNKNOWN, scan = scan)))
-        assertEquals(listOf(binding), actions)
+        val oemScan = 0x2e8
+        fun hdmi(action: Int) = event(action, KeyEvent.KEYCODE_UNKNOWN, scan = oemScan, source = InputDevice.SOURCE_HDMI)
+        assertTrue(press(hdmi(KeyEvent.ACTION_DOWN)))
+        assertTrue(press(hdmi(KeyEvent.ACTION_UP)))
+        assertFalse(press(hdmi(KeyEvent.ACTION_UP)))
+        assertEquals(listOf(binding, 0x10000 + oemScan), actions)
     }
     @Test fun startupSelectionSkipsCurrentBootAndHandsOffOnceOnNextBoot() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

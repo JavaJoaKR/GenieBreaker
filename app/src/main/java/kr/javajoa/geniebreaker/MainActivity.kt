@@ -177,7 +177,6 @@ class MainActivity : FlutterActivity() {
             }
             if (event.action == KeyEvent.ACTION_UP) return true
         }
-        if (!appLock.locked) controls.showUnsupportedButton(event)
         return super.dispatchKeyEvent(event)
     }
 

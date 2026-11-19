@@ -37,13 +37,15 @@ class RemoteInputTest {
         assertEquals("Direction and OK must activate exactly the requested row", expected, choice.get())
     }
 
-    private fun unmappedRemoteKey(activity: MainActivity, scanCode: Int) {
+    private fun unmappedRemoteKey(activity: MainActivity, scanCode: Int, expectedHandled: Boolean = true,
+                                  source: Int = InputDevice.SOURCE_DPAD) {
         val downTime = SystemClock.uptimeMillis()
         instrumentation.runOnMainSync {
             for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
                 val event = KeyEvent(downTime, SystemClock.uptimeMillis(), action, KeyEvent.KEYCODE_UNKNOWN,
-                    0, 0, -1, scanCode, 0, InputDevice.SOURCE_DPAD)
-                assertTrue("The activity must handle an unmapped remote scan code", activity.dispatchKeyEvent(event))
+                    0, 0, -1, scanCode, 0, source)
+                val handled = activity.dispatchKeyEvent(event)
+                if (expectedHandled) assertTrue("The activity must handle scan code $scanCode", handled)
             }
         }
     }
@@ -55,8 +57,8 @@ class RemoteInputTest {
         val input = ParcelFileDescriptor.AutoCloseOutputStream(pipes[1])
         val prefs = tvPreferences(activity)
         val red = KeyEvent.KEYCODE_PROG_RED
-        val vodScan = 0x273
-        val vodBinding = 0x10000 + vodScan
+        val shortcutScan = 0x2e8
+        val shortcutBinding = 0x10000 + shortcutScan
         fun send(line: String) { input.write((line + "\n").toByteArray()); input.flush() }
         fun press(code: Int) {
             send("""{"id":1,"command":"inject","events":[1,$code,1,0,0,0]}""")
@@ -96,14 +98,18 @@ class RemoteInputTest {
             press(314)
             awaitMenu(activity, "버튼 추가")
             awaitFocus(activity, "item-0")
-            unmappedRemoteKey(activity, vodScan)
-            awaitMenu(activity, "리모컨 버튼 $vodScan")
+            unmappedRemoteKey(activity, 0x274, expectedHandled = false) // Linux KEY_UNMUTE remains with Android.
+            val instructions = "추가할 리모컨 버튼을 누르세요. 전원·볼륨 등 TV가 직접 처리하는 버튼은 입력이 전달되지 않을 수 있습니다."
+            awaitMenuValue(activity, "message", "$instructions\n\n등록할 수 없는 입력 · UNKNOWN (0) / scan 628 / source 201 / meta 0")
+            awaitFocus(activity, "item-0")
+            unmappedRemoteKey(activity, shortcutScan, source = InputDevice.SOURCE_HDMI)
+            awaitMenu(activity, "리모컨 버튼 $shortcutScan")
             awaitFocus(activity, "item-0")
             press(108)
             awaitFocus(activity, "item-1")
             press(314)
             awaitMenu(activity, null)
-            assertEquals("home", prefs.getString("button.$vodBinding", null))
+            assertEquals("home", prefs.getString("button.$shortcutBinding", null))
 
             val choice = AtomicInteger(-1)
             instrumentation.runOnMainSync {
@@ -130,8 +136,8 @@ class RemoteInputTest {
             )).use { it.readBytes() }
             throw error
         } finally {
-            prefs.edit().remove("buttonRegistered.$red").remove("buttonRegistered.$vodBinding")
-                .remove("button.$vodBinding").remove("buttonLabel.$vodBinding").apply()
+            prefs.edit().remove("buttonRegistered.$red").remove("buttonRegistered.$shortcutBinding")
+                .remove("button.$shortcutBinding").remove("buttonLabel.$shortcutBinding").apply()
             input.close()
             pipes[0].close()
             instrumentation.runOnMainSync { activity.finish() }
