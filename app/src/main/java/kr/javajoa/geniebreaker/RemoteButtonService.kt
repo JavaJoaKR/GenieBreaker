@@ -13,6 +13,15 @@ class RemoteButtonService : AccessibilityService() {
     private val presses = ButtonPresses<String>()
     private val handler = Handler(Looper.getMainLooper())
     private val bindings by lazy { RemoteBindings(this) }
+    private val prefs by lazy { tvPreferences(this) }
+    private val homeShortcut = HomeShortcut(handler,
+        enabled = { prefs.getBoolean(HOME_SHORTCUT_ENABLED, true) },
+        open = { openGenieBreaker() },
+        reset = {
+            presses.cancelActions()
+            bindings.clear()
+        }
+    )
     private var reportedInputFailure = false
 
     override fun onCreate() {
@@ -31,6 +40,7 @@ class RemoteButtonService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
+        homeShortcut.cancel()
         handler.removeCallbacksAndMessages(null)
         presses.cancelActions()
     }
@@ -46,6 +56,7 @@ class RemoteButtonService : AccessibilityService() {
     }
 
     private fun disconnect() {
+        homeShortcut.cancel()
         handler.removeCallbacksAndMessages(null)
         presses.clear()
         if (RemoteServiceConnection.disconnect(this) && BuildConfig.DEBUG) {
@@ -55,10 +66,12 @@ class RemoteButtonService : AccessibilityService() {
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         return try {
+            homeShortcut.observe(event)
             if (RemoteCapture.handle(event)) return true
             // Return the input decision before dispatching a potentially slow platform action.
-            presses.handle(event, bindings::action) { action -> handler.post { runAction(action) } }
+            presses.handle(event, bindings::actions) { action -> handler.post { runAction(action) } }
         } catch (error: RuntimeException) {
+            homeShortcut.cancel()
             presses.cancelActions()
             if (!reportedInputFailure) {
                 reportedInputFailure = true
@@ -67,6 +80,9 @@ class RemoteButtonService : AccessibilityService() {
             false
         }
     }
+
+    private fun openGenieBreaker(): Boolean =
+        openScreen(this, Intent.makeMainActivity(ComponentName(this, MainActivity::class.java)))
 
     private fun runAction(action: String) {
         val completed = try {
@@ -77,9 +93,7 @@ class RemoteButtonService : AccessibilityService() {
                 "accessibility" -> openAccessibilityScreen(this)
                 else -> {
                     val target = action.removePrefix("app:")
-                    if (target == packageName) {
-                        openScreen(this, Intent.makeMainActivity(ComponentName(this, MainActivity::class.java)))
-                    } else launchPackage(this, target)
+                    if (target == packageName) openGenieBreaker() else launchPackage(this, target)
                 }
             }
         } catch (error: RuntimeException) {

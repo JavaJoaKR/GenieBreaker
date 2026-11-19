@@ -85,10 +85,12 @@ class RemoteInputTest {
             awaitFocus(activity, "item-0")
             instrumentation.runOnMainSync {
                 val down = SystemClock.uptimeMillis()
-                assertTrue(activity.dispatchKeyEvent(KeyEvent(down, down, KeyEvent.ACTION_DOWN, red, 0)))
-                assertTrue(activity.dispatchKeyEvent(KeyEvent(down, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, red, 0)))
+                assertTrue(activity.dispatchKeyEvent(KeyEvent(down, down, KeyEvent.ACTION_DOWN, red,
+                    0, 0, -1, 0, 0, InputDevice.SOURCE_DPAD)))
+                assertTrue(activity.dispatchKeyEvent(KeyEvent(down, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, red,
+                    0, 0, -1, 0, 0, InputDevice.SOURCE_DPAD)))
             }
-            awaitMenu(activity, "빨간색")
+            awaitMenu(activity, "빨간색 · 짧게 누르기")
             awaitFocus(activity, "item-0")
             assertTrue(prefs.getBoolean("buttonRegistered.$red", false))
             assertFalse(prefs.contains("button.$red"))
@@ -99,11 +101,11 @@ class RemoteInputTest {
             awaitMenu(activity, "버튼 추가")
             awaitFocus(activity, "item-0")
             unmappedRemoteKey(activity, 0x274, expectedHandled = false) // Linux KEY_UNMUTE remains with Android.
-            val instructions = "추가할 리모컨 버튼을 누르세요. TV 본체 전원, 음량, 화면 이동 버튼은 기본 조작에 사용됩니다."
+            val instructions = "리모컨 버튼을 짧게 또는 길게 누른 뒤 놓으세요. 전원, 음량, 채널, 숫자 패드, 홈, 화면 조작 버튼은 기본 기능에 사용됩니다."
             awaitMenuValue(activity, "message", "$instructions\n\n이 입력은 현재 매핑할 수 없습니다.\nUNKNOWN (0) / scan 628 / source 201 / meta 0")
             awaitFocus(activity, "item-0")
             unmappedRemoteKey(activity, shortcutScan, source = InputDevice.SOURCE_HDMI)
-            awaitMenu(activity, "리모컨 버튼 $shortcutScan")
+            awaitMenu(activity, "리모컨 버튼 $shortcutScan · 짧게 누르기")
             awaitFocus(activity, "item-0")
             press(108)
             awaitFocus(activity, "item-1")
