@@ -23,6 +23,9 @@ internal class RemoteBindings(context: Context) {
         null
     }
 
+    fun actions(code: Int): ButtonPressActions<String> =
+        ButtonPressActions(action(code), action(holdBindingId(code)))
+
     fun hasAppBinding(packageName: String): Boolean = prefs.all.any { (name, value) ->
         name.startsWith("button.") && value == "app:$packageName" &&
             name.removePrefix("button.").toIntOrNull()?.let { buttonLabel(it) != null } == true
@@ -36,6 +39,14 @@ internal class RemoteBindings(context: Context) {
         val update = prefs.edit().putString("button.$key", action).putString("buttonLabel.$key", label)
         if (action == null) update.remove("buttonRegistered.$key")
         update.apply()
+    }
+
+    fun clear() {
+        val edit = prefs.edit()
+        prefs.all.keys.filter {
+            it.startsWith("button.") || it.startsWith("buttonLabel.") || it.startsWith("buttonRegistered.")
+        }.forEach { edit.remove(it) }
+        edit.apply()
     }
 
     fun rows(): List<Map<String, Any>> {

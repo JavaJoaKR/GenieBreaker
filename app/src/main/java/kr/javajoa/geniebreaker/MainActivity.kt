@@ -118,6 +118,7 @@ class MainActivity : FlutterActivity() {
                 }
             }
             "homeSettings" -> controls.homeSettings()
+            "toggleHomeShortcut" -> controls.toggleHomeShortcut()
             "accessibility" -> controls.accessibility()
             "mappingSettings" -> controls.mappingSettings()
             "chooseButton" -> controls.chooseButton()

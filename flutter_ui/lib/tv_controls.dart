@@ -11,7 +11,7 @@ List<TvAction> mappingActions(Map state) => [
   const TvAction(
     'mapping:add',
     '버튼 추가',
-    '등록할 리모컨 버튼을 누르세요',
+    '짧게 누르기와 길게 누르기를 따로 등록합니다',
     Icons.add_rounded,
     'chooseButton',
   ),

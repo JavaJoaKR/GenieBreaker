@@ -2,11 +2,12 @@ package kr.javajoa.geniebreaker
 
 import android.app.Activity
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.view.KeyEvent
 
 private const val CAPTURE_INSTRUCTIONS =
-    "추가할 리모컨 버튼을 누르세요. TV 본체 전원, 음량, 화면 이동 버튼은 기본 조작에 사용됩니다."
+    "리모컨 버튼을 짧게 또는 길게 누른 뒤 놓으세요. 전원, 음량, 채널, 숫자 패드, 홈, 화면 조작 버튼은 기본 기능에 사용됩니다."
 
 internal class TvControls(
     private val owner: Activity,
@@ -19,15 +20,24 @@ internal class TvControls(
     private val remoteAccessibility = RemoteAccessibility(owner, ::refresh)
     private var capturePage: String? = null
     private var state = emptyMap<String, Any>()
-    private val capture: (Int) -> Boolean = { key ->
-        if (isCapturing()) {
-            capturePage = null
-            bindings.register(key)
-            closeMenu()
-            edit(key)
-            refresh()
-            true
-        } else false
+    private val onBindingsChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == null || key.startsWith("button.") || key.startsWith("buttonRegistered.")) refresh()
+    }
+    private val capture: (Int) -> ButtonPressActions<() -> Unit>? = { code ->
+        val page = capturePage
+        if (page == null || !isCapturing()) null else ButtonPressActions(
+            click = { register(page, code) },
+            hold = { register(page, holdBindingId(code)) }
+        )
+    }
+
+    private fun register(page: String, key: Int) {
+        if (page != capturePage || !isCapturing()) return
+        capturePage = null
+        bindings.register(key)
+        closeMenu()
+        edit(key)
+        refresh()
     }
 
     private fun isCapturing() = capturePage != null && capturePage == pageId() && owner.hasWindowFocus()
@@ -48,16 +58,18 @@ internal class TvControls(
     }
 
     fun resume() {
-        RemoteCapture.choose = capture
+        prefs.registerOnSharedPreferenceChangeListener(onBindingsChanged)
+        RemoteCapture.claim = capture
         RemoteCapture.observeUnclaimed = ::showUnsupportedButton
         remoteAccessibility.start()
         StartupWakeService.restore(owner)
         refresh()
     }
     fun pause() {
+        prefs.unregisterOnSharedPreferenceChangeListener(onBindingsChanged)
         remoteAccessibility.stop()
-        if (RemoteCapture.choose === capture) {
-            RemoteCapture.choose = null
+        if (RemoteCapture.claim === capture) {
+            RemoteCapture.claim = null
             RemoteCapture.observeUnclaimed = null
         }
     }
@@ -68,6 +80,7 @@ internal class TvControls(
         val next = mapOf(
             "mappingStatus" to remoteAccessibility.status(),
             "bindings" to bindings.rows(),
+            "homeShortcutEnabled" to prefs.getBoolean(HOME_SHORTCUT_ENABLED, true),
             "startupName" to prefs.getString("startupLabel", "").orEmpty(),
             "needsOverlay" to (Build.VERSION.SDK_INT >= 29),
             "canStart" to (defaultHome || hasOverlay),
@@ -107,6 +120,11 @@ internal class TvControls(
             }
         }
     }
+    fun toggleHomeShortcut() {
+        prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, !prefs.getBoolean(HOME_SHORTCUT_ENABLED, true)).apply()
+        refresh()
+    }
+
     fun homeSettings() {
         if (!bindings.hasAppBinding(owner.packageName)) {
             TvMenus.show(
@@ -130,7 +148,7 @@ internal class TvControls(
         val existing = bindings.action(key)
         val actions = buttonActions.keys.toList()
         val labels = listOf("앱 실행") + buttonActions.values + listOf("버튼 삭제")
-        TvMenus.show(owner, title, labels, "버튼을 한 번 누를 때 실행할 동작을 선택하세요.", when {
+        TvMenus.show(owner, title, labels, "이 입력에 지정할 동작을 선택하세요.", when {
             existing == null -> -1
             existing.startsWith("app:") -> 0
             else -> actions.indexOf(existing) + 1
