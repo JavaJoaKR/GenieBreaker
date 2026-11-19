@@ -99,22 +99,37 @@ wait_for_remote_connection() {
 
 # The shell input command dispatches at the framework level. A virtual USB remote
 # enters through InputReader and exercises the same accessibility filter as hardware.
-press_red_key() {
-  adb shell uinput - <<'REMOTE'
-{"id":1,"command":"register","name":"Genie QA Remote","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,398]}]}
+press_remote_key() {
+  local key="$1"
+  adb shell uinput - <<REMOTE
+{"id":1,"command":"register","name":"Genie QA Remote","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,398,401]}]}
 {"id":1,"command":"delay","duration":1500}
-{"id":1,"command":"inject","events":[1,398,1,0,0,0]}
+{"id":1,"command":"inject","events":[1,$key,1,0,0,0]}
 {"id":1,"command":"delay","duration":120}
-{"id":1,"command":"inject","events":[1,398,0,0,0,0]}
+{"id":1,"command":"inject","events":[1,$key,0,0,0,0]}
 {"id":1,"command":"delay","duration":300}
 REMOTE
 }
 
 wait_for_remote_connection 'Remapping service connected' 1
-press_red_key
+press_remote_key 398
 wait_for_settings remote
 [[ "$(home_component)" == "$original_home" ]]
 echo 'Mapped red key opened the selected app from the original launcher.'
+
+adb shell appops set "$pkg" SYSTEM_ALERT_WINDOW deny
+adb shell input keyevent KEYCODE_HOME
+press_remote_key 401
+for ((attempt=0; attempt<15; attempt++)); do
+  if adb shell dumpsys activity activities | grep -E "(topResumedActivity|mResumedActivity|ResumedActivity).*$pkg/" >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+adb shell dumpsys activity activities | grep -E "(topResumedActivity|mResumedActivity|ResumedActivity).*$pkg/" >/dev/null
+[[ "$(home_component)" == "$original_home" ]]
+adb shell appops set "$pkg" SYSTEM_ALERT_WINDOW allow
+echo 'Mapped blue key opened GenieBreaker without changing HOME or requiring an overlay.'
 
 connected=$(remote_log_count 'Remapping service connected')
 adb shell input keyevent KEYCODE_HOME
@@ -125,7 +140,7 @@ else
 fi
 wait_for_remote_connection 'Remapping service connected' "$((connected + 1))"
 adb shell input keyevent KEYCODE_HOME
-press_red_key
+press_remote_key 398
 wait_for_settings remote-after-replacement
 echo 'Replacing the installed APK preserved the remote binding and reconnected the enabled service.'
 
@@ -141,7 +156,7 @@ connected=$(remote_log_count 'Remapping service connected')
 adb shell settings put secure enabled_accessibility_services "$services"
 adb shell settings put secure accessibility_enabled 1
 wait_for_remote_connection 'Remapping service connected' "$((connected + 1))"
-press_red_key
+press_remote_key 398
 wait_for_settings remote-reconnect
 echo 'Mapped red key worked after disabling and re-enabling the accessibility service.'
 

@@ -23,6 +23,11 @@ internal class RemoteBindings(context: Context) {
         null
     }
 
+    fun hasAppBinding(packageName: String): Boolean = prefs.all.any { (name, value) ->
+        name.startsWith("button.") && value == "app:$packageName" &&
+            name.removePrefix("button.").toIntOrNull()?.let { buttonLabel(it) != null } == true
+    }
+
     fun register(key: Int) {
         prefs.edit().putBoolean("buttonRegistered.$key", true).apply()
     }

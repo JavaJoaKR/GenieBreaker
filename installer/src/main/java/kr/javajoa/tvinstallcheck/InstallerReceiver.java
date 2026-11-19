@@ -34,24 +34,6 @@ public final class InstallerReceiver extends BroadcastReceiver {
             return;
         }
 
-        String message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
-        String other = intent.getStringExtra(PackageInstaller.EXTRA_OTHER_PACKAGE_NAME);
-        int legacy = intent.getIntExtra("android.content.pm.extra.LEGACY_STATUS", 0);
-        probe.complete(attempt, statusLabel(status) + "\nAndroid 상태 · " + status + " / " + legacy
-            + (message == null ? "" : "\n" + message)
-            + (other == null ? "" : "\n관련 앱 · " + other));
-    }
-
-    private String statusLabel(int status) {
-        switch (status) {
-            case PackageInstaller.STATUS_SUCCESS: return "설치 완료";
-            case PackageInstaller.STATUS_FAILURE_CONFLICT: return "패키지 충돌";
-            case PackageInstaller.STATUS_FAILURE_BLOCKED: return "TV가 설치를 차단했습니다.";
-            case PackageInstaller.STATUS_FAILURE_ABORTED: return "설치 취소";
-            case PackageInstaller.STATUS_FAILURE_STORAGE: return "저장 공간 부족";
-            case PackageInstaller.STATUS_FAILURE_INCOMPATIBLE: return "기기 호환성 문제";
-            case PackageInstaller.STATUS_FAILURE_INVALID: return "유효하지 않은 APK";
-            default: return "설치 실패";
-        }
+        probe.complete(attempt, InstallReport.outcome(intent, status));
     }
 }

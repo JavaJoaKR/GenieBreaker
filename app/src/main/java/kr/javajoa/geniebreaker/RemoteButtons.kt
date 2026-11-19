@@ -3,7 +3,7 @@ package kr.javajoa.geniebreaker
 import android.view.InputDevice
 import android.view.KeyEvent
 
-/** Leave navigation, system power, volume and text input with Android. */
+/** Leave navigation, TV power, volume and text input with Android. */
 private val remoteButtons = linkedMapOf(
     KeyEvent.KEYCODE_PROG_RED to "빨간색", KeyEvent.KEYCODE_PROG_GREEN to "초록색",
     KeyEvent.KEYCODE_PROG_YELLOW to "노란색", KeyEvent.KEYCODE_PROG_BLUE to "파란색",
@@ -12,6 +12,7 @@ private val remoteButtons = linkedMapOf(
     KeyEvent.KEYCODE_LAST_CHANNEL to "이전 채널", KeyEvent.KEYCODE_DVR to "녹화 목록",
     KeyEvent.KEYCODE_BOOKMARK to "즐겨찾기", KeyEvent.KEYCODE_CAPTIONS to "자막",
     KeyEvent.KEYCODE_TV to "TV", KeyEvent.KEYCODE_MENU to "메뉴", KeyEvent.KEYCODE_SETTINGS to "설정",
+    KeyEvent.KEYCODE_AVR_POWER to "AV 리시버 전원",
     KeyEvent.KEYCODE_TV_CONTENTS_MENU to "TV 콘텐츠 메뉴",
     KeyEvent.KEYCODE_TV_MEDIA_CONTEXT_MENU to "TV 미디어 메뉴",
     KeyEvent.KEYCODE_MEDIA_TOP_MENU to "미디어 상위 메뉴", KeyEvent.KEYCODE_TV_TELETEXT to "텔레텍스트",
@@ -48,6 +49,7 @@ private val remoteScanButtons = mapOf(
 
 // Keep scan-based bindings outside the range used by existing Android/vendor key codes.
 private const val SCAN_BINDING_BASE = 0x10000
+private const val SCAN_BACKSPACE = 14
 
 internal fun buttonLabel(code: Int): String? = when {
     code in KeyEvent.KEYCODE_VIDEO_APP_1..KeyEvent.KEYCODE_VIDEO_APP_8 ->
@@ -78,7 +80,7 @@ internal fun isRemoteInput(event: KeyEvent): Boolean = isRemoteSource(event.sour
 
 private fun isRemoteShortcutScan(scan: Int): Boolean =
     // Linux media, program and TV shortcuts, miscellaneous buttons and OEM scan codes.
-    scan == 139 || scan in 148..150 || scan in 163..168 || scan in 183..194 ||
+    scan == SCAN_BACKSPACE || scan == 139 || scan in 148..150 || scan in 163..168 || scan in 183..194 ||
         scan in 200..203 || scan in 207..208 || scan == 226 || scan in 0x100..0x109 ||
         scan in 0x165..0x19c || scan in 0x1b4..0x1ba ||
         scan in 0x26a..0x26b || scan in 0x26e..0x273 || scan in 0x275..0x277 ||
@@ -87,12 +89,15 @@ private fun isRemoteShortcutScan(scan: Int): Boolean =
 private fun buttonCode(event: KeyEvent): Int? {
     val code = event.keyCode
     if (code != KeyEvent.KEYCODE_UNKNOWN) {
-        if (code >= SCAN_BINDING_BASE ||
-            (code in KeyEvent.KEYCODE_F1..KeyEvent.KEYCODE_F12 && !isRemoteInput(event))) return null
+        if (code >= SCAN_BINDING_BASE) return null
+        if ((code == KeyEvent.KEYCODE_AVR_POWER || code in KeyEvent.KEYCODE_F1..KeyEvent.KEYCODE_F12) &&
+            !isRemoteInput(event)) return null
         return code.takeIf { buttonLabel(it) != null }
     }
     val scan = event.scanCode
     if (!isRemoteShortcutScan(scan)) return null
+    // A TV remote can report KEY_BACKSPACE as UNKNOWN. Preserve keyboard Backspace.
+    if (scan == SCAN_BACKSPACE && !event.isFromSource(InputDevice.SOURCE_DPAD)) return null
     // Some firmware exposes shortcut buttons through a physical keyboard device.
     if (!isRemoteInput(event) &&
         event.device?.let { !it.isVirtual && it.supportsSource(InputDevice.SOURCE_KEYBOARD) } != true) return null

@@ -1,6 +1,7 @@
 package kr.javajoa.geniebreaker
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -74,7 +75,12 @@ class RemoteButtonService : AccessibilityService() {
                 "back" -> performGlobalAction(GLOBAL_ACTION_BACK)
                 "apps" -> openAppsScreen(this)
                 "accessibility" -> openAccessibilityScreen(this)
-                else -> launchPackage(this, action.removePrefix("app:"))
+                else -> {
+                    val target = action.removePrefix("app:")
+                    if (target == packageName) {
+                        openScreen(this, Intent.makeMainActivity(ComponentName(this, MainActivity::class.java)))
+                    } else launchPackage(this, target)
+                }
             }
         } catch (error: RuntimeException) {
             Diagnostics.record(this, "Remote launch", error)

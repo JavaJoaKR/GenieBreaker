@@ -117,9 +117,7 @@ class MainActivity : FlutterActivity() {
                     TvMenus.notice(this, "TV 설정의 ‘정보’에서 시스템 업데이트를 확인하세요.")
                 }
             }
-            "homeSettings" -> {
-                if (!openHomeSettings(this)) TvMenus.notice(this, "TV 설정에서 기본 홈 앱을 선택하세요.")
-            }
+            "homeSettings" -> controls.homeSettings()
             "accessibility" -> controls.accessibility()
             "mappingSettings" -> controls.mappingSettings()
             "chooseButton" -> controls.chooseButton()

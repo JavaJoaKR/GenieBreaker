@@ -60,11 +60,11 @@ internal fun openAppDetails(context: Context, pkg: String): Boolean =
 
 internal data class LaunchableApp(val pkg: String, val label: String)
 
-internal fun launchableApps(context: Context): List<LaunchableApp> {
+internal fun launchableApps(context: Context, includeSelf: Boolean = false): List<LaunchableApp> {
     val pm = context.packageManager
     return listOf(Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER)
         .flatMap { pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(it), 0) }
-        .filter { it.activityInfo.exported && it.activityInfo.packageName != context.packageName }
+        .filter { it.activityInfo.exported && (includeSelf || it.activityInfo.packageName != context.packageName) }
         .distinctBy { it.activityInfo.packageName }
         .map { LaunchableApp(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
         .sortedWith(compareBy({ it.label.lowercase() }, { it.pkg }))

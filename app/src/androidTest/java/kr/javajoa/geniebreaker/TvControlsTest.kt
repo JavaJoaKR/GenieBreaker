@@ -84,7 +84,8 @@ class TvControlsTest {
             prefs.putInt("lastBoot", StartupApps.boot(context) - 1)
         }
         assertTrue(prefs
-            .putString("button.$key", "app:$target").putString("buttonLabel.$key", "설정").commit())
+            .putString("button.$key", "app:$target").putString("buttonLabel.$key", "설정")
+            .putString("button.${KeyEvent.KEYCODE_PROG_BLUE}", "app:${context.packageName}").commit())
     }
     @Test fun ownedPressSurvivesRebindAndNeverRunsTwice() {
         val presses = ButtonPresses<String>()
@@ -165,6 +166,44 @@ class TvControlsTest {
         assertTrue(press(hdmi(KeyEvent.ACTION_UP)))
         assertFalse(press(hdmi(KeyEvent.ACTION_UP)))
         assertEquals(listOf(binding, 0x10000 + oemScan), actions)
+    }
+    @Test fun ma4000ShortcutsDoNotClaimKeyboardBackspaceOrTvPower() {
+        val presses = ButtonPresses<Int>()
+        val actions = mutableListOf<Int>()
+        val remote = InputDevice.SOURCE_DPAD or InputDevice.SOURCE_KEYBOARD
+        fun press(input: KeyEvent) = presses.handle(input, { it }, { actions.add(it) })
+
+        for ((key, scan) in listOf(KeyEvent.KEYCODE_UNKNOWN to 14, KeyEvent.KEYCODE_AVR_POWER to 588)) {
+            assertTrue(press(event(KeyEvent.ACTION_DOWN, key, scan = scan, source = remote)))
+            assertTrue(press(event(KeyEvent.ACTION_UP, key, scan = scan, source = remote)))
+        }
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = 14,
+            source = InputDevice.SOURCE_KEYBOARD)))
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL, scan = 14, source = remote)))
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TV_POWER, scan = 588, source = remote)))
+        assertEquals(listOf(0x10000 + 14, KeyEvent.KEYCODE_AVR_POWER), actions)
+    }
+    @Test fun selfLaunchIsAvailableForButtonsAndUnlocksHomeSettings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val pkg = context.packageName
+        val key = KeyEvent.KEYCODE_AVR_POWER
+        val reserved = KeyEvent.KEYCODE_TV_POWER
+        val prefs = tvPreferences(context)
+        val bindings = RemoteBindings(context)
+        assertTrue(launchableApps(context, includeSelf = true).any { it.pkg == pkg })
+        assertFalse(launchableApps(context).any { it.pkg == pkg })
+        try {
+            prefs.edit().putString("button.$reserved", "app:$pkg").commit()
+            bindings.register(key)
+            assertFalse(bindings.hasAppBinding(pkg))
+            bindings.set(key, "app:$pkg", "GenieBreaker")
+            assertTrue(bindings.hasAppBinding(pkg))
+            bindings.set(key, null, null)
+            assertFalse(bindings.hasAppBinding(pkg))
+        } finally {
+            bindings.set(key, null, null)
+            prefs.edit().remove("button.$reserved").commit()
+        }
     }
     @Test fun startupSelectionSkipsCurrentBootAndHandsOffOnceOnNextBoot() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
