@@ -107,6 +107,17 @@ internal class TvControls(
             }
         }
     }
+    fun homeSettings() {
+        if (!bindings.hasAppBinding(owner.packageName)) {
+            TvMenus.show(
+                owner, "GenieBreaker 단축키 필요", listOf("버튼 추가", "닫기"),
+                "홈을 변경하려면 먼저 리모컨 버튼 하나에 ‘앱 실행 → GenieBreaker’를 지정하세요."
+            ) { index -> if (index == 0) chooseButton() }
+            return
+        }
+        if (!openHomeSettings(owner)) TvMenus.notice(owner, "TV 설정에서 기본 홈 앱을 선택하세요.")
+    }
+
     fun chooseButton() {
         TvMenus.show(
             owner, "버튼 추가", listOf("취소"),
@@ -125,7 +136,9 @@ internal class TvControls(
             else -> actions.indexOf(existing) + 1
         }) { index ->
             when {
-                index == 0 -> chooseApp("버튼에 지정할 앱") { pkg, name -> bind(key, "app:$pkg", name) }
+                index == 0 -> chooseApp("버튼에 지정할 앱", includeSelf = true) { pkg, name ->
+                    bind(key, "app:$pkg", name)
+                }
                 index <= actions.size -> bind(key, actions[index - 1], null)
                 else -> bind(key, null, null)
             }
@@ -135,15 +148,15 @@ internal class TvControls(
         bindings.set(key, action, label)
         refresh()
     }
-    private fun chooseApp(title: String, apply: (String, String) -> Unit) {
-        val entries = launchableApps(owner)
+    private fun chooseApp(title: String, includeSelf: Boolean = false, apply: (String, String) -> Unit) {
+        val entries = launchableApps(owner, includeSelf)
         if (entries.isEmpty()) { TvMenus.notice(owner, "실행할 수 있는 앱이 없습니다."); return }
         TvMenus.show(owner, title, entries.map { "${it.label}\n${it.pkg}" }) { i ->
             val (pkg, name) = entries[i]
             apply(pkg, name)
         }
     }
-    fun chooseStartup() = chooseApp("시작 앱 선택", ::selectStartup)
+    fun chooseStartup() = chooseApp("시작 앱 선택", apply = ::selectStartup)
     fun selectStartup(pkg: String, label: String) {
         if (launchIntent(owner, pkg) == null) {
             TvMenus.notice(owner, "실행할 수 없는 앱입니다.")

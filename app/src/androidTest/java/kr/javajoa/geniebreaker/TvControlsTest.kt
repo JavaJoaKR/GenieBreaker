@@ -84,7 +84,8 @@ class TvControlsTest {
             prefs.putInt("lastBoot", StartupApps.boot(context) - 1)
         }
         assertTrue(prefs
-            .putString("button.$key", "app:$target").putString("buttonLabel.$key", "설정").commit())
+            .putString("button.$key", "app:$target").putString("buttonLabel.$key", "설정")
+            .putString("button.${KeyEvent.KEYCODE_PROG_BLUE}", "app:${context.packageName}").commit())
     }
     @Test fun ownedPressSurvivesRebindAndNeverRunsTwice() {
         val presses = ButtonPresses<String>()
@@ -181,6 +182,28 @@ class TvControlsTest {
         assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL, scan = 14, source = remote)))
         assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TV_POWER, scan = 588, source = remote)))
         assertEquals(listOf(0x10000 + 14, KeyEvent.KEYCODE_AVR_POWER), actions)
+    }
+    @Test fun selfLaunchIsAvailableForButtonsAndUnlocksHomeSettings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val pkg = context.packageName
+        val key = KeyEvent.KEYCODE_AVR_POWER
+        val reserved = KeyEvent.KEYCODE_TV_POWER
+        val prefs = tvPreferences(context)
+        val bindings = RemoteBindings(context)
+        assertTrue(launchableApps(context, includeSelf = true).any { it.pkg == pkg })
+        assertFalse(launchableApps(context).any { it.pkg == pkg })
+        try {
+            prefs.edit().putString("button.$reserved", "app:$pkg").commit()
+            bindings.register(key)
+            assertFalse(bindings.hasAppBinding(pkg))
+            bindings.set(key, "app:$pkg", "GenieBreaker")
+            assertTrue(bindings.hasAppBinding(pkg))
+            bindings.set(key, null, null)
+            assertFalse(bindings.hasAppBinding(pkg))
+        } finally {
+            bindings.set(key, null, null)
+            prefs.edit().remove("button.$reserved").commit()
+        }
     }
     @Test fun startupSelectionSkipsCurrentBootAndHandsOffOnceOnNextBoot() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
