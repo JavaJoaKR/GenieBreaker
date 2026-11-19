@@ -4,6 +4,17 @@ def android10Compat = providers.gradleProperty('android10Compat').map { it == 't
 def ciAbiSplits = providers.gradleProperty('ciAbiSplits').map { it == 'true' }.getOrElse(false)
 def ciTvDebug = providers.gradleProperty('ciTvDebug').map { it == 'true' }.getOrElse(false)
 def ciNdkVersion = providers.gradleProperty('ciNdkVersion').orNull
+def buildCommit = providers.environmentVariable('GITHUB_SHA')
+    .orElse(providers.gradleProperty('buildCommit'))
+    .orElse(providers.exec {
+        workingDir rootProject.projectDir
+        commandLine 'git', 'rev-parse', 'HEAD'
+        ignoreExitValue = true
+    }.standardOutput.asText)
+    .get().trim()
+if (!(buildCommit ==~ /[0-9a-fA-F]{6,64}/)) {
+    throw new GradleException('Build from a Git checkout or supply the source commit with -PbuildCommit.')
+}
 android {
     namespace 'kr.javajoa.geniebreaker'
     compileSdk 35
@@ -21,6 +32,7 @@ android {
             }
         }
         targetSdk 35
+        buildConfigField 'String', 'BUILD_COMMIT', "\"${buildCommit.substring(0, 6).toLowerCase(Locale.ROOT)}\""
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
         versionName '0.1.' + (System.getenv('BUILD_NUMBER') ?: '1')
     }

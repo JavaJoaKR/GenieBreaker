@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_shelf.dart';
 import 'file_entries.dart';
-import 'pin_panel.dart';
 import 'platform_bridge.dart';
 import 'popup_panel.dart';
 import 'remote_tile.dart';
@@ -151,33 +150,13 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     }
   }
 
-  Future<String?> _askPin(String title) => showTvDialog<String>(
-    context,
-    (route) => PinPanel(
-      title: title,
-      onCancel: () => Navigator.pop(route),
-      onSubmit: (pin) async {
-        Navigator.pop(route, pin);
-        return true;
-      },
-    ),
-  );
-
-  Future<void> configurePin() async {
-    if (widget.data['pinEnabled'] == true) {
-      final accepted = await confirmAction(context, '앱 잠금 해제', '앱을 열 때 PIN을 묻지 않습니다.', '잠금 끄기');
-      if (mounted && accepted) await call('disablePin');
+  Future<void> configureLock() async {
+    if (widget.data['lockEnabled'] == true) {
+      final accepted = await confirmAction(context, '앱 잠금 해제', '앱을 열 때 잠금 코드를 묻지 않습니다.', '잠금 끄기');
+      if (mounted && accepted) await call('disableLock');
       return;
     }
-    final pin = await _askPin('새 PIN 입력 · 4–8자리');
-    if (!mounted || pin == null) return;
-    final confirmed = await _askPin('새 PIN 다시 입력');
-    if (!mounted || confirmed == null) return;
-    if (pin != confirmed) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN이 일치하지 않습니다.')));
-      return;
-    }
-    await call('setPin', pin);
+    await call('enableLock');
   }
 
   void select(String next, {bool enterContent = false}) {
@@ -875,7 +854,6 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['shortcut:accessibility'],
                 ['shortcut:home'],
                 ['shortcut:accounts'],
-                ['shortcut:add-account'],
                 ['shortcut:tv-update'],
               ];
               content = scroll([
@@ -907,12 +885,6 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   icon: Icons.manage_accounts_outlined,
                 ),
                 tile(
-                  'shortcut:add-account',
-                  '계정 추가',
-                  () => call('addAccount'),
-                  icon: Icons.person_add_alt_1_outlined,
-                ),
-                tile(
                   'shortcut:tv-update',
                   'TV 업데이트 설정',
                   () => call('tvUpdateSettings'),
@@ -930,7 +902,10 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'settings:update',
                   widget.data['update'] as String? ?? '업데이트 확인',
                   () => call('update'),
-                  subtitle: '현재 버전  ${widget.data['version'] ?? '—'}',
+                  subtitle: [
+                    '현재 버전  ${widget.data['version'] ?? '—'}',
+                    if (widget.data['buildCommit'] case final String commit) commit,
+                  ].join(' · '),
                   icon: Icons.system_update_rounded,
                 ),
                 tile(
@@ -943,8 +918,10 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 tile(
                   'settings:lock',
                   '앱 잠금',
-                  configurePin,
-                  subtitle: widget.data['pinEnabled'] == true ? '켜짐' : '꺼짐',
+                  configureLock,
+                  subtitle: widget.data['lockEnabled'] == true
+                      ? '켜짐 · 현재 빌드 커밋 앞 6자리로 해제'
+                      : '꺼짐 · 누르면 잠금 켜기',
                   icon: Icons.lock_outline_rounded,
                 ),
               ]);

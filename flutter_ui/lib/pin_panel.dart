@@ -4,28 +4,16 @@ import 'package:flutter/services.dart';
 import 'tv_focus.dart';
 import 'tv_theme.dart';
 
-/// Numeric PIN entry via the TV keyboard, including physical remote digits.
-class PinPanel extends StatefulWidget {
-  const PinPanel({
-    super.key,
-    required this.title,
-    required this.onSubmit,
-    this.onCancel,
-    this.minimum = 4,
-    this.maximum = 8,
-  });
+class LockCodePanel extends StatefulWidget {
+  const LockCodePanel({super.key, required this.onSubmit});
 
-  final String title;
   final Future<bool> Function(String) onSubmit;
-  final VoidCallback? onCancel;
-  final int minimum;
-  final int maximum;
 
   @override
-  State<PinPanel> createState() => _PinPanelState();
+  State<LockCodePanel> createState() => _LockCodePanelState();
 }
 
-class _PinPanelState extends State<PinPanel> {
+class _LockCodePanelState extends State<LockCodePanel> {
   final input = TextEditingController();
   bool busy = false;
   String? error;
@@ -37,21 +25,24 @@ class _PinPanelState extends State<PinPanel> {
   }
 
   Future<void> submit() async {
-    final pin = input.text;
-    if (busy || pin.length < widget.minimum) return;
-    setState(() => busy = true);
+    final code = input.text;
+    if (busy || code.length != 6) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
     var accepted = false;
     try {
-      accepted = await widget.onSubmit(pin);
+      accepted = await widget.onSubmit(code);
     } catch (_) {
-      if (mounted) setState(() => error = 'PIN을 확인할 수 없습니다.');
+      if (mounted) setState(() => error = '잠금 코드를 확인할 수 없습니다.');
     }
     if (!mounted) return;
     setState(() {
       busy = false;
       if (!accepted) {
         input.clear();
-        error ??= 'PIN이 일치하지 않습니다.';
+        error ??= '잠금 코드가 일치하지 않습니다.';
       }
     });
   }
@@ -71,7 +62,7 @@ class _PinPanelState extends State<PinPanel> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(widget.title, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
+                Text('GenieBreaker 잠금', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 8),
                 Actions(
                   actions: {
@@ -84,15 +75,15 @@ class _PinPanelState extends State<PinPanel> {
                     controller: input,
                     autofocus: true,
                     obscureText: true,
-                    keyboardType: TextInputType.number,
+                    keyboardType: TextInputType.visiblePassword,
                     textInputAction: TextInputAction.done,
                     enableSuggestions: false,
                     autocorrect: false,
                     inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(widget.maximum),
+                      FilteringTextInputFormatter.allow(RegExp('[0-9a-fA-F]')),
+                      LengthLimitingTextInputFormatter(6),
                     ],
-                    decoration: InputDecoration(labelText: 'PIN', errorText: error),
+                    decoration: InputDecoration(labelText: '빌드 커밋 앞 6자리', errorText: error),
                     onChanged: (_) {
                       if (error != null) setState(() => error = null);
                     },
@@ -103,8 +94,6 @@ class _PinPanelState extends State<PinPanel> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    if (widget.onCancel != null)
-                      TextButton(onPressed: widget.onCancel, child: const Text('취소')),
                     FilledButton(onPressed: submit, child: const Text('확인')),
                   ],
                 ),

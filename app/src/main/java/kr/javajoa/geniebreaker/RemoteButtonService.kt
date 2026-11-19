@@ -12,9 +12,17 @@ class RemoteButtonService : AccessibilityService() {
     private val presses = ButtonPresses<String>()
     private val handler = Handler(Looper.getMainLooper())
     private val bindings by lazy { RemoteBindings(this) }
+    private var reportedInputFailure = false
+
+    override fun onCreate() {
+        super.onCreate()
+        // Android may bind the service before the activity is opened after an update.
+        Diagnostics.install(applicationContext)
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        reportedInputFailure = false
         RemoteServiceConnection.connect(this)
         if (BuildConfig.DEBUG) android.util.Log.i("GenieRemoteTest", "Remapping service connected")
     }
@@ -45,9 +53,18 @@ class RemoteButtonService : AccessibilityService() {
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (RemoteCapture.handle(event)) return true
-        // Return the input decision before dispatching a potentially slow platform action.
-        return presses.handle(event, bindings::action) { action -> handler.post { runAction(action) } }
+        return try {
+            if (RemoteCapture.handle(event)) return true
+            // Return the input decision before dispatching a potentially slow platform action.
+            presses.handle(event, bindings::action) { action -> handler.post { runAction(action) } }
+        } catch (error: RuntimeException) {
+            presses.cancelActions()
+            if (!reportedInputFailure) {
+                reportedInputFailure = true
+                handler.post { Diagnostics.record(this, "Remote key input", error) }
+            }
+            false
+        }
     }
 
     private fun runAction(action: String) {
@@ -63,6 +80,12 @@ class RemoteButtonService : AccessibilityService() {
             Diagnostics.record(this, "Remote launch", error)
             false
         }
-        if (!completed) Toast.makeText(this, "지정한 동작을 실행할 수 없습니다", Toast.LENGTH_SHORT).show()
+        if (!completed) {
+            try {
+                Toast.makeText(this, "지정한 동작을 실행할 수 없습니다", Toast.LENGTH_SHORT).show()
+            } catch (error: RuntimeException) {
+                Diagnostics.record(this, "Remote action feedback", error)
+            }
+        }
     }
 }

@@ -40,9 +40,6 @@ internal fun openAccountSettings(context: Context): Boolean =
     openScreen(context, Intent(Settings.ACTION_SYNC_SETTINGS)) ||
         openScreen(context, Intent("android.settings.ACCOUNT_SYNC_SETTINGS"))
 
-internal fun openAddAccount(context: Context): Boolean =
-    openScreen(context, Intent(Settings.ACTION_ADD_ACCOUNT))
-
 internal fun openTvUpdateSettings(context: Context): Boolean {
     // Android TV used this action before it became a public SDK constant.
     val update = Intent("android.settings.SYSTEM_UPDATE_SETTINGS")

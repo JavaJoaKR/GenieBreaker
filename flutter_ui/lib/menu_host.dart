@@ -472,11 +472,8 @@ class _GeniePageState extends State<GeniePage> {
     if (data?['locked'] == true) {
       return Scaffold(
         backgroundColor: canvas,
-        body: PinPanel(
-          title: 'GenieBreaker 잠금',
-          minimum: 1,
-          maximum: 12,
-          onSubmit: (pin) async => await bridge.invokeMethod<bool>('unlockPin', pin) == true,
+        body: LockCodePanel(
+          onSubmit: (code) async => await bridge.invokeMethod<bool>('unlockApp', code) == true,
         ),
       );
     }
