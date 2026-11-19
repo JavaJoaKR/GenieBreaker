@@ -4,7 +4,9 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.view.KeyEvent
-import android.widget.Toast
+
+private const val CAPTURE_INSTRUCTIONS =
+    "추가할 리모컨 버튼을 누르세요. 전원·볼륨 등 TV가 직접 처리하는 버튼은 입력이 전달되지 않을 수 있습니다."
 
 internal class TvControls(
     private val owner: Activity,
@@ -16,13 +18,10 @@ internal class TvControls(
     private val bindings = RemoteBindings(owner)
     private val remoteAccessibility = RemoteAccessibility(owner, ::refresh)
     private var capturePage: String? = null
-    private var captureHint: Toast? = null
     private var state = emptyMap<String, Any>()
     private val capture: (Int) -> Boolean = { key ->
         if (isCapturing()) {
             capturePage = null
-            captureHint?.cancel()
-            captureHint = null
             bindings.register(key)
             closeMenu()
             edit(key)
@@ -33,26 +32,32 @@ internal class TvControls(
 
     private fun isCapturing() = capturePage != null && capturePage == pageId() && owner.hasWindowFocus()
 
-    fun showUnsupportedButton(event: KeyEvent) {
-        if (!isCapturing() || event.action != KeyEvent.ACTION_DOWN || event.repeatCount != 0 ||
-            event.isCanceled || event.keyCode == KeyEvent.KEYCODE_BACK || !isRemoteInput(event)) return
-        captureHint?.cancel()
+    private fun showUnsupportedButton(event: KeyEvent) {
+        val page = capturePage ?: return
+        if (!isCapturing() || event.keyCode == KeyEvent.KEYCODE_BACK || remoteNavigationCommand(event) != null ||
+            (!isRemoteInput(event) && event.isPrintingKey)) return
         val key = KeyEvent.keyCodeToString(event.keyCode).removePrefix("KEYCODE_")
-        captureHint = Toast.makeText(owner, "등록할 수 없는 버튼입니다 ($key / ${event.scanCode}).", Toast.LENGTH_SHORT)
-        captureHint?.show()
+        val source = event.source.toString(16)
+        val modifiers = event.metaState.toString(16)
+        TvMenus.updateMessage(
+            owner, page,
+            "$CAPTURE_INSTRUCTIONS\n\n등록할 수 없는 입력 · $key (${event.keyCode}) / scan ${event.scanCode} / source $source / meta $modifiers"
+        )
     }
 
     fun resume() {
         RemoteCapture.choose = capture
+        RemoteCapture.observeUnclaimed = ::showUnsupportedButton
         remoteAccessibility.start()
         StartupWakeService.restore(owner)
         refresh()
     }
     fun pause() {
         remoteAccessibility.stop()
-        captureHint?.cancel()
-        captureHint = null
-        if (RemoteCapture.choose === capture) RemoteCapture.choose = null
+        if (RemoteCapture.choose === capture) {
+            RemoteCapture.choose = null
+            RemoteCapture.observeUnclaimed = null
+        }
     }
     fun snapshot(): Map<String, Any> = state
     fun refresh() {
@@ -99,7 +104,7 @@ internal class TvControls(
     fun chooseButton() {
         TvMenus.show(
             owner, "버튼 추가", listOf("취소"),
-            "추가할 리모컨 버튼을 누르세요. 전원·볼륨 등 TV가 직접 처리하는 버튼은 입력이 전달되지 않을 수 있습니다."
+            "$CAPTURE_INSTRUCTIONS\n\n특수 버튼 입력 대기 중"
         )
         capturePage = pageId()
     }

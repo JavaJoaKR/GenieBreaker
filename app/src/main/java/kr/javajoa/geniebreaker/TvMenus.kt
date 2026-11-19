@@ -6,7 +6,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.lang.ref.WeakReference
 
 internal class MenuPage(
-    val title: String, val items: List<String> = emptyList(), val message: String = "",
+    val title: String, val items: List<String> = emptyList(), var message: String = "",
     val selected: Int = -1, val action: (Int) -> Unit = {},
     val optionsAction: ((Map<String, Boolean>) -> Unit)? = null,
     var options: Map<String, Boolean> = emptyMap(), var focused: Int = 0, var focusKey: String = "",
@@ -27,12 +27,21 @@ internal object TvMenus {
     fun cloneOptions(owner: Activity, title: String, values: Map<String, Boolean>, action: (Map<String, Boolean>) -> Unit) {
         if (activity.get() === owner) controller?.push(MenuPage("듀얼앱 만들기", message = title, optionsAction = action, options = values))
     }
+    fun updateMessage(owner: Activity, pageId: String, message: String) {
+        if (activity.get() === owner) controller?.updateMessage(pageId, message)
+    }
     fun notice(owner: Activity, text: String) = show(owner, "안내", listOf("닫기"), text)
 }
 
 internal class MenuController(private val activity: Activity, private val publish: (Map<String, Any>) -> Unit, private val dismiss: () -> Unit) {
     private val pages = mutableListOf<MenuPage>()
     fun push(page: MenuPage) { pages.add(page); publish(snapshot()) }
+    fun updateMessage(pageId: String, message: String) {
+        val page = pages.lastOrNull() ?: return
+        if (page.id != pageId || page.message == message) return
+        page.message = message
+        publish(snapshot())
+    }
     fun snapshot(): Map<String, Any> {
         val page = pages.last()
         return mapOf("title" to page.title, "items" to page.items, "message" to page.message,
