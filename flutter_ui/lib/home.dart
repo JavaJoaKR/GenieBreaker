@@ -152,7 +152,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
 
   Future<void> configureLock() async {
     if (widget.data['lockEnabled'] == true) {
-      final accepted = await confirmAction(context, '앱 잠금 해제', '앱을 열 때 잠금 코드를 묻지 않습니다.', '잠금 끄기');
+      final accepted = await confirmAction(context, '앱 잠금 해제', '잠금을 끄면 앱을 바로 열 수 있습니다.', '잠금 끄기');
       if (mounted && accepted) await call('disableLock');
       return;
     }
@@ -217,7 +217,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         setState(
           () => listingError = e is PlatformException && e.message != null
               ? e.message
-              : '폴더를 읽지 못했습니다. 새로고침해 주세요. [GB-UI-0001]',
+              : '폴더를 열 수 없습니다. 목록을 새로고침하세요. [GB-UI-0001]',
         );
       }
       return;
@@ -514,7 +514,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   if (list.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 6),
-                      child: Text('표시할 기기가 없습니다', style: TextStyle(color: muted)),
+                      child: Text('검색 결과가 없습니다', style: TextStyle(color: muted)),
                     ),
                   ...list.map(device),
                 ],
@@ -562,12 +562,12 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
         toolbar([
           button('apps:filter', appData['duals'] == true ? '모든 앱' : '내 듀얼앱', () => call('appFilter')),
           button('apps:view', '보기 설정', () => call('appView')),
-        ], status: status == '앱을 선택해 듀얼앱을 만드세요' ? null : status),
+        ], status: status == '듀얼앱을 만들 원본 앱을 선택하세요' ? null : status),
         Expanded(
           child: items.isEmpty
               ? Center(
                   child: Text(
-                    appData['loading'] == true ? '앱 목록을 불러오는 중입니다' : '표시할 앱이 없습니다. 보기 설정을 확인하세요.',
+                    appData['loading'] == true ? '앱 목록 불러오는 중' : '표시할 앱이 없습니다. 보기 설정에서 목록 범위를 확인하세요.',
                     style: const TextStyle(color: muted),
                   ),
                 )
@@ -652,9 +652,9 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       if (mounted && name != null) await fileAction('rename', path: path, name: name);
     }
     if (action == '삭제') {
-      final warning = entry['directory'] == true ? '안에 있는 파일도 함께 삭제됩니다.' : '삭제한 파일은 복원할 수 없습니다.';
+      final warning = entry['directory'] == true ? '폴더 안의 파일도 함께 삭제됩니다.' : '삭제한 파일은 복원할 수 없습니다.';
       await dialogAction(
-        '삭제할까요?',
+        '삭제 확인',
         "${entry['name']}\n$warning",
         '삭제',
         () => fileAction('delete', path: path),
@@ -691,7 +691,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       for (final e in entries) ['file:${e['path']}', 'more:${e['path']}'],
     ];
     final emptyMessage = files.isEmpty
-        ? '저장소 목록을 불러오는 중입니다'
+        ? '저장소 목록 불러오는 중'
         : _trail.isEmpty
         ? '연결된 저장소가 없습니다'
         : '폴더가 비어 있습니다';
@@ -743,7 +743,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           const Padding(
             padding: EdgeInsets.only(bottom: 12),
             child: Text(
-              '내부 저장소·USB는 저장소 연결에서 폴더 접근을 허용하세요.',
+              '내부 저장소나 USB의 폴더는 ‘저장소 연결’에서 접근을 허용하세요.',
               style: TextStyle(color: muted, fontSize: 12),
             ),
           ),
@@ -779,16 +779,16 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       StorageSummary(storage),
       const SizedBox(height: 10),
       for (final item in [
-        ('apks', '듀얼앱 설치파일', 'apkSize'),
-        ('updates', '업데이트 다운로드', 'updateSize'),
-        ('cache', '임시 캐시', 'cacheSize'),
+        ('apks', '듀얼앱 설치 파일', 'apkSize'),
+        ('updates', '다운로드한 업데이트', 'updateSize'),
+        ('cache', '캐시', 'cacheSize'),
       ])
         tile(
           'storage:${item.$1}',
           '${item.$2}  ·  ${storage[item.$3] ?? '—'}',
           () => dialogAction(
             '${item.$2} 정리',
-            '이 앱이 보관하는 ${item.$2} 파일을 삭제합니다. 설치된 앱은 유지됩니다.',
+            'GenieBreaker에 저장된 ${item.$2} 파일을 삭제합니다. 설치된 앱은 유지됩니다.',
             '정리',
             () async {
               await call('clean', item.$1);
@@ -798,7 +798,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           icon: Icons.cleaning_services_outlined,
         ),
       const SizedBox(height: 12),
-      const Text('정리 작업은 이 앱이 만든 설치파일과 캐시에만 적용됩니다.', style: TextStyle(color: muted)),
+      const Text('정리 작업은 이 앱이 만든 설치 파일과 캐시에만 적용됩니다.', style: TextStyle(color: muted)),
     ]);
   }
 
@@ -861,7 +861,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'shortcut:apps',
                   '앱 목록',
                   () => call('appSettings'),
-                  subtitle: 'Android TV 설정에서 설치된 앱을 관리합니다',
+                  subtitle: 'Android TV의 앱 관리 설정을 엽니다',
                   icon: Icons.apps_rounded,
                 ),
                 tile(
@@ -880,7 +880,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ),
                 tile(
                   'shortcut:accounts',
-                  '장치 계정 목록',
+                  '기기 계정 목록',
                   () => call('accountSettings'),
                   icon: Icons.manage_accounts_outlined,
                 ),
@@ -909,7 +909,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'settings:diagnostics',
                   '문제 기록',
                   () => call('diagnostics'),
-                  subtitle: '기기 안에 저장된 오류 식별 코드',
+                  subtitle: '기기에 저장된 오류 코드를 확인합니다',
                   icon: Icons.info_outline_rounded,
                 ),
                 tile(

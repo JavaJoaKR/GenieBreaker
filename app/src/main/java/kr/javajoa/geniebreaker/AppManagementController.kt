@@ -20,7 +20,7 @@ internal class AppManagementController(
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val pm = activity.packageManager
     private val duals = DualApps(activity.applicationContext)
-    private var status = "앱을 선택해 듀얼앱을 만드세요"
+    private var status = "듀얼앱을 만들 원본 앱을 선택하세요"
     private var allApps = false
     private var onlyDuals = false
     private var busy = false
@@ -31,7 +31,7 @@ internal class AppManagementController(
     private var refreshAgain = false
     private val installState = SessionInstaller.state(activity)
     private val preferences = activity.getSharedPreferences("apk_workshop", Context.MODE_PRIVATE)
-    private fun installStatus() = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "앱을 선택해 듀얼앱을 만드세요"
+    private fun installStatus() = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "듀얼앱을 만들 원본 앱을 선택하세요"
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> ui {
         status = installStatus()
     } }
@@ -56,7 +56,7 @@ internal class AppManagementController(
                     loading = false; changed()
                     if (refreshAgain) { refreshAgain = false; refresh() }
                 }
-            } catch (error: Exception) { ui { loading = false; status = "앱 목록 오류 [${Diagnostics.record(activity, "App shelf", error)}]" } }
+            } catch (error: Exception) { ui { loading = false; status = "앱 목록을 불러오지 못했습니다. [${Diagnostics.record(activity, "App shelf", error)}]" } }
         }
     }
     private fun choose(pkg: PackageInfo) {
@@ -97,9 +97,9 @@ internal class AppManagementController(
         val launchState = when {
             application == null -> "상태 확인 불가"
             !application.enabled -> "사용 중지됨"
-            application.flags and ApplicationInfo.FLAG_SUSPENDED != 0 -> "시스템에서 일시중지됨"
-            launchIntent(activity, pkg.packageName) == null -> "실행 항목 없음"
-            else -> "실행 항목 있음"
+            application.flags and ApplicationInfo.FLAG_SUSPENDED != 0 -> "시스템에서 일시 중지됨"
+            launchIntent(activity, pkg.packageName) == null -> "실행 화면 없음"
+            else -> "실행 화면 확인됨"
         }
         val version = pkg.versionName?.let { " · 버전 $it" }.orEmpty()
         return "설치됨 · $launchState$version"
@@ -116,15 +116,15 @@ internal class AppManagementController(
             "듀얼앱 · ${appStatus(clone)}",
             "듀얼앱 APK · ${if (apkReady) "준비됨" else "없음"}",
             "최근 설치 결과 · ${result?.lineSequence()?.firstOrNull() ?: "기록 없음"}",
-            "‘실행 항목 있음’은 Android가 앱의 실행 화면을 찾았다는 뜻입니다."
+            "‘실행 화면 확인됨’은 Android에서 앱의 실행 화면을 찾았다는 의미입니다."
         ).joinToString("\n")
         val actions = mutableListOf<Pair<String, () -> Unit>>("닫기" to {})
         if (original != null) {
-            actions += "원본 앱 시스템 설정" to {
-                if (!openAppDetails(activity, originalPackage)) notice("원본 앱 설정 화면을 열 수 없습니다.")
+            actions += "원본 앱 설정" to {
+                if (!openAppDetails(activity, originalPackage)) notice("TV의 앱 목록에서 원본 앱의 정보를 여세요.")
             }
         }
-        if (result != null) actions += "설치 결과 자세히" to { notice(result) }
+        if (result != null) actions += "설치 결과 상세 정보" to { notice(result) }
         TvMenus.show(activity, "넷플릭스 듀얼앱 상태", actions.map { it.first }, message) { index ->
             actions[index].second()
         }
@@ -138,7 +138,7 @@ internal class AppManagementController(
         val saved = preferences.getString("options_${pkg.packageName}", null)
         val values = try { val json = JSONObject(saved ?: "{}"); defaults.mapValues { (key, fallback) -> json.optBoolean(key, fallback) } } catch (_: Exception) { defaults }
         val label = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "듀얼앱"
-        val description = if (!netflix) label else "$label · ${pkg.versionName}\n버전에 관계없이 실행 코드를 검사합니다. 원본 앱은 설치·사용 설정 상태로 유지하세요."
+        val description = if (!netflix) label else "$label · ${pkg.versionName}\n설치된 넷플릭스의 실행 코드를 검사합니다. 원본 앱은 설치한 상태에서 사용 설정을 유지하세요."
         TvMenus.cloneOptions(activity, description, values) { chosen ->
             preferences.edit().putString("options_${pkg.packageName}", JSONObject(chosen).toString()).apply()
             createWithOptions(pkg, CloneOptions.from(chosen))
@@ -147,7 +147,7 @@ internal class AppManagementController(
     private fun createWithOptions(pkg: PackageInfo, options: CloneOptions) {
         if (busy) return
         if (Build.VERSION.SDK_INT < 26) { notice("이 기기에서는 듀얼앱을 만들 수 없습니다."); return }
-        busy = true; status = "듀얼앱을 준비하고 있습니다"; changed()
+        busy = true; status = "듀얼앱 생성 중"; changed()
         worker.execute {
             try {
                 val record = duals.build(pkg, options) { progress -> ui { status = progress } }
@@ -169,7 +169,7 @@ internal class AppManagementController(
         try {
             val app = pm.getApplicationInfo(packageName, 0)
             if (app.flags and ApplicationInfo.FLAG_SYSTEM != 0) { notice("시스템 앱은 일반 권한으로 제거할 수 없습니다."); return }
-            TvMenus.show(activity, "앱을 제거할까요?", listOf("취소", "제거 요청"), "${app.loadLabel(pm)}\n이 앱의 데이터도 함께 삭제됩니다.") { choice ->
+            TvMenus.show(activity, "앱 제거 확인", listOf("취소", "제거 요청"), "${app.loadLabel(pm)}\n앱을 제거하면 저장된 데이터도 삭제됩니다.") { choice ->
                 if (choice == 1) try { activity.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))) } catch (error: Exception) { notice("제거 요청 실패: ${error.message}") }
             }
         } catch (error: Exception) { notice("앱 정보를 읽지 못했습니다: ${error.message}") }
@@ -178,7 +178,7 @@ internal class AppManagementController(
         if (Build.VERSION.SDK_INT >= 26 && !pm.canRequestPackageInstalls()) {
             preferences.edit().putString("pending_install", id).apply()
             TvMenus.show(activity, "설치 권한 필요", listOf("취소", "허용 화면"), "이 앱의 ‘알 수 없는 앱 설치’를 허용해야 합니다.") { choice ->
-                if (choice == 1) try { activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))) } catch (error: Exception) { notice(error.message ?: "허용 화면 없음") }
+                if (choice == 1) try { activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))) } catch (error: Exception) { notice(error.message ?: "설치 권한 화면을 열 수 없습니다.") }
                 else preferences.edit().remove("pending_install").apply()
             }
             return
@@ -189,7 +189,7 @@ internal class AppManagementController(
             require(file.isFile)
             val metadata = JSONObject(File(activity.filesDir, "edited/$id.json").readText())
             SessionInstaller.submit(activity, file, metadata.getString("package"))
-            status = "설치 확인을 기다리고 있습니다"
+            status = "TV의 설치 확인 대기 중"
         } catch (error: Exception) { notice("설치 화면을 열지 못했습니다: ${error.message}") }
     }
     fun resume() {
@@ -210,7 +210,7 @@ internal class AppManagementController(
         }
         worker.execute { FileWork.reading { try {
             activity.contentResolver.openOutputStream(uri)?.use { output -> File(activity.filesDir, "edited/$id.apk").inputStream().use { it.copyTo(output) } } ?: error("저장 위치를 열지 못했습니다")
-            ui { notice("APK를 저장했습니다") }
+            ui { notice("APK를 선택한 폴더에 저장했습니다") }
         } catch (error: Exception) { ui { notice("저장 실패: ${error.message}") } } } }
     }
     private fun notice(message: String) { if (!activity.isDestroyed && !activity.isFinishing) TvMenus.notice(activity, message) }

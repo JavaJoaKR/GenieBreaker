@@ -44,7 +44,7 @@ internal class RemoteBindings(context: Context) {
         }.distinct().sorted().mapNotNull { key ->
             val label = buttonLabel(key) ?: return@mapNotNull null
             val action = (values["button.$key"] as? String)?.takeIf(::validAction)
-            val summary = if (action == null) "동작 미지정" else
+            val summary = if (action == null) "지정한 동작 없음" else
                 buttonActions[action] ?: values["buttonLabel.$key"] as? String ?: action.removePrefix("app:")
             mapOf("key" to key, "label" to label, "action" to summary)
         }

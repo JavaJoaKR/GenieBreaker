@@ -36,7 +36,7 @@ class _LockCodePanelState extends State<LockCodePanel> {
     try {
       accepted = await widget.onSubmit(code);
     } catch (_) {
-      if (mounted) setState(() => error = '잠금 코드를 확인할 수 없습니다.');
+      if (mounted) setState(() => error = '잠금 코드 확인에 실패했습니다. 다시 시도하세요.');
     }
     if (!mounted) return;
     setState(() {

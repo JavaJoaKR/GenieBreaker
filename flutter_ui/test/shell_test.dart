@@ -24,7 +24,7 @@ void main() {
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return shell();
-      if (call.method == 'files.list') return {'title': '파일탐색기', 'entries': [], 'writable': false, 'clipboard': ''};
+      if (call.method == 'files.list') return {'title': '파일 탐색기', 'entries': [], 'writable': false, 'clipboard': ''};
       if (call.method == 'storage.list') return {'total': '8 GB', 'free': '4 GB', 'usedFraction': .5};
       return null;
     });
@@ -118,7 +118,7 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'file:local:');
     await arrow(tester, LogicalKeyboardKey.select);
     expect(find.text('상위 폴더'), findsOneWidget);
-    expect(find.text('설치파일 정리'), findsNothing);
+    expect(find.text('설치 파일 정리'), findsNothing);
     await arrow(tester, LogicalKeyboardKey.escape);
     expect(focus, 'file:local:');
     expect(find.text('상위 폴더'), findsNothing);
@@ -274,7 +274,7 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return shell(apps: [
         for (var i = 0; i < 5; i++)
-          {'id': 'p$i', 'name': '긴 이름을 가진 TV 앱 $i', 'detail': i == 0 ? '듀얼앱 사용 중' : ''},
+          {'id': 'p$i', 'name': '긴 이름을 가진 TV 앱 $i', 'detail': i == 0 ? '듀얼앱 설치됨' : ''},
       ]);
       return null;
     });
@@ -316,7 +316,7 @@ void main() {
   testWidgets('A slow folder refresh never steals focus from a later user action', (tester) async {
     final response = Completer<Map<String, dynamic>>();
     var lists = 0;
-    final folder = <String, dynamic>{'title': '파일탐색기', 'entries': [], 'writable': false, 'clipboard': ''};
+    final folder = <String, dynamic>{'title': '파일 탐색기', 'entries': [], 'writable': false, 'clipboard': ''};
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       if (call.method == 'ready') return shell();
       if (call.method == 'files.list') return ++lists == 1 ? folder : response.future;

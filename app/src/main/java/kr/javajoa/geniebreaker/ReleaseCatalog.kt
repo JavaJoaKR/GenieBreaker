@@ -20,6 +20,6 @@ internal object ReleaseCatalog {
                 if (url.startsWith(PREFIX)) candidates += UpdateAsset(version, url)
             }
         }
-        return candidates.maxByOrNull { it.version } ?: error("사용 가능한 main APK 릴리스를 아직 찾지 못했습니다")
+        return candidates.maxByOrNull { it.version } ?: error("설치할 수 있는 공식 APK 릴리스를 찾지 못했습니다")
     }
 }

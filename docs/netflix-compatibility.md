@@ -1,36 +1,27 @@
-# Netflix TV clone startup profile
+# 넷플릭스 TV 듀얼앱 호환성
 
-The app-management clone popup exposes an experimental Netflix option only for
-`com.netflix.ninja`. It defaults on for Netflix TV regardless of version. These are research reference versions, not an allowlist:
+## 적용 범위
 
-| versionName | versionCode | Status |
+앱 관리의 듀얼앱 생성 메뉴에서 `com.netflix.ninja`에 한해 실험적 실행 호환성 옵션을 제공한다. 넷플릭스 TV 앱의 버전과 관계없이 이 옵션을 기본 선택한다. 아래 버전은 조사 기준이며, 적용 여부는 설치된 APK의 검사 결과로 결정한다.
+
+| 버전 이름 | 버전 코드 | 검증 상태 |
 | --- | --- | --- |
-| 13.0.1 build 25028 | 25028 | Preferred upstream target; MA4000 unverified |
-| 13.2.1 build 27207 | 27207 | Experimental; MA4000 unverified |
-| 13.2.2 build 27250 | 27250 | Experimental; MA4000 unverified |
+| 13.0.1 build 25028 | 25028 | 우선 검토 대상. MA4000 실기기 미검증 |
+| 13.2.1 build 27207 | 27207 | 실험 대상. MA4000 실기기 미검증 |
+| 13.2.2 build 27250 | 27250 | 실험 대상. MA4000 실기기 미검증 |
 
-With the option enabled, the original resource package and task affinity are
-preserved and native-library extraction is enabled. The clone declares package
-visibility for the installed, enabled original app, which must remain installed.
-A DEX scan requires exactly one public, non-static, no-argument Runnable.run():void
-method containing the exact startup certificate-failure marker. Only that method
-body is replaced by a void return. Absent/ambiguous markers,
-unexpected method shapes, or oversized DEX files stop generation with an error.
-The resulting DEX is re-read before ARSCLib writes the aligned APK and apksig signs
-and verifies it. Output metadata records effective options and the changed method;
-APK generation never means playback was verified.
+## 생성 조건과 결과
 
-Reference research: https://github.com/ajstrick81/morphe-androidtv-patches
-(Netflix CloneAppPatch and startup certificate-check fingerprint). This is an
-independent implementation using Apache-licensed dexlib2; no upstream GPL source
-or native hook loader is bundled. No ad, household, DRM, subscription, or device
-identity patches are included. Ordinary Netflix account and device support still
-apply. Changing an APK cannot grant Android system privileges.
+호환성 옵션은 원본 리소스 패키지와 `taskAffinity`를 유지하고 네이티브 라이브러리 추출을 활성화한다. 듀얼앱은 설치된 원본 앱에 대한 패키지 가시성을 선언한다. 원본 앱은 설치된 상태에서 사용 설정을 유지해야 한다.
 
-Validation uses synthetic DEX fixtures, profile/UI tests and the existing generic
-clone install/launch emulator regression. No Netflix APK or MA4000 device is
-available in CI. To test on MA4000: update GenieBreaker, keep the original Netflix
-installed and enabled, choose the original app in App management, recreate the
-clone with the Netflix option, install, and launch. An old generic clone is not
-retroactively repaired. Exported diagnostics distinguish generation/install errors
-from playback failures.
+DEX 검사에서 시작 시 서명 확인 실패를 나타내는 표식과 일치하는 `Runnable.run():void` 메서드를 정확히 하나 확인한다. 형태가 예상과 다르거나 일치 항목이 없거나 여러 개일 때, 또는 DEX가 처리 한도를 초과할 때는 생성을 중단한다. 수정한 DEX를 다시 검사한 뒤 ARSCLib으로 APK를 정렬하고, apksig로 서명과 검증을 수행한다. 생성 정보에는 적용한 옵션과 수정된 메서드를 기록한다.
+
+구현은 Apache 라이선스의 dexlib2를 사용한다. 참고 구현의 GPL 소스와 네이티브 후킹 로더는 포함하지 않는다. 적용 범위는 듀얼앱의 시작 호환성이다. 계정, 이용권, 기기 지원과 재생에는 넷플릭스의 기존 요건이 적용된다.
+
+[참고 구현](https://github.com/ajstrick81/morphe-androidtv-patches)
+
+## 검증 상태
+
+CI에서는 합성 DEX, 프로필과 화면 검증, 일반 듀얼앱의 설치·실행을 확인한다. 넷플릭스 APK와 MA4000 실기기는 CI 환경에서 사용할 수 없다. APK 생성과 설치가 완료되어도 영상 재생은 별도로 확인해야 한다.
+
+MA4000에서 확인할 때는 GenieBreaker를 업데이트하고 원본 넷플릭스 앱을 설치·활성화한다. 앱 관리에서 원본 앱을 선택하고 넷플릭스 옵션을 적용해 듀얼앱을 다시 생성한다. 설치 후 실행과 재생을 각각 확인한다. 기존에 생성한 듀얼앱에는 변경 사항이 자동으로 적용되지 않는다.

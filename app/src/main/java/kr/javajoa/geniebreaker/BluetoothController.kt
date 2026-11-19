@@ -24,7 +24,7 @@ internal class BluetoothController(
         message(text)
         if (ErrorCodes.isError(text)) TvMenus.notice(activity, text)
     }
-    private var btMessage = "연결할 기기를 선택하세요"
+    private var btMessage = "연결할 블루투스 기기를 선택하세요"
     private var registered = false
     private var scanExpired = false
     private var watchdogScheduled = false
@@ -35,7 +35,7 @@ internal class BluetoothController(
     private val scanWatchdog = Runnable {
         watchdogScheduled = false; scanExpired = true
         try { if (access()) adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
-        message("검색을 마쳤습니다. 기기를 선택하거나 다시 검색하세요.")
+        message("검색을 완료했습니다. 목록에서 기기를 선택하세요.")
     }
     private val nameTick = object : Runnable {
         override fun run() {
@@ -71,10 +71,10 @@ internal class BluetoothController(
             (bonded + found.values).distinctBy { it.address }.forEach { device ->
                 names.seed(device.address, device.name)
                 pendingNames = pendingNames || names.isPending(device.address)
-                devices += mapOf("id" to device.address, "name" to (names.get(device.address) ?: if (names.isPending(device.address)) "이름 확인 중" else "이름 없는 기기"),
+                devices += mapOf("id" to device.address, "name" to (names.get(device.address) ?: if (names.isPending(device.address)) "이름 확인 중" else "이름을 확인할 수 없는 기기"),
                     "bonded" to (device.bondState == BluetoothDevice.BOND_BONDED),
                     "kind" to when (device.bluetoothClass?.majorDeviceClass) { BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"; BluetoothClass.Device.Major.PERIPHERAL -> "input"; else -> "bluetooth" },
-                    "detail" to when { device.bondState == BluetoothDevice.BOND_BONDING -> "페어링 중"; device.address in linked -> "기기 링크 연결됨"; device.bondState == BluetoothDevice.BOND_BONDED -> "등록됨"; else -> "페어링 가능" })
+                    "detail" to when { device.bondState == BluetoothDevice.BOND_BONDING -> "페어링 중"; device.address in linked -> "블루투스 링크 연결됨"; device.bondState == BluetoothDevice.BOND_BONDED -> "등록됨"; else -> "페어링 가능" })
             }
         } catch (error: SecurityException) { Diagnostics.record(activity, "Bluetooth snapshot", error) }
         catch (error: Exception) { Diagnostics.record(activity, "Bluetooth snapshot", error) }
@@ -110,7 +110,7 @@ internal class BluetoothController(
                     when (intent.action) {
                         BluetoothDevice.ACTION_ACL_CONNECTED -> linked.add(it.address)
                         BluetoothDevice.ACTION_ACL_DISCONNECTED -> linked.remove(it.address)
-                        BluetoothDevice.ACTION_BOND_STATE_CHANGED -> message(when (it.bondState) { BluetoothDevice.BOND_BONDED -> "페어링 완료. 기기에서 연결 상태를 확인하세요."; BluetoothDevice.BOND_BONDING -> "페어링 중입니다. 확인 창을 확인하세요."; else -> "페어링이 취소되었거나 등록이 해제되었습니다." })
+                        BluetoothDevice.ACTION_BOND_STATE_CHANGED -> message(when (it.bondState) { BluetoothDevice.BOND_BONDED -> "페어링 완료. 기기에서 연결 상태를 확인하세요."; BluetoothDevice.BOND_BONDING -> "페어링 중입니다. 확인 창이 표시되면 승인하세요."; else -> "페어링이 취소되었거나 등록이 해제되었습니다." })
                     }
                 }
                 refresh()
@@ -148,9 +148,9 @@ internal class BluetoothController(
     fun result(requestCode: Int, resultCode: Int) {
         if (requestCode != 501) return
         val address = pendingCompanionAddress; pendingCompanionAddress = null
-        if (resultCode != Activity.RESULT_OK || address == null) { message("대체 페어링이 취소되었습니다."); return }
+        if (resultCode != Activity.RESULT_OK || address == null) { message("페어링 요청이 취소되었습니다."); return }
         try { adapter?.getRemoteDevice(address)?.let { found[address] = it; bluetoothActions.bond(it) } }
-        catch (error: Exception) { operationError("대체 페어링 완료", error) }
+        catch (error: Exception) { operationError("다른 방식으로 페어링 완료", error) }
     }
     private fun operationError(operation: String, error: Exception) {
         val code = Diagnostics.record(activity, operation, error)
@@ -173,8 +173,8 @@ internal class BluetoothController(
         try {
             if (bt.isEnabled) { message("이미 켜져 있습니다"); return }
             activity.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-        } catch (_: ActivityNotFoundException) { message("펌웨어에서 블루투스 켜기 요청을 지원하지 않습니다") }
-        catch (_: SecurityException) { message("블루투스 켜기 요청이 거부되었습니다") }
+        } catch (_: ActivityNotFoundException) { message("TV 설정에서 블루투스를 켜세요") }
+        catch (_: SecurityException) { message("TV가 블루투스 활성화 요청을 거부했습니다") }
     }
     fun discover() {
         val bt = adapter ?: return
@@ -185,7 +185,7 @@ internal class BluetoothController(
             if (Build.VERSION.SDK_INT < 31) {
                 val location = activity.getSystemService(LocationManager::class.java)
                 if (location == null || !(location.isProviderEnabled(LocationManager.GPS_PROVIDER) || location.isProviderEnabled(LocationManager.NETWORK_PROVIDER))) {
-                    message("위치 서비스가 꺼져 있어 이 Android 버전에서 검색할 수 없습니다"); return
+                    message("이 Android 버전에서 블루투스 기기를 검색하려면 위치 서비스를 켜세요"); return
                 }
             }
             found.clear(); searched = true; scanExpired = false; publish()
@@ -200,19 +200,19 @@ internal class BluetoothController(
         try {
             val title = names.get(device.address) ?: device.name ?: "이름 확인 중"
             val bonded = device.bondState == BluetoothDevice.BOND_BONDED
-            val actions = if (bonded) arrayOf("연결", "연결 해제", "기기 지우기", "상세 정보")
-                else arrayOf("페어링", "다른 페어링 방식", "기기 정보")
+            val actions = if (bonded) arrayOf("연결", "연결 해제", "기기 등록 삭제", "상세 정보")
+                else arrayOf("페어링", "다른 방식으로 페어링", "기기 정보")
             TvMenus.show(activity, title, actions.toList()) { index ->
                 try {
                     if (bonded) when (index) {
                         0 -> bluetoothActions.connection(device, true)
                         1 -> bluetoothActions.connection(device, false)
-                        2 -> TvMenus.show(activity, "등록을 삭제할까요?", listOf("취소", "삭제"), "리모컨이나 키보드를 삭제하면 조작할 수 없게 될 수 있습니다. 다른 입력 수단을 준비하세요.") { choice -> if (choice == 1) bluetoothActions.forget(device) }
+                        2 -> TvMenus.show(activity, "기기 등록 삭제 확인", listOf("취소", "삭제"), "등록 삭제 후 리모컨이나 키보드가 연결 해제될 수 있습니다. 다른 입력 수단을 준비하세요.") { choice -> if (choice == 1) bluetoothActions.forget(device) }
                         else -> deviceDetails(device)
                     } else when (index) {
                         0 -> {
                             adapter?.cancelDiscovery()
-                            if (device.bondState == BluetoothDevice.BOND_BONDING) message("이미 페어링 중입니다.") else bluetoothActions.bond(device)
+                            if (device.bondState == BluetoothDevice.BOND_BONDING) message("이 기기의 페어링이 진행 중입니다.") else bluetoothActions.bond(device)
                         }
                         1 -> companionPair(device)
                         else -> deviceDetails(device)
@@ -224,14 +224,14 @@ internal class BluetoothController(
     private fun deviceDetails(device: BluetoothDevice) {
         try {
             val name = names.get(device.address) ?: device.name ?: "이름 확인 중"
-            TvMenus.show(activity, name, listOf("닫기"), "${device.address}\n${if (device.bondState == BluetoothDevice.BOND_BONDED) "등록됨" else "등록되지 않음"}\n${if (device.address in linked) "기기 링크 연결됨" else "링크 연결 상태 미확인"}\n\n등록 상태와 오디오·입력 프로필의 실제 연결 상태는 다를 수 있습니다.")
+            TvMenus.show(activity, name, listOf("닫기"), "${device.address}\n${if (device.bondState == BluetoothDevice.BOND_BONDED) "등록됨" else "등록되지 않음"}\n${if (device.address in linked) "블루투스 링크 연결됨" else "블루투스 링크 연결 미확인"}\n\n등록 여부와 오디오·입력 프로필의 연결 상태는 별도로 확인하세요.")
 
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 정보", error) }
     }
     @Suppress("DEPRECATION")
     private fun companionPair(device: BluetoothDevice) {
         if (Build.VERSION.SDK_INT < 26 || !activity.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
-            message("이 펌웨어는 대체 페어링 서비스를 제공하지 않습니다."); return
+            message("이 TV에서는 다른 페어링 방식을 사용할 수 없습니다."); return
         }
         try {
             adapter?.cancelDiscovery()
@@ -242,16 +242,16 @@ internal class BluetoothController(
                 private fun chooser(sender: IntentSender) {
                     activity.runOnUiThread {
                         if (!activity.isFinishing && !activity.isDestroyed) try { activity.startIntentSenderForResult(sender, 501, null, 0, 0, 0) }
-                        catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링 화면", error) }
+                        catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("다른 방식으로 페어링 화면", error) }
                     }
                 }
                 override fun onDeviceFound(chooserLauncher: IntentSender) { chooser(chooserLauncher) }
                 override fun onAssociationPending(intentSender: IntentSender) { chooser(intentSender) }
-                override fun onFailure(error: CharSequence?) { activity.runOnUiThread { if (!activity.isDestroyed) message("대체 페어링 실패: ${error ?: "기기를 찾지 못했습니다"}") } }
+                override fun onFailure(error: CharSequence?) { activity.runOnUiThread { if (!activity.isDestroyed) message("페어링 실패 · ${error ?: "기기를 찾지 못했습니다"}") } }
             }
             if (Build.VERSION.SDK_INT >= 33) manager.associate(request, activity.mainExecutor, callback)
             else manager.associate(request, callback, null)
-            message("대체 페어링 준비 중입니다. 기기를 페어링 모드로 유지하세요.")
-        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("대체 페어링", error) }
+            message("페어링을 준비하고 있습니다. 기기를 페어링 모드로 유지하세요.")
+        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("다른 방식으로 페어링", error) }
     }
 }

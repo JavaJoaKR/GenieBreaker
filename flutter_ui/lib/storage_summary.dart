@@ -33,7 +33,7 @@ class StorageSummary extends StatelessWidget {
             color: accentTone,
             backgroundColor: divider,
             borderRadius: BorderRadius.circular(2),
-            semanticsLabel: '사용 중인 저장공간',
+            semanticsLabel: '사용 중인 저장 공간',
             semanticsValue: fraction == null ? '불러오는 중' : '${(fraction * 100).round()}%',
           ),
         ],

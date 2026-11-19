@@ -11,7 +11,7 @@ List<TvAction> mappingActions(Map state) => [
   const TvAction(
     'mapping:add',
     '버튼 추가',
-    '리모컨에서 추가할 버튼을 누르세요',
+    '등록할 리모컨 버튼을 누르세요',
     Icons.add_rounded,
     'chooseButton',
   ),
@@ -26,13 +26,13 @@ List<TvAction> mappingActions(Map state) => [
     ),
   TvAction(
     'mapping:service',
-    '버튼 맵핑 설정',
+    '버튼 매핑 설정',
     switch (state['mappingStatus']) {
       'active' => '접근성 서비스 연결됨',
       'connecting' => '접근성에서 켜짐 · 연결 대기 중',
       'restricted' => '앱 정보에서 제한된 설정 허용 필요',
       'unknown' => '접근성 설정에서 서비스 상태를 확인하세요',
-      _ => '지정한 동작을 실행하려면 접근성에서 켜세요',
+      _ => '버튼에 지정한 동작을 실행하려면 접근성 서비스를 켜세요',
     },
     Icons.settings_outlined,
     'mappingSettings',
@@ -46,7 +46,7 @@ List<TvAction> startupActions(Map state) {
     TvAction(
       'startup:choose',
       name.isEmpty ? '시작할 앱 선택' : name,
-      name.isEmpty ? 'TV를 켜고 부팅을 마치면 실행할 앱을 선택하세요' : '시작 앱 변경',
+      name.isEmpty ? 'TV 부팅 후 자동으로 실행할 앱을 선택하세요' : '시작 앱 변경',
       Icons.apps_rounded,
       'chooseStartup',
     ),
@@ -70,11 +70,11 @@ List<TvAction> startupActions(Map state) {
             ? '꺼짐 · TV를 재부팅할 때만 실행'
             : needsOverlay && state['hasOverlay'] != true
             ? '켜짐 · 다른 앱 위에 표시 권한 필요'
-            : '켜짐 · TV가 대기 상태에서 깨어날 때 실행',
+            : '켜짐 · TV의 대기 상태가 해제되면 실행',
         Icons.wb_sunny_outlined,
         'toggleWake',
       ),
-      const TvAction('startup:test', '지금 실행', '선택한 앱을 열어 확인합니다', Icons.play_arrow_rounded, 'testStartup'),
+      const TvAction('startup:test', '지금 실행', '선택한 앱의 실행 여부를 확인합니다', Icons.play_arrow_rounded, 'testStartup'),
       const TvAction(
         'startup:clear',
         '시작 앱 해제',

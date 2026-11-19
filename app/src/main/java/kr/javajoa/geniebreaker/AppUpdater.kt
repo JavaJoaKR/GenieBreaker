@@ -85,13 +85,13 @@ internal class AppUpdater(
                     ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 확인", true); if (!automatic && cachedVersion == 0L) toast("최신 버전입니다") }
                     return@execute
                 }
-                ui { state("업데이트 받는 중", false) }
+                ui { state("업데이트 다운로드 중", false) }
                 apk.parentFile?.mkdirs()
                 val temporary = File.createTempFile("download-", ".apk", apk.parentFile)
                 try {
                     val download = connect(candidate)
                     try {
-                        require(download.contentLength.toLong() <= 128L * 1024 * 1024) { "업데이트 파일이 너무 큽니다" }
+                        require(download.contentLength.toLong() <= 128L * 1024 * 1024) { "업데이트 파일이 128MB 한도를 초과합니다" }
                         download.inputStream.use { input -> temporary.outputStream().use { output ->
                             val buffer = ByteArray(8192); var total = 0L
                             while (true) {
@@ -102,11 +102,11 @@ internal class AppUpdater(
                             }
                         } }
                     } finally { download.disconnect() }
-                    require(validUpdate(temporary) && activity.packageManager.getPackageArchiveInfo(temporary.path, 0)?.let(::version) == latest.version) { "앱 ID·버전 또는 서명이 일치하지 않습니다" }
+                    require(validUpdate(temporary) && activity.packageManager.getPackageArchiveInfo(temporary.path, 0)?.let(::version) == latest.version) { "다운로드한 APK의 앱 ID, 버전 또는 서명이 예상과 다릅니다" }
                     check(temporary.renameTo(apk)) { "업데이트 파일을 저장하지 못했습니다" }
                     succeeded()
                     preferences.edit().putLong("last_check", System.currentTimeMillis()).apply()
-                    ui { state("업데이트 설치", true); if (!automatic) toast("다운로드 완료. 설치 버튼을 선택하세요") }
+                    ui { state("업데이트 설치", true); if (!automatic) toast("다운로드를 완료했습니다. ‘업데이트 설치’를 선택하세요.") }
                 } finally { temporary.delete() }
             } catch (error: Exception) {
                 if (!closed) {
@@ -129,16 +129,16 @@ internal class AppUpdater(
         try {
             require(validUpdate(apk))
             if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
-                TvMenus.show(activity, "앱 업데이트 허용", listOf("나중에", "허용 화면 열기"), "업데이트를 설치하려면 이 앱의 ‘알 수 없는 앱 설치’를 허용해야 합니다.") { choice ->
+                TvMenus.show(activity, "앱 업데이트 허용", listOf("나중에", "허용 화면 열기"), "업데이트를 설치하려면 TV 설정에서 GenieBreaker의 ‘알 수 없는 앱 설치’를 허용하세요.") { choice ->
                     if (choice == 1) try {
                         waitingForPermission = true
                         activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")))
-                    } catch (_: Exception) { waitingForPermission = false; toast("펌웨어에서 설치 허용 화면을 지원하지 않습니다") }
+                    } catch (_: Exception) { waitingForPermission = false; toast("TV 설정에서 ‘알 수 없는 앱 설치’ 권한을 확인하세요") }
                 }
                 return
             }
             SessionInstaller.submit(activity, apk, activity.packageName)
-        } catch (_: ActivityNotFoundException) { toast("이 펌웨어에는 사용할 수 있는 APK 설치 화면이 없습니다") }
+        } catch (_: ActivityNotFoundException) { toast("이 TV에서 APK 설치 화면을 열 수 없습니다") }
         catch (error: Exception) { val code = Diagnostics.record(activity, "Update install", error); apk.delete(); state("업데이트 확인", true); toast("업데이트 파일 확인 실패 [$code]") }
     }
     fun resume() {

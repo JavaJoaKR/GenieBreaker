@@ -9,7 +9,7 @@ void main() {
 
   testWidgets('Confirmation actions stay visible with a long message', (tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
-      if (call.method == 'ready') return {'title': '앱을 제거할까요?', 'items': ['취소', '제거 요청'], 'message': List.filled(50, '앱 데이터가 삭제됩니다.').join('\n')};
+      if (call.method == 'ready') return {'title': '앱 제거 확인', 'items': ['취소', '제거 요청'], 'message': List.filled(50, '앱 데이터가 삭제됩니다.').join('\n')};
       return null;
     });
     await tester.pumpWidget(const GenieUI());
