@@ -83,10 +83,13 @@ if [[ -z "$previous" || "$previous" == null ]]; then services="$service"; else s
 adb shell settings put secure enabled_accessibility_services "$services"
 adb shell settings put secure accessibility_enabled 1
 adb shell input keyevent KEYCODE_HOME
+remote_log_count() {
+  adb logcat -d -s GenieRemoteTest | awk -v message="$1" 'index($0, message) {count++} END {print count+0}'
+}
 wait_for_remote_connection() {
   local message="$1" expected="$2" count
   for attempt in {1..20}; do
-    count=$(adb logcat -d -s GenieRemoteTest | awk -v message="$message" 'index($0, message) {count++} END {print count+0}')
+    count=$(remote_log_count "$message")
     if (( count >= expected )); then return 0; fi
     sleep 1
   done
@@ -113,16 +116,31 @@ wait_for_settings remote
 [[ "$(home_component)" == "$original_home" ]]
 echo 'Mapped red key opened the selected app from the original launcher.'
 
+connected=$(remote_log_count 'Remapping service connected')
+adb shell input keyevent KEYCODE_HOME
+if [[ "${1:-}" == --preinstalled ]]; then
+  adb install -r -t tv-apks/debug.apk
+else
+  gradle --no-daemon :app:installDebug
+fi
+wait_for_remote_connection 'Remapping service connected' "$((connected + 1))"
+adb shell input keyevent KEYCODE_HOME
+press_red_key
+wait_for_settings remote-after-replacement
+echo 'Replacing the installed APK preserved the remote binding and reconnected the enabled service.'
+
+disconnected=$(remote_log_count 'Remapping service disconnected')
 if [[ -z "$previous" || "$previous" == null ]]; then
   adb shell settings delete secure enabled_accessibility_services
 else
   adb shell settings put secure enabled_accessibility_services "$previous"
 fi
-wait_for_remote_connection 'Remapping service disconnected' 1
+wait_for_remote_connection 'Remapping service disconnected' "$((disconnected + 1))"
 adb shell input keyevent KEYCODE_HOME
+connected=$(remote_log_count 'Remapping service connected')
 adb shell settings put secure enabled_accessibility_services "$services"
 adb shell settings put secure accessibility_enabled 1
-wait_for_remote_connection 'Remapping service connected' 2
+wait_for_remote_connection 'Remapping service connected' "$((connected + 1))"
 press_red_key
 wait_for_settings remote-reconnect
 echo 'Mapped red key worked after disabling and re-enabling the accessibility service.'

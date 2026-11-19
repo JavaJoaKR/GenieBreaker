@@ -83,21 +83,25 @@ internal class TvControls(
             TvMenus.notice(owner, "이 TV에서는 접근성 설정을 직접 열 수 없습니다. TV 설정에서 접근성을 여세요.")
     }
     fun mappingSettings() {
-        if (Build.VERSION.SDK_INT < 33 || state["mappingStatus"] == "active") {
+        val status = remoteAccessibility.status()
+        if (Build.VERSION.SDK_INT < 33 || status == "active") {
             accessibility()
             return
         }
         TvMenus.show(
             owner,
             "버튼 맵핑 설정",
-            listOf("접근성 설정", "GenieBreaker 앱 정보", "닫기"),
-            "접근성에서 ‘GenieBreaker 버튼 맵핑’을 켜세요. TV가 ‘제한된 설정’을 표시하거나 스위치가 다시 꺼지면 앱 정보의 더보기에서 ‘제한된 설정 허용’을 확인하세요."
+            listOf("GenieBreaker 앱 정보", "접근성 설정", "닫기"),
+            if (status == "restricted")
+                "Android가 이 설치본의 접근성 설정을 제한하고 있습니다. 앱 정보의 더보기에서 ‘제한된 설정 허용’을 선택한 뒤, 접근성에서 ‘GenieBreaker 버튼 맵핑’을 다시 켜세요."
+            else
+                "접근성에서 ‘GenieBreaker 버튼 맵핑’을 켜세요. 업데이트 후 스위치가 다시 꺼지면 앱 정보의 더보기에서 ‘제한된 설정 허용’을 확인하세요."
         ) { index ->
             when (index) {
-                0 -> accessibility()
-                1 -> {
+                0 -> {
                     if (!openAppDetails(owner, owner.packageName)) TvMenus.notice(owner, "TV 설정의 앱 목록에서 GenieBreaker를 선택하세요.")
                 }
+                1 -> accessibility()
             }
         }
     }

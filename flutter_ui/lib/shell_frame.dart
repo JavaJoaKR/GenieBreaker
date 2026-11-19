@@ -44,6 +44,8 @@ class ShellFrame extends StatelessWidget {
   static double gutter(bool compact) => compact ? 10 : 14;
   static double railWidth(bool compact) => compact ? 146 : 174;
   static double outerHorizontal(bool compact) => compact ? 18 : 24;
+  static Widget versionLabel(String version) =>
+      Text('v$version', style: const TextStyle(color: muted, fontSize: 12));
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +98,7 @@ class ShellFrame extends StatelessWidget {
                     if (version.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(9, 6, 0, 0),
-                        child: Text('v$version', style: const TextStyle(color: muted, fontSize: 12)),
+                        child: versionLabel(version),
                       ),
                   ],
                 ),

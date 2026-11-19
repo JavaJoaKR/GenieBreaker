@@ -5,6 +5,7 @@ import 'pin_panel.dart';
 import 'platform_bridge.dart';
 import 'popup_panel.dart';
 import 'remote_tile.dart';
+import 'shell_frame.dart';
 import 'tv_focus.dart';
 import 'tv_theme.dart';
 
@@ -470,10 +471,18 @@ class _GeniePageState extends State<GeniePage> {
       }
     });
     if (data?['locked'] == true) {
+      final version = data?['version'] as String? ?? '';
       return Scaffold(
         backgroundColor: canvas,
-        body: LockCodePanel(
-          onSubmit: (code) async => await bridge.invokeMethod<bool>('unlockApp', code) == true,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            LockCodePanel(
+              onSubmit: (code) async => await bridge.invokeMethod<bool>('unlockApp', code) == true,
+            ),
+            if (version.isNotEmpty)
+              Positioned(left: 24, bottom: 18, child: ShellFrame.versionLabel(version)),
+          ],
         ),
       );
     }

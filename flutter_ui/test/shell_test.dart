@@ -471,7 +471,7 @@ void main() {
     final calls = <MethodCall>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
       calls.add(call);
-      if (call.method == 'ready') return {...shell(), 'buildCommit': '0Abc42'};
+      if (call.method == 'ready') return {...shell(), 'buildCommit': '0Abc42A'};
       return null;
     });
     await tester.pumpWidget(const GenieUI());
@@ -480,7 +480,8 @@ void main() {
       await arrow(tester, LogicalKeyboardKey.arrowDown);
     }
     expect(focus, 'nav:settings');
-    expect(find.textContaining('0Abc42'), findsOneWidget);
+    expect(find.textContaining('현재 버전  test'), findsOneWidget);
+    expect(find.textContaining('0Abc42A'), findsNothing);
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowDown);
@@ -490,7 +491,7 @@ void main() {
     expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('Locked session hides the shell and accepts a six-character commit code', (tester) async {
+  testWidgets('Locked session shows the version and accepts a seven-character code', (tester) async {
     String? submitted;
     final messenger = tester.binding.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(bridge, (call) async {
@@ -506,17 +507,24 @@ void main() {
     await messenger.handlePlatformMessage(
       'genie/ui',
       const StandardMethodCodec().encodeMethodCall(
-        const MethodCall('session', {'shell': true, 'locked': true}),
+        const MethodCall('session', {'shell': true, 'locked': true, 'version': '0.1.193'}),
       ),
       (_) {},
     );
     await tester.pumpAndSettle();
     expect(find.text('GenieBreaker 잠금'), findsOneWidget);
     expect(find.text('블루투스'), findsNothing);
+    expect(find.text('v0.1.193'), findsOneWidget);
+    expect(find.text('잠금 코드'), findsOneWidget);
+    expect(find.textContaining('자리'), findsNothing);
     await tester.enterText(find.byType(TextField), '0AbF19');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(submitted, '0AbF19');
+    expect(submitted, isNull);
+    await tester.enterText(find.byType(TextField), '0AbF19C');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(submitted, '0AbF19C');
   });
 
 }
