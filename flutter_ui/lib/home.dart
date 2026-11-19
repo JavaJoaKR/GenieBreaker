@@ -902,10 +902,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'settings:update',
                   widget.data['update'] as String? ?? '업데이트 확인',
                   () => call('update'),
-                  subtitle: [
-                    '현재 버전  ${widget.data['version'] ?? '—'}',
-                    if (widget.data['buildCommit'] case final String commit) commit,
-                  ].join(' · '),
+                  subtitle: '현재 버전  ${widget.data['version'] ?? '—'}',
                   icon: Icons.system_update_rounded,
                 ),
                 tile(
@@ -919,9 +916,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'settings:lock',
                   '앱 잠금',
                   configureLock,
-                  subtitle: widget.data['lockEnabled'] == true
-                      ? '켜짐 · 현재 빌드 커밋 앞 6자리로 해제'
-                      : '꺼짐 · 누르면 잠금 켜기',
+                  subtitle: widget.data['lockEnabled'] == true ? '켜짐' : '꺼짐',
                   icon: Icons.lock_outline_rounded,
                 ),
               ]);

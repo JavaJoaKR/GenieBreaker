@@ -11,7 +11,7 @@ def buildCommit = providers.environmentVariable('GITHUB_SHA')
         ignoreExitValue = true
     }.standardOutput.asText)
     .get().trim()
-if (!(buildCommit ==~ /[0-9a-fA-F]{6,64}/)) {
+if (!(buildCommit ==~ /[0-9a-fA-F]{7,64}/)) {
     throw new GradleException('Build from a Git checkout or supply the source commit with -PbuildCommit.')
 }
 android {
@@ -30,7 +30,7 @@ android {
             }
         }
         targetSdk 35
-        buildConfigField 'String', 'BUILD_COMMIT', "\"${buildCommit.substring(0, 6).toLowerCase(Locale.ROOT)}\""
+        buildConfigField 'String', 'BUILD_COMMIT', "\"${buildCommit.substring(0, 7).toLowerCase(Locale.ROOT)}\""
         versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
         versionName '0.1.' + (System.getenv('BUILD_NUMBER') ?: '1')
     }

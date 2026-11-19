@@ -14,6 +14,7 @@ class LockCodePanel extends StatefulWidget {
 }
 
 class _LockCodePanelState extends State<LockCodePanel> {
+  static const codeLength = 7;
   final input = TextEditingController();
   bool busy = false;
   String? error;
@@ -26,7 +27,7 @@ class _LockCodePanelState extends State<LockCodePanel> {
 
   Future<void> submit() async {
     final code = input.text;
-    if (busy || code.length != 6) return;
+    if (busy || code.length != codeLength) return;
     setState(() {
       busy = true;
       error = null;
@@ -81,9 +82,9 @@ class _LockCodePanelState extends State<LockCodePanel> {
                     autocorrect: false,
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp('[0-9a-fA-F]')),
-                      LengthLimitingTextInputFormatter(6),
+                      LengthLimitingTextInputFormatter(codeLength),
                     ],
-                    decoration: InputDecoration(labelText: '빌드 커밋 앞 6자리', errorText: error),
+                    decoration: InputDecoration(labelText: '잠금 코드', errorText: error),
                     onChanged: (_) {
                       if (error != null) setState(() => error = null);
                     },

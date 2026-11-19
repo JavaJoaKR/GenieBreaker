@@ -1,10 +1,12 @@
 package kr.javajoa.geniebreaker
 
+import android.app.AppOpsManager
 import android.content.ComponentName
 import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
+import android.os.Build
 import android.provider.Settings
 
 /** Main-thread connection state. A late unbind must not clear a newer connection. */
@@ -35,6 +37,7 @@ internal class RemoteAccessibility(private val context: Context, private val cha
     private val resolver = context.contentResolver
     private var watching = false
     private var observingSettings = false
+    private var reportedRestriction = false
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = Runnable {
         if (watching) {
@@ -81,7 +84,18 @@ internal class RemoteAccessibility(private val context: Context, private val cha
     }
 
     fun status(): String {
-        if (RemoteServiceConnection.connected) return "active"
+        if (RemoteServiceConnection.connected) {
+            reportedRestriction = false
+            return "active"
+        }
+        if (hasRestrictedSettings()) {
+            if (!reportedRestriction) {
+                reportedRestriction = true
+                Diagnostics.record(context, "Accessibility restricted settings blocked")
+            }
+            return "restricted"
+        }
+        reportedRestriction = false
         return try {
             // During rebind the global bit can lag behind the per-service selection.
             val enabled = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
@@ -89,6 +103,23 @@ internal class RemoteAccessibility(private val context: Context, private val cha
             if (enabled) "connecting" else "off"
         } catch (_: SecurityException) {
             "unknown"
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hasRestrictedSettings(): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return false
+        return try {
+            // This optional app-op is only consulted for our own package. Some TV
+            // firmware omits it or disallows reading it from an app.
+            val mode = context.getSystemService(AppOpsManager::class.java)?.unsafeCheckOpNoThrow(
+                "android:access_restricted_settings", context.applicationInfo.uid, context.packageName
+            )
+            mode == AppOpsManager.MODE_IGNORED || mode == AppOpsManager.MODE_ERRORED
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
         }
     }
 }

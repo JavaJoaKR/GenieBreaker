@@ -181,7 +181,7 @@ class MainActivity : FlutterActivity() {
     private fun snapshot(): Map<String, Any> = if (appLock.locked) {
         mapOf("shell" to true, "locked" to true, "version" to BuildConfig.VERSION_NAME)
     } else bluetooth.snapshot() +
-        mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME, "buildCommit" to BuildConfig.BUILD_COMMIT,
+        mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME,
             "apps" to apps.snapshot(), "update" to updateLabel, "controls" to controls.snapshot(), "lockEnabled" to appLock.enabled) +
         (menus?.current()?.let { mapOf("menu" to it) } ?: emptyMap())
 
