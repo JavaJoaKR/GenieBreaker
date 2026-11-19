@@ -166,6 +166,22 @@ class TvControlsTest {
         assertFalse(press(hdmi(KeyEvent.ACTION_UP)))
         assertEquals(listOf(binding, 0x10000 + oemScan), actions)
     }
+    @Test fun ma4000ShortcutsDoNotClaimKeyboardBackspaceOrTvPower() {
+        val presses = ButtonPresses<Int>()
+        val actions = mutableListOf<Int>()
+        val remote = InputDevice.SOURCE_DPAD or InputDevice.SOURCE_KEYBOARD
+        fun press(input: KeyEvent) = presses.handle(input, { it }, { actions.add(it) })
+
+        for ((key, scan) in listOf(KeyEvent.KEYCODE_UNKNOWN to 14, KeyEvent.KEYCODE_AVR_POWER to 588)) {
+            assertTrue(press(event(KeyEvent.ACTION_DOWN, key, scan = scan, source = remote)))
+            assertTrue(press(event(KeyEvent.ACTION_UP, key, scan = scan, source = remote)))
+        }
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = 14,
+            source = InputDevice.SOURCE_KEYBOARD)))
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL, scan = 14, source = remote)))
+        assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TV_POWER, scan = 588, source = remote)))
+        assertEquals(listOf(0x10000 + 14, KeyEvent.KEYCODE_AVR_POWER), actions)
+    }
     @Test fun startupSelectionSkipsCurrentBootAndHandsOffOnceOnNextBoot() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val target = instrumentation.targetContext

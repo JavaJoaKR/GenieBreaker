@@ -4,6 +4,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.InstallSourceInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
@@ -46,8 +47,10 @@ final class OfficialInstaller {
 
     void complete(String attempt, String result) {
         if (!isCurrent(attempt)) return;
+        String details = state.getString("diagnostics", "");
         BUSY.set(false);
-        state.edit().remove("attempt").putString("result", result).apply();
+        state.edit().remove("attempt").remove("diagnostics")
+            .putString("result", result + "\n\n" + details).apply();
     }
 
     @SuppressWarnings("deprecation")
@@ -84,21 +87,46 @@ final class OfficialInstaller {
         return Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
     }
 
-    void begin() {
-        if (!BUSY.compareAndSet(false, true)) return;
-        String attempt = UUID.randomUUID().toString();
-        state.edit().putString("attempt", attempt).putString("result", "최신 버전을 확인하는 중입니다.").apply();
-        new Thread(() -> downloadAndSubmit(attempt), "official-installer").start();
+    @SuppressWarnings("deprecation")
+    String installedSource() {
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                InstallSourceInfo source = packages.getInstallSourceInfo(PACKAGE);
+                return "직전 설치 요청 앱 · " + sourceName(source.getInitiatingPackageName())
+                    + "\n기록된 설치 앱 · " + sourceName(source.getInstallingPackageName());
+            }
+            return "기록된 설치 앱 · " + sourceName(packages.getInstallerPackageName(PACKAGE));
+        } catch (PackageManager.NameNotFoundException | SecurityException unavailable) {
+            return "설치 출처 · 확인 불가";
+        }
     }
 
-    private void downloadAndSubmit(String attempt) {
+    private static String sourceName(String packageName) {
+        return packageName == null ? "미제공" : packageName;
+    }
+
+    void begin(boolean retryLatest) {
+        if (!BUSY.compareAndSet(false, true)) return;
+        String attempt = UUID.randomUUID().toString();
+        state.edit().putString("attempt", attempt).putString("result", "최신 버전을 확인하는 중입니다.")
+            .putString("diagnostics", InstallReport.environment(context) + "\n" + installedSummary()
+                + "\n" + installedSource()).apply();
+        new Thread(() -> downloadAndSubmit(attempt, retryLatest), "official-installer").start();
+    }
+
+    private void addDiagnostic(String detail) {
+        state.edit().putString("diagnostics", state.getString("diagnostics", "") + "\n" + detail).apply();
+    }
+
+    private void downloadAndSubmit(String attempt, boolean retryLatest) {
         File apk = new File(context.getCacheDir(), "geniebreaker.apk");
         try {
             LatestRelease release = LatestRelease.fetch();
+            addDiagnostic("대상 공식 APK · 0.1." + release.version);
             PackageInfo current = installed();
             if (current != null) {
                 if (!officialSigner(current)) throw new IOException("현재 설치된 앱의 서명이 공식 APK와 다릅니다.");
-                if (versionOf(current) >= release.version) {
+                if (versionOf(current) > release.version || (!retryLatest && versionOf(current) == release.version)) {
                     complete(attempt, "현재 버전 " + current.versionName + " · 공개된 버전 0.1." + release.version);
                     return;
                 }
@@ -110,6 +138,7 @@ final class OfficialInstaller {
                 || versionOf(archive) != release.version) {
                 throw new IOException("APK 패키지, 서명 또는 버전이 공식 릴리스 정보와 다릅니다.");
             }
+            addDiagnostic("Installer의 APK 검사 · 패키지, SHA-256, 서명, 버전 일치");
             submit(apk, attempt);
         } catch (Exception error) {
             String detail = error.getMessage();
@@ -155,6 +184,7 @@ final class OfficialInstaller {
         params.setSize(apk.length());
         if (Build.VERSION.SDK_INT >= 31) params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED);
         int id = installer.createSession(params);
+        addDiagnostic("Android 설치 세션 · " + id);
         boolean committed = false;
         try (PackageInstaller.Session session = installer.openSession(id)) {
             try (InputStream in = new FileInputStream(apk); OutputStream out = session.openWrite("base.apk", 0, apk.length())) {

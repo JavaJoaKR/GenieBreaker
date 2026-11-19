@@ -82,7 +82,7 @@ final class LatestRelease {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(15_000);
         connection.setReadTimeout(20_000);
-        connection.setRequestProperty("User-Agent", "GenieBreakerInstaller/1.1");
+        connection.setRequestProperty("User-Agent", "GenieBreakerInstaller/1.2");
         return connection;
     }
 

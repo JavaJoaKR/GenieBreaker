@@ -6,7 +6,7 @@ import android.os.Build
 import android.view.KeyEvent
 
 private const val CAPTURE_INSTRUCTIONS =
-    "추가할 리모컨 버튼을 누르세요. 전원이나 음량 버튼처럼 TV가 직접 처리하는 입력은 등록이 제한될 수 있습니다."
+    "추가할 리모컨 버튼을 누르세요. TV 본체 전원, 음량, 화면 이동 버튼은 기본 조작에 사용됩니다."
 
 internal class TvControls(
     private val owner: Activity,
@@ -39,9 +39,11 @@ internal class TvControls(
         val key = KeyEvent.keyCodeToString(event.keyCode).removePrefix("KEYCODE_")
         val source = event.source.toString(16)
         val modifiers = event.metaState.toString(16)
+        val reason = if (event.hasNoModifiers()) "이 입력은 현재 매핑할 수 없습니다."
+            else "다른 키와 함께 들어온 입력은 매핑할 수 없습니다."
         TvMenus.updateMessage(
             owner, page,
-            "$CAPTURE_INSTRUCTIONS\n\n등록 제한 입력 · $key (${event.keyCode}) / scan ${event.scanCode} / source $source / meta $modifiers"
+            "$CAPTURE_INSTRUCTIONS\n\n$reason\n$key (${event.keyCode}) / scan ${event.scanCode} / source $source / meta $modifiers"
         )
     }
 
