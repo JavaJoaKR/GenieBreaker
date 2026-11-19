@@ -5,10 +5,16 @@ on:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
+      - 'installer/**'
+      - 'Installer.apk'
+      - '.github/workflows/installer.yml'
   pull_request:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
+      - 'installer/**'
+      - 'Installer.apk'
+      - '.github/workflows/installer.yml'
   workflow_dispatch:
 permissions:
   contents: read
