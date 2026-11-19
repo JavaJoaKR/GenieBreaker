@@ -20,8 +20,8 @@ internal object Diagnostics {
         return code
     }
     @Synchronized fun read(context: Context): String = try {
-        File(context.filesDir, "diagnostics.txt").takeIf { it.exists() }?.readText()?.takeLast(20000) ?: "기록된 오류가 없습니다."
-    } catch (_: Exception) { "기록을 읽지 못했습니다. [GB-FS-0002]" }
+        File(context.filesDir, "diagnostics.txt").takeIf { it.exists() }?.readText()?.takeLast(20000) ?: "저장된 오류 기록이 없습니다."
+    } catch (_: Exception) { "저장된 오류 기록을 열 수 없습니다. [GB-FS-0002]" }
     @Synchronized fun clear(context: Context) { File(context.filesDir, "diagnostics.txt").delete() }
     @Synchronized fun install(context: Context) {
         if (installed) return

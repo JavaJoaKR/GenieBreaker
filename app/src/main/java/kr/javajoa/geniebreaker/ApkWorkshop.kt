@@ -49,19 +49,19 @@ internal class ApkWorkshop(private val context: Context) {
         val paths = listOf(source.sourceDir) + (source.splitSourceDirs?.toList() ?: emptyList())
         val sourceBytes = paths.sumOf { File(it).length() }
         require(context.filesDir.usableSpace > sourceBytes * 3 + 16L * 1024 * 1024) { "APK 작업을 위한 저장 공간이 부족합니다." }
-        require(sourceBytes <= 200L * 1024 * 1024) { "32비트 기기 보호를 위해 원본 합계 200MB 이하만 처리합니다." }
+        require(sourceBytes <= 200L * 1024 * 1024) { "원본 APK는 합계 200MB까지만 처리합니다." }
         val id = UUID.randomUUID().toString()
         val work = File(context.cacheDir, "apk-work/$id")
         val output = File(context.filesDir, "edited/$id.apk")
         FileWork.lock.readLock().lock()
         try {
             work.mkdirs(); output.parentFile?.mkdirs()
-            progress("APK를 읽고 있습니다")
+            progress("원본 APK 읽는 중")
             val bundle = ApkBundle()
             var apk: ApkModule? = null
             try {
                 paths.forEachIndexed { index, path -> bundle.addModule(ApkModule.loadApkFile(File(path), if (index == 0) "base" else "split_$index")) }
-                progress(if (paths.size > 1) "분할 APK를 병합하고 있습니다" else "앱 정보를 수정하고 있습니다")
+                progress(if (paths.size > 1) "분할 APK 병합 중" else "앱 정보 수정 중")
                 apk = if (paths.size > 1) bundle.mergeModules() else bundle.apkModuleList.first()
                 val module = requireNotNull(apk)
                 val manifest = module.androidManifest
@@ -127,7 +127,7 @@ internal class ApkWorkshop(private val context: Context) {
                 } }
                 var compatibilityMethod: String? = null
                 if (options.netflixCompatibility) {
-                    progress("넷플릭스 실행 호환성을 검사하고 있습니다")
+                    progress("넷플릭스 실행 호환성 검사 중")
                     val queries = root.getOrCreateElement("queries")
                     val alreadyVisible = queries.getElements("package").asSequence().any {
                         it.searchAttributeByName("name")?.valueAsString == NetflixCompatibility.PACKAGE
@@ -164,7 +164,7 @@ internal class ApkWorkshop(private val context: Context) {
                 module.refreshManifest(); module.refreshTable()
                 val unsigned = File(work, "unsigned.apk")
                 module.writeApk(unsigned)
-                progress("새 서명으로 APK를 생성하고 있습니다")
+                progress("APK 생성 및 서명 중")
                 val aliasBase = MessageDigest.getInstance("SHA-256").digest(spec.packageName.toByteArray()).take(12).joinToString("") { "%02x".format(it) }
                 val alias = "gb-edit-$aliasBase" + if (spec.freshKey) "-$id" else ""
                 val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -190,11 +190,11 @@ internal class ApkWorkshop(private val context: Context) {
                 val signer = ApkSigner.SignerConfig.Builder("GenieBreaker", store.getKey(alias, null) as PrivateKey, listOf(certificate)).build()
                 ApkSigner.Builder(listOf(signer)).setInputApk(unsigned).setOutputApk(output).setMinSdkVersion(26)
                     .setV1SigningEnabled(true).setV2SigningEnabled(true).setV3SigningEnabled(false).setV4SigningEnabled(false).build().sign()
-                progress("서명과 패키지 정보를 검증하고 있습니다")
+                progress("서명과 패키지 정보 검증 중")
                 val verification = ApkVerifier.Builder(output).setMinCheckedPlatformVersion(26).build().verify()
                 require(verification.isVerified) { "생성한 APK의 서명 검증에 실패했습니다: ${verification.errors}" }
                 val parsed = context.packageManager.getPackageArchiveInfo(output.absolutePath, PackageManager.GET_PERMISSIONS or PackageManager.GET_PROVIDERS)
-                require(parsed?.packageName == spec.packageName) { "수정된 패키지 정보를 Android가 읽지 못했습니다." }
+                require(parsed?.packageName == spec.packageName) { "Android에서 수정된 APK의 패키지명을 확인하지 못했습니다." }
                 parsed?.permissions?.forEach { permission ->
                     val owner = try { context.packageManager.getPermissionInfo(permission.name, 0).packageName } catch (_: PackageManager.NameNotFoundException) { null }
                     require(owner == null || owner == spec.packageName) { "권한 충돌: ${permission.name} (사용 중인 앱: $owner)" }

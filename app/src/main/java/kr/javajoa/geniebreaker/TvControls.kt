@@ -6,7 +6,7 @@ import android.os.Build
 import android.view.KeyEvent
 
 private const val CAPTURE_INSTRUCTIONS =
-    "추가할 리모컨 버튼을 누르세요. 전원·볼륨 등 TV가 직접 처리하는 버튼은 입력이 전달되지 않을 수 있습니다."
+    "추가할 리모컨 버튼을 누르세요. 전원이나 음량 버튼처럼 TV가 직접 처리하는 입력은 등록이 제한될 수 있습니다."
 
 internal class TvControls(
     private val owner: Activity,
@@ -41,7 +41,7 @@ internal class TvControls(
         val modifiers = event.metaState.toString(16)
         TvMenus.updateMessage(
             owner, page,
-            "$CAPTURE_INSTRUCTIONS\n\n등록할 수 없는 입력 · $key (${event.keyCode}) / scan ${event.scanCode} / source $source / meta $modifiers"
+            "$CAPTURE_INSTRUCTIONS\n\n등록 제한 입력 · $key (${event.keyCode}) / scan ${event.scanCode} / source $source / meta $modifiers"
         )
     }
 
@@ -80,7 +80,7 @@ internal class TvControls(
     }
     fun accessibility() {
         if (!openAccessibilityScreen(owner))
-            TvMenus.notice(owner, "이 TV에서는 접근성 설정을 직접 열 수 없습니다. TV 설정에서 접근성을 여세요.")
+            TvMenus.notice(owner, "TV의 설정 메뉴에서 ‘접근성’을 여세요.")
     }
     fun mappingSettings() {
         val status = remoteAccessibility.status()
@@ -90,12 +90,12 @@ internal class TvControls(
         }
         TvMenus.show(
             owner,
-            "버튼 맵핑 설정",
+            "버튼 매핑 설정",
             listOf("GenieBreaker 앱 정보", "접근성 설정", "닫기"),
             if (status == "restricted")
-                "Android가 이 설치본의 접근성 설정을 제한하고 있습니다. 앱 정보의 더보기에서 ‘제한된 설정 허용’을 선택한 뒤, 접근성에서 ‘GenieBreaker 버튼 맵핑’을 다시 켜세요."
+                "Android에서 이 앱의 접근성 설정을 제한했습니다. 앱 정보의 ‘더보기’에서 ‘제한된 설정 허용’을 선택한 뒤, 접근성에서 ‘GenieBreaker 버튼 매핑’을 다시 켜세요."
             else
-                "접근성에서 ‘GenieBreaker 버튼 맵핑’을 켜세요. 업데이트 후 스위치가 다시 꺼지면 앱 정보의 더보기에서 ‘제한된 설정 허용’을 확인하세요."
+                "접근성에서 ‘GenieBreaker 버튼 매핑’을 켜세요. 업데이트 후 스위치가 다시 꺼지면 앱 정보의 ‘더보기’에서 ‘제한된 설정 허용’을 확인하세요."
         ) { index ->
             when (index) {
                 0 -> {
@@ -108,7 +108,7 @@ internal class TvControls(
     fun chooseButton() {
         TvMenus.show(
             owner, "버튼 추가", listOf("취소"),
-            "$CAPTURE_INSTRUCTIONS\n\n특수 버튼 입력 대기 중"
+            "$CAPTURE_INSTRUCTIONS\n\n리모컨 버튼 입력 대기 중"
         )
         capturePage = pageId()
     }
@@ -117,13 +117,13 @@ internal class TvControls(
         val existing = bindings.action(key)
         val actions = buttonActions.keys.toList()
         val labels = listOf("앱 실행") + buttonActions.values + listOf("버튼 삭제")
-        TvMenus.show(owner, title, labels, "버튼을 한 번 눌렀을 때 실행할 동작", when {
+        TvMenus.show(owner, title, labels, "버튼을 한 번 누를 때 실행할 동작을 선택하세요.", when {
             existing == null -> -1
             existing.startsWith("app:") -> 0
             else -> actions.indexOf(existing) + 1
         }) { index ->
             when {
-                index == 0 -> chooseApp("버튼으로 실행할 앱") { pkg, name -> bind(key, "app:$pkg", name) }
+                index == 0 -> chooseApp("버튼에 지정할 앱") { pkg, name -> bind(key, "app:$pkg", name) }
                 index <= actions.size -> bind(key, actions[index - 1], null)
                 else -> bind(key, null, null)
             }
@@ -153,7 +153,7 @@ internal class TvControls(
     }
     fun startupPermission() {
         if (!StartupApps.permissionSettings(owner))
-            TvMenus.notice(owner, "이 TV에서는 권한 설정을 바로 열 수 없습니다. 설정에서 ‘다른 앱 위에 표시’를 확인하세요.")
+            TvMenus.notice(owner, "TV 설정의 앱 권한에서 ‘다른 앱 위에 표시’를 확인하세요.")
     }
     fun toggleWake() {
         val enabled = !StartupApps.wakeEnabled(owner)
@@ -161,7 +161,7 @@ internal class TvControls(
         if (!enabled) owner.stopService(Intent(owner, StartupWakeService::class.java))
         else if (!StartupApps.allowed(owner)) startupPermission()
         else if (!StartupWakeService.restore(owner)) {
-            TvMenus.notice(owner, "이 TV에서 대기 해제 감지를 시작할 수 없습니다.")
+            TvMenus.notice(owner, "이 TV에서 대기 상태 해제를 감지할 수 없습니다.")
         }
         refresh()
     }

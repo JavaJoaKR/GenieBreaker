@@ -29,7 +29,7 @@ internal object SessionInstaller {
 
     fun submit(context: Context, apk: File, expectedPackage: String) {
         val app = context.applicationContext
-        state(app).edit().putString("progress", "설치 파일을 준비하고 있습니다").remove("result").apply()
+        state(app).edit().putString("progress", "설치 파일 준비 중").remove("result").apply()
         val worker = Executors.newSingleThreadExecutor()
         FileWork.lock.readLock().lock()
         try { FileWork.pending.incrementAndGet() } finally { FileWork.lock.readLock().unlock() }
@@ -55,7 +55,7 @@ internal object SessionInstaller {
                         .putExtra("expected_package", expectedPackage)
                     val mutable = if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
                     val pending = PendingIntent.getBroadcast(app, id, callback, PendingIntent.FLAG_UPDATE_CURRENT or mutable)
-                    state(app).edit().putString("progress", "설치 확인을 기다리고 있습니다").apply()
+                    state(app).edit().putString("progress", "TV의 설치 확인 대기 중").apply()
                     session.commit(pending.intentSender); committed = true
                 }
             } catch (error: Exception) {
@@ -88,16 +88,16 @@ class InstallResultReceiver : BroadcastReceiver() {
             }
             return
         }
-        val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "상세 응답 없음"
+        val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "시스템에서 상세 메시지를 반환하지 않았습니다."
         val other = intent.getStringExtra(PackageInstaller.EXTRA_OTHER_PACKAGE_NAME)
         val legacy = intent.getIntExtra("android.content.pm.extra.LEGACY_STATUS", 0)
         val explanation = when (status) {
             PackageInstaller.STATUS_SUCCESS -> "설치 완료"
-            PackageInstaller.STATUS_FAILURE_CONFLICT -> "다른 앱과 충돌하여 설치할 수 없습니다."
-            PackageInstaller.STATUS_FAILURE_BLOCKED -> "기기에서 설치를 허용하지 않았습니다."
-            PackageInstaller.STATUS_FAILURE_ABORTED -> "설치가 취소됐습니다."
-            PackageInstaller.STATUS_FAILURE_STORAGE -> "설치 공간이 부족합니다."
-            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "이 기기에서 사용할 수 없는 앱입니다."
+            PackageInstaller.STATUS_FAILURE_CONFLICT -> "이미 설치된 앱과 충돌하여 설치를 완료하지 못했습니다."
+            PackageInstaller.STATUS_FAILURE_BLOCKED -> "TV가 설치를 차단했습니다."
+            PackageInstaller.STATUS_FAILURE_ABORTED -> "설치가 취소되었습니다."
+            PackageInstaller.STATUS_FAILURE_STORAGE -> "설치에 필요한 저장 공간이 부족합니다."
+            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "APK가 이 기기의 설치 요건과 일치하지 않습니다."
             else -> "설치 실패"
         }
         val result = "$explanation\n대상: $expected\n상태: $status / $legacy\n${if (other != null) "충돌 앱: $other\n" else ""}$message"

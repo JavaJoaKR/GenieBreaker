@@ -39,7 +39,7 @@ internal class DualApps(private val context: Context) {
         val original = source.packageName
         val previous = record(original)?.takeIf(::owns)
         val target = previous?.target ?: (0..999).asSequence().map { DualPackageNames.candidate(original, it) }.firstOrNull { !isInstalled(it) }
-            ?: error("새 듀얼앱을 준비할 수 없습니다")
+            ?: error("듀얼앱 생성 정보를 준비할 수 없습니다")
         @Suppress("DEPRECATION")
         val installedVersion = try { context.packageManager.getPackageInfo(target, 0).versionCode } catch (_: PackageManager.NameNotFoundException) { 0 }
         @Suppress("DEPRECATION")

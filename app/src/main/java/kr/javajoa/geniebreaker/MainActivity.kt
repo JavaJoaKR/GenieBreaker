@@ -44,7 +44,7 @@ class MainActivity : FlutterActivity() {
         val prefs = getSharedPreferences("local_diagnostics", MODE_PRIVATE)
         prefs.getString("last_crash", null)?.let { code ->
             prefs.edit().remove("last_crash").apply()
-            uiHandler.post { TvMenus.notice(this, "이전 실행이 종료됐습니다. 오류 코드 [$code]") }
+            uiHandler.post { TvMenus.notice(this, "이전 실행이 예기치 않게 종료되었습니다. 오류 코드 [$code]") }
         }
     }
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -228,18 +228,18 @@ class MainActivity : FlutterActivity() {
         bluetooth.result(requestCode, resultCode)
     }
     private fun openAppSettings() {
-        if (!openAppsScreen(this)) TvMenus.notice(this, "이 TV에서는 앱 목록을 직접 열 수 없습니다. TV 설정에서 앱을 여세요.")
+        if (!openAppsScreen(this)) TvMenus.notice(this, "TV 설정에서 ‘앱’을 열어 설치 목록을 확인하세요.")
     }
     private fun showAccountSettings() {
         if (!openAccountSettings(this)) {
-            TvMenus.notice(this, "계정 목록을 바로 열 수 없습니다. TV 설정에서 ‘계정’을 여세요.")
+            TvMenus.notice(this, "TV 설정의 ‘계정’에서 기기 계정을 확인하세요.")
         }
     }
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)
-        TvMenus.show(this, "문제 기록 · 기기 내부", listOf("기록 복사", "기록 지우기"), text) { which ->
+        TvMenus.show(this, "문제 기록 · 이 기기에 저장됨", listOf("기록 복사", "기록 지우기"), text) { which ->
             if (which == 0) getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker local errors", text))
-            else TvMenus.show(this, "문제 기록 지우기", listOf("취소", "기록 지우기"), "기기에 저장된 오류 코드를 지웁니다.") { if (it == 1) Diagnostics.clear(this) }
+            else TvMenus.show(this, "문제 기록 지우기", listOf("취소", "기록 지우기"), "기기에 저장된 오류 기록을 삭제합니다.") { if (it == 1) Diagnostics.clear(this) }
         }
     }
 }

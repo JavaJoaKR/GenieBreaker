@@ -29,7 +29,7 @@ internal class AppCatalog(private val context: Context, private val duals: DualA
         val next = items.map { pkg ->
             val record = bySource[pkg.packageName] ?: byTarget[pkg.packageName]
             mapOf<String, Any>("id" to pkg.packageName, "name" to (pkg.applicationInfo?.loadLabel(pm)?.toString() ?: "앱"), "icon" to icon(pkg.applicationInfo, pkg.lastUpdateTime),
-                "detail" to when { record == null -> ""; duals.isInstalled(record.target) -> "듀얼앱 사용 중"; else -> "설치 준비됨" })
+                "detail" to when { record == null -> ""; duals.isInstalled(record.target) -> "듀얼앱 설치됨"; else -> "APK 설치 가능" })
         }
         return Listing(items, next)
     }

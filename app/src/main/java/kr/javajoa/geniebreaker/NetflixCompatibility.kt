@@ -30,7 +30,7 @@ internal object NetflixCompatibility {
         options.copy(renameResources = false, isolateTasks = false, extractLibraries = true) else options
 
     fun read(file: File): DexFile {
-        require(file.length() in 1..(48L * 1024 * 1024)) { "DEX가 비어 있거나 32비트 처리 한도(48MB)를 초과했습니다." }
+        require(file.length() in 1..(48L * 1024 * 1024)) { "DEX가 비어 있거나 32비트 처리 한도인 48MB를 초과했습니다." }
         return file.inputStream().buffered().use { DexBackedDexFile.fromInputStream(null, it) }
     }
     private fun id(method: Method) = "${method.definingClass}->${method.name}(${method.parameterTypes.joinToString("")})${method.returnType}"
@@ -41,14 +41,14 @@ internal object NetflixCompatibility {
     }.map { method ->
         require(AccessFlags.PUBLIC.isSet(method.accessFlags) && !AccessFlags.STATIC.isSet(method.accessFlags) &&
             method.name == "run" && method.returnType == "V" && method.parameterTypes.isEmpty() &&
-            "Ljava/lang/Runnable;" in type.interfaces) { "넷플릭스 검사 코드 형태가 예상과 다릅니다. APK를 수정하지 않았습니다." }
+            "Ljava/lang/Runnable;" in type.interfaces) { "넷플릭스 검사 코드의 형식이 예상과 달라 APK 수정을 중단했습니다." }
         id(method)
     } }
 
     /** The caller must establish uniqueness across ALL dex files before invoking this. */
     fun patch(input: File, target: String, output: File) {
         val dex = read(input)
-        require(candidates(dex) == listOf(target)) { "넷플릭스 검사 코드가 유일하지 않습니다. APK를 수정하지 않았습니다." }
+        require(candidates(dex) == listOf(target)) { "일치하는 넷플릭스 검사 코드를 하나로 특정하지 못해 APK 수정을 중단했습니다." }
         val changed = mutableSetOf<String>()
         val rewritten = DexRewriter(object : RewriterModule() {
             override fun getMethodRewriter(rewriters: Rewriters): Rewriter<Method> = Rewriter { method ->

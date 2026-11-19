@@ -1,94 +1,57 @@
-# GenieBreaker TV design
+# GenieBreaker TV 화면 설계
 
-A compact Android TV utility operated by a directional remote. A dark grayscale
-palette uses luminance to distinguish the active tab, focus, and content.
-Design guidance: qiaomu-design (existing-direction craft and functional UI path).
-Visual restraint 3/10, motion 1/10, density 8/10.
+## 사용 기준
 
-## Functional contract
+GenieBreaker는 방향키 리모컨으로 조작하는 Android TV 유틸리티다. 사용자는 3초 안에 현재 탭, 포커스, 작업 상태를 확인할 수 있어야 한다. 앱 화면과 메뉴는 한 Flutter 엔진에서 표시한다. 페어링, 권한 요청, 파일 선택, APK 설치에는 Android 시스템 화면을 사용한다.
 
-Within three seconds identify the current tab, focused action and device/task
-state. Complete Bluetooth pairing, app cloning/installation, app settings access,
-file management, app-owned storage cleanup and local error-code reading using
-only the remote. All application screens and popups share one Flutter engine.
-Android permission, pairing, picker and installer screens remain system-owned.
+리모컨만으로 블루투스 기기 등록, 듀얼앱 생성과 설치, 앱 설정 이동, 파일 관리, 저장 공간 정리, 오류 코드 확인을 수행할 수 있어야 한다.
 
-## Design system
+## 시각 기준
 
-- Canvas #121212, navigation #1B1B1B, panel #222222, and raised #2A2A2A.
-- Primary text #F5F5F5, secondary #BDBDBD, and action accent #DDDDDD.
-- The launcher icon, TV banner, and notification share an angular G mark.
-- The sidebar uses a whole-surface #393939 fill for the active tab and a brighter
-  #5C5C5C fill for focus. Content actions keep the 2dp focus outline.
-- Linear donor: three luminance layers, one accent, quiet 1px structural borders.
-  Apple donor: 2px focus outline, 8px spacing base, 400/500/600 type roles,
-  shadows reserved for modal depth. Translate to the grayscale palette; copy no
-  proprietary typography or brand marks.
-- Korean system fonts avoid remote font requests and additional APK font assets.
-  Headings 24–27; rows 17; metadata 12. Halve prior explicit radii:
-  tiles and action buttons 5, highlights inset 6, panels 7, rail 8, modals 9.
-- Whole application rendered at 0.90 of its previous logical size, with matching
-  viewport and hit testing. This never alters Android's global density setting.
-- Five deliberate details: full focus outline, distinct selected fill, persistent
-  package/path/device identities, official Material icons plus actual app icons,
-  bounded modal surface with pinned actions and prominent local error codes.
-- No decorative media. Bundled Material icons are tree-shaken. Installed app icons
-  are read locally, resized to 64px, and displayed in their original colors.
+| 요소 | 기준 |
+| --- | --- |
+| 배경 | 화면 `#121212`, 탐색 영역 `#1B1B1B`, 패널 `#222222`, 강조 패널 `#2A2A2A` |
+| 텍스트 | 본문 `#F5F5F5`, 보조 정보 `#BDBDBD`, 동작 강조 `#DDDDDD` |
+| 탭 | 선택 상태 `#393939`, 포커스 `#5C5C5C` |
+| 포커스 | 콘텐츠 동작에 2dp 윤곽선 적용 |
+| 글자 크기 | 제목 24–27, 항목 17, 보조 정보 12 |
+| 모서리 반경 | 타일·버튼 5, 내부 강조 6, 패널 7, 탐색 영역 8, 모달 9 |
+| 바깥 여백 | 가로 18–24dp, 세로 14–18dp |
 
-## Layout and interaction
+앱 아이콘, TV 배너, 알림에는 같은 G 표식을 사용한다. 설치된 앱의 아이콘은 기기에서 읽어 64px로 조정하고 원래 색상을 유지한다. 앱 내부에서는 Material 아이콘과 기기 기본 한국어 글꼴을 사용한다.
 
-- A 146–174dp navigation rail and 18–24dp horizontal, 14–18dp vertical outer margins reserve most of the
-  viewport for content. Its footer shows the installed version. Content headers
-  can show a live item count or scan state.
-- Eight tabs: Bluetooth, apps, shortcuts, files, storage, mapping, startup and
-  settings. Keep navigation and controls visible while each result list scrolls.
-- Up/Down in the sidebar opens the focused tab while keeping focus in the rail.
-  Right restores that tab's last attached content focus. All edges clamp.
-- Bluetooth lists maintain their own columns even when lengths differ. Pinned
-  counts and compact rows give devices the remaining height. Async names update
-  keyed rows without replacing the focused identity.
-- Toolbars share a row with status at TV widths. The app grid sizes columns from
-  the available content width, with equal cards, fixed icon slots, and one-line
-  labels and status. Package keys keep focus stable.
-- Explorer provides connected-storage roots, folder navigation, sort, refresh,
-  mkdir, copy, cut/paste, rename, delete, open/install and local details. Each row
-  has a separately focusable file-actions button. Down from any toolbar action
-  enters the first file row. Up from that row returns to the initiating action.
-  The breadcrumb uses display names and keeps the current folder visible. From
-  two or more levels deep, the storage list is one action away even if the
-  parent folder is unavailable. Only permitted roots are shown.
-- Left at content's first column returns to sidebar. Back inside a nested folder
-  returns to its parent and originating row; at top-level returns to sidebar.
-- Storage shows free and total capacity together above the usage bar. File information has a single Close action and only shows a known modification date.
-- Storage is a separate tab. Cleanup only affects app-owned APKs, updates and
-  caches. Destructive actions default to Cancel; progress rejects duplicate work.
-- Menus stay within the same Flutter surface and exclude background focus.
-  Back pops one menu level; Close restores the original content focus.
-- No permanent direction/confirm/back tutorial text. Labels describe actions.
-- Key-repeat feedback and scrolling are immediate. System reduced-motion settings
-  are respected; no decorative animation is added.
+기존 화면의 논리 크기에 0.90배를 적용한다. 화면 표시 범위와 입력 판정 범위에 같은 배율을 적용한다. Android의 시스템 밀도는 유지한다. 화면 이동에 필요한 상태 표시를 제공하고 시스템의 모션 최소화 설정을 따른다.
 
-## States and recovery
+## 레이아웃과 리모컨 탐색
 
-- Loading preserves existing content, empty states explain the missing content,
-  permission state offers permission access, errors show a short offline code and
-  refresh/retry remains reachable. Long names wrap at most twice then ellipsize.
-- Repeated operations are serialized. Copy never overwrites existing files; move
-  deletes the source only after copy completes. Incomplete copies are removed or
-  explicitly reported. Root deletion and copies into descendants are rejected.
-- Read-only roots remain browsable, but mutations are offered only with write
-  permission. Internal storage and USB use user-granted document-tree access.
-- File API and installer locks prevent cleanup racing active file work.
+- 왼쪽 탐색 영역의 너비는 146–174dp다. 하단에 앱 버전을 표시한다. 콘텐츠 제목에는 항목 수나 검색 상태를 표시할 수 있다.
+- 탐색 탭은 블루투스, 앱 관리, 바로가기, 파일 탐색기, 저장 공간, 버튼 매핑, 시작 앱, 설정 순서다. 목록을 스크롤할 때 탐색 영역과 동작 버튼을 유지한다.
+- 왼쪽 탐색 영역에서 위·아래 방향키를 누르면 포커스한 탭이 열리며 포커스는 탐색 영역에 머문다. 오른쪽 방향키를 누르면 해당 탭에서 마지막으로 선택한 콘텐츠로 이동한다. 화면 가장자리에 도달하면 해당 방향으로 포커스를 이동할 수 없다.
+- 블루투스 목록은 등록 기기와 검색 기기를 별도 열로 표시한다. 기기 이름이 나중에 확인되어도 기존 항목과 포커스를 유지한다.
+- 앱 관리는 콘텐츠 너비를 기준으로 열 수를 정한다. 카드 크기와 아이콘 영역을 일정하게 유지하고 이름과 상태를 한 줄씩 표시한다. 패키지명으로 항목을 식별한다.
+- 콘텐츠 첫 열의 항목에서 왼쪽 방향키를 누르면 탐색 영역으로 이동한다. 열린 폴더에서 뒤로 이동하면 상위 폴더와 기존 항목으로 돌아간다. 최상위 화면에서 뒤로 이동하면 탐색 영역으로 돌아간다.
+- 메뉴가 열린 동안 배경의 포커스를 제한한다. 뒤로 이동은 메뉴를 한 단계 닫고, 닫기는 기존 콘텐츠 포커스를 복원한다.
 
-## Acceptance
+## 파일과 저장 공간
 
-Widget tests own directional/focus regression coverage; Android tests cover the
-single Flutter host, menu callback stack, provider containment, actual file
-operations and existing installer/updater regressions. Review real rendered TV
-screens at 960×540 and a smaller landscape viewport. Hardware Bluetooth/profile
-behavior and vendor settings screens still require MA4000 validation.
+파일 탐색기는 연결된 저장소, 폴더 이동, 정렬, 새로고침, 폴더 생성, 복사, 이동, 이름 변경, 삭제, 파일 열기·설치, 상세 정보를 지원한다. 각 행의 파일 동작 버튼은 별도로 선택할 수 있다. 상단 도구 모음에서 아래로 이동하면 첫 번째 파일을 선택한다. 첫 번째 파일에서 위로 이동하면 직전에 선택한 버튼으로 돌아간다.
 
-Release builds enable R8/resource shrinking, retain ARM32 only and preserve
-reflective APK editing/signing APIs. Automatic GitHub updates remain enabled.
-Logs stay local and store category/exception codes without device metadata,
-IP, location or full paths. No log upload or analytics endpoint is included.
+현재 폴더와 상위 경로는 표시 이름으로 표시한다. 폴더를 두 단계 이상 연 경우 저장소 목록으로 바로 이동할 수 있다. 내부 저장소와 USB는 사용자가 허용한 폴더만 표시한다. 쓰기 권한이 있는 위치에서 편집 동작을 제공한다.
+
+저장 공간 화면에는 전체 용량과 사용 가능 용량, 사용률을 표시한다. 정리 대상은 GenieBreaker가 보관한 APK, 업데이트 파일, 캐시다. 삭제 확인의 기본 선택은 취소다. 파일과 설치 작업의 동시 실행을 제어해 사용 중인 파일이 정리되지 않도록 한다.
+
+복사는 기존 파일을 덮어쓰지 않는다. 이동은 복사가 완료된 뒤 원본을 삭제한다. 복사 실패 시 불완전한 파일을 정리하고, 정리할 수 없으면 남은 파일을 알린다. 저장소 최상위 폴더 삭제와 하위 폴더로의 순환 복사를 차단한다.
+
+## 상태와 복구
+
+불러오는 중에는 기존 콘텐츠를 유지한다. 빈 목록은 현재 상태를 표시한다. 권한이 필요한 경우 해당 설정으로 이동할 수 있게 한다. 오류에는 기기에 저장되는 오류 코드와 가능한 후속 동작을 표시한다. 긴 이름은 최대 두 줄로 표시한다.
+
+파일 상세 정보에는 확인된 수정일만 표시하며 닫기 동작을 제공한다. 조작 안내는 해당 동작이 필요한 위치에 배치한다. 방향키, 확인, 뒤로의 상시 안내를 화면에 배치하지 않는다.
+
+## 빌드와 검증
+
+Flutter 위젯 테스트는 화면과 방향키 탐색을 검증한다. Android 계측 테스트는 단일 Flutter 화면, 메뉴 이동, 파일 접근 범위, APK 처리와 업데이트를 확인한다. 960×540과 소형 가로 화면에서 레이아웃을 검토한다. 블루투스 프로필 동작과 제조사 설정 화면은 MA4000 실기기 확인이 필요하다.
+
+PR과 수동 실행에서 Android TV 에뮬레이터를 사용한다. `main` 배포 실행에서는 ARM32용 APK를 빌드하고 Flutter 검사, Android lint, 단위 테스트, APK 서명과 ABI를 확인한다. 배포 빌드는 R8과 리소스 축소를 사용하며 APK 편집·서명 라이브러리에서 필요한 리플렉션 API를 보존한다.
+
+앱 업데이트는 GitHub 릴리스를 사용한다. 오류 기록은 기기에 저장한다. 기록 항목은 오류 분류와 예외 유형을 기준으로 생성한다. 기기 정보, IP 주소, 위치, 전체 파일 경로는 기록에 포함하지 않는다.

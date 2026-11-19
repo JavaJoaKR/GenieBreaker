@@ -20,7 +20,7 @@ internal object StorageTools {
         "apks" -> File(context.filesDir, "edited").listFiles().orEmpty().filter { it.extension in setOf("apk", "json") }
         "cache" -> context.cacheDir.listFiles().orEmpty().filter { it.name != "updates" && it.name != "update.apk" }
         "updates" -> updateRoots(context).filter { it.exists() }
-        else -> throw IllegalArgumentException("지원하지 않는 저장공간 종류")
+        else -> throw IllegalArgumentException("지원하지 않는 저장 공간 종류")
     }
 
     fun snapshot(context: Context): Map<String, Any> = FileWork.reading {
@@ -53,10 +53,10 @@ internal object StorageTools {
         require(kind in setOf("apks", "cache", "updates"))
         if (!FileWork.lock.writeLock().tryLock()) error("파일 작업 중입니다. 작업이 끝난 뒤 다시 정리하세요.")
         try {
-            check(FileWork.pending.get() == 0) { "설치 파일을 준비하고 있습니다. 잠시 후 다시 정리하세요." }
+            check(FileWork.pending.get() == 0) { "설치 파일 준비 중. 잠시 후 다시 정리하세요." }
             val failed = cleanupTargets(context, kind).count { !it.deleteRecursively() }
             if (failed > 0) error("일부 파일을 정리하지 못했습니다. 다시 시도하세요.")
-            return "정리했습니다. 설치된 앱과 서명 키는 유지됩니다."
+            return "선택한 파일을 정리했습니다. 설치된 앱과 서명 키는 유지됩니다."
         } finally { FileWork.lock.writeLock().unlock() }
     }
 }

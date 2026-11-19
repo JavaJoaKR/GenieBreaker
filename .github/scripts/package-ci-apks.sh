@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p dist tv-apks
+mkdir -p dist
 standard="dist/GenieBreaker-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk"
 release=app/build/outputs/apk/release
-cp "$release/app-armeabi-v7a-release.apk" "$standard"
-cp "$release/app-x86_64-release.apk" tv-apks/release.apk
-cp app/build/outputs/apk/debug/app-debug.apk tv-apks/debug.apk
-cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk tv-apks/instrumentation.apk
-python3 - "$standard" <<'PY'
+signed_apks=("$standard")
+verify_tv="${VERIFY_TV:-true}"
+if [[ "$verify_tv" == true ]]; then
+  mkdir -p tv-apks
+  cp "$release/app-armeabi-v7a-release.apk" "$standard"
+  cp "$release/app-x86_64-release.apk" tv-apks/release.apk
+  cp app/build/outputs/apk/debug/app-debug.apk tv-apks/debug.apk
+  cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk tv-apks/instrumentation.apk
+  signed_apks+=(tv-apks/release.apk)
+else
+  cp "$release/app-release.apk" "$standard"
+fi
+python3 - "$standard" "$verify_tv" <<'PY'
 from pathlib import Path
 from sys import argv
 from zipfile import ZipFile
 
-apks = [
-    (argv[1], {"armeabi-v7a"}, ("libapp.so", "libflutter.so")),
-    ("tv-apks/release.apk", {"x86_64"}, ("libapp.so", "libflutter.so")),
-    ("tv-apks/debug.apk", {"x86_64"}, ("libflutter.so",)),
-]
+apks = [(argv[1], {"armeabi-v7a"}, ("libapp.so", "libflutter.so"))]
+if argv[2] == "true":
+    apks += [
+        ("tv-apks/release.apk", {"x86_64"}, ("libapp.so", "libflutter.so")),
+        ("tv-apks/debug.apk", {"x86_64"}, ("libflutter.so",)),
+    ]
 for apk, expected, required in apks:
     with ZipFile(apk) as archive:
         libraries = set(archive.namelist())
@@ -29,15 +38,16 @@ for apk, expected, required in apks:
             if f"lib/{abi}/{library}" not in libraries:
                 raise SystemExit(f"{apk}: missing {abi}/{library}")
 
-# The clone and APK editor instrumented tests use this APK as their input.
-debug_size = Path("tv-apks/debug.apk").stat().st_size
-if debug_size > 200 * 1024 * 1024:
-    raise SystemExit(f"tv-apks/debug.apk exceeds the APK workshop size limit: {debug_size} bytes")
-print(f"x64 debug test APK: {debug_size} bytes")
+if argv[2] == "true":
+    # The clone and APK editor instrumented tests use this APK as input.
+    debug_size = Path("tv-apks/debug.apk").stat().st_size
+    if debug_size > 200 * 1024 * 1024:
+        raise SystemExit(f"tv-apks/debug.apk exceeds the APK workshop size limit: {debug_size} bytes")
+    print(f"x64 debug test APK: {debug_size} bytes")
 PY
 
 tools="$ANDROID_HOME/build-tools/35.0.0"
-for apk in dist/*.apk tv-apks/release.apk; do
+for apk in "${signed_apks[@]}"; do
   "$tools/apksigner" verify --min-sdk-version 26 "$apk"
   if ! "$tools/aapt" dump badging "$apk" | grep -F "versionCode='$BUILD_NUMBER'" >/dev/null; then
     echo "$apk does not have CI version code $BUILD_NUMBER" >&2

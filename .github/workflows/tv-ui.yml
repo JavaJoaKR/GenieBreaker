@@ -4,7 +4,8 @@ on:
 permissions:
   contents: read
 jobs:
-  screenshot:
+  emulator:
+    name: Android TV emulator
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

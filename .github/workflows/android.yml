@@ -13,12 +13,13 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 env:
   BUILD_NUMBER: ${{ github.run_number }}
   FLUTTER_VERSION: '3.35.7'
   ANDROID_NDK_VERSION: '27.3.13750724'
+  VERIFY_TV: ${{ github.event_name != 'push' }}
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -51,12 +52,17 @@ jobs:
           path: |
             flutter_ui/build/host/outputs/repo
             build-symbols
-          # Keep the cache key for the existing ARM32 and x64 AARs.
-          key: genie-aar-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-false-${{ hashFiles('flutter_ui/lib/**', 'flutter_ui/pubspec.yaml', 'flutter_ui/pubspec.lock') }}
+          # Keep the existing full-build cache separate from ARM32 release-only AARs.
+          key: genie-aar-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-${{ env.VERIFY_TV == 'true' && 'false' || 'release-arm32' }}-${{ hashFiles('flutter_ui/lib/**', 'flutter_ui/pubspec.yaml', 'flutter_ui/pubspec.lock') }}
       - name: Build Flutter AARs
         if: steps.flutter-aar.outputs.cache-hit != 'true'
         working-directory: flutter_ui
-        run: flutter build aar --no-profile --target-platform android-arm,android-x64 --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
+        run: |
+          if [[ "$VERIFY_TV" == true ]]; then
+            flutter build aar --no-profile --target-platform android-arm,android-x64 --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
+          else
+            flutter build aar --no-debug --no-profile --target-platform android-arm --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
+          fi
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
@@ -66,11 +72,19 @@ jobs:
         run: |
           test -x "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
           base64 --decode development-keystore.base64 > release.jks
-          gradle --build-cache :app:assembleRelease :app:lintRelease -PciAbiSplits=true || {
+          targets=(:app:assembleRelease :app:lintRelease)
+          if [[ "$VERIFY_TV" == true ]]; then
+            targets+=(-PciAbiSplits=true)
+          else
+            targets+=(:app:testReleaseUnitTest)
+          fi
+          gradle --build-cache "${targets[@]}" || {
             cat app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt 2>/dev/null || true
             exit 1
           }
-          gradle --build-cache :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest -PciTvDebug=true
+          if [[ "$VERIFY_TV" == true ]]; then
+            gradle --build-cache :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest -PciTvDebug=true
+          fi
       - name: Package and check APKs
         run: bash .github/scripts/package-ci-apks.sh
       - uses: actions/upload-artifact@v4
@@ -84,6 +98,7 @@ jobs:
           compression-level: 0
           overwrite: true
       - uses: actions/upload-artifact@v4
+        if: env.VERIFY_TV == 'true'
         with:
           name: TV-APKs
           path: tv-apks/
@@ -93,6 +108,7 @@ jobs:
 
   tv:
     needs: build
+    if: github.event_name != 'push'
     uses: ./.github/workflows/tv-ui.yml
 
   publish:
@@ -114,5 +130,5 @@ jobs:
           tag="build-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
           cp "dist/GenieBreaker-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk" dist/GenieBreaker.apk
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
-          notes="자동 개발 빌드. 공개 개발용 키로 서명되며 MA4000 실기기 검증 전입니다. [channel:${GITHUB_REF_NAME}]"
+          notes="자동으로 생성한 개발 빌드입니다. 공개 개발 키로 서명했으며 MA4000 실기기 검증은 진행하지 않았습니다. [channel:${GITHUB_REF_NAME}]"
           gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "GenieBreaker build ${GITHUB_RUN_NUMBER}" --latest --notes "$notes"

@@ -82,7 +82,7 @@ class RemoteButtonService : AccessibilityService() {
         }
         if (!completed) {
             try {
-                Toast.makeText(this, "지정한 동작을 실행할 수 없습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "매핑한 동작을 실행할 수 없습니다", Toast.LENGTH_SHORT).show()
             } catch (error: RuntimeException) {
                 Diagnostics.record(this, "Remote action feedback", error)
             }

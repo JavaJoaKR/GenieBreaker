@@ -224,8 +224,8 @@ class _GeniePageState extends State<GeniePage> {
     final items = (data?['items'] as List? ?? []).cast<String>();
     final confirmation = isConfirmation;
     const labels = {
-      'renameApp': ['앱 이름 변경', '앱 이름에 듀얼 표시'],
-      'renameLaunchers': ['런처 이름 변경', 'TV 홈 화면의 실행 이름 변경'],
+      'renameApp': ['앱 이름 변경', '앱 이름에 ‘듀얼’을 추가합니다'],
+      'renameLaunchers': ['런처 이름 변경', 'TV 홈 화면에 표시되는 이름을 바꿉니다'],
       'renameResources': ['리소스 패키지 변경', '끄면 원본 리소스 패키지명 유지'],
       'isolateTasks': ['실행 작업 분리', '끄면 원본 작업 그룹 유지'],
       'extractLibraries': ['네이티브 라이브러리 추출', '끄면 원본 추출 설정 유지'],
@@ -289,7 +289,7 @@ class _GeniePageState extends State<GeniePage> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(4, 6, 4, 12),
                 child: Text(
-                  '패키지·공급자 주소·충돌 권한·서명은 별도 설치를 위해 변경됩니다. 호환성 옵션은 앱 실행을 보장하지 않습니다.',
+                  '별도 설치에 필요한 패키지명, 공급자 주소, 권한과 서명을 변경합니다. 앱 실행 여부는 설치 후 확인하세요.',
                   style: TextStyle(color: muted, fontSize: 12, height: 1.5),
                 ),
               ),
@@ -297,7 +297,7 @@ class _GeniePageState extends State<GeniePage> {
                 const Padding(
                   padding: EdgeInsets.all(4),
                   child: Text(
-                    '넷플릭스 프로필: 원본 리소스·작업 그룹 유지, 라이브러리 추출을 적용합니다.',
+                    '넷플릭스 프로필은 원본 리소스와 작업 그룹을 유지하고 라이브러리를 추출합니다.',
                     style: TextStyle(color: muted, fontSize: 12),
                   ),
                 ),

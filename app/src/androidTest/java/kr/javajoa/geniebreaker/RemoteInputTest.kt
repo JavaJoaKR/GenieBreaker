@@ -99,8 +99,8 @@ class RemoteInputTest {
             awaitMenu(activity, "버튼 추가")
             awaitFocus(activity, "item-0")
             unmappedRemoteKey(activity, 0x274, expectedHandled = false) // Linux KEY_UNMUTE remains with Android.
-            val instructions = "추가할 리모컨 버튼을 누르세요. 전원·볼륨 등 TV가 직접 처리하는 버튼은 입력이 전달되지 않을 수 있습니다."
-            awaitMenuValue(activity, "message", "$instructions\n\n등록할 수 없는 입력 · UNKNOWN (0) / scan 628 / source 201 / meta 0")
+            val instructions = "추가할 리모컨 버튼을 누르세요. 전원이나 음량 버튼처럼 TV가 직접 처리하는 입력은 등록이 제한될 수 있습니다."
+            awaitMenuValue(activity, "message", "$instructions\n\n등록 제한 입력 · UNKNOWN (0) / scan 628 / source 201 / meta 0")
             awaitFocus(activity, "item-0")
             unmappedRemoteKey(activity, shortcutScan, source = InputDevice.SOURCE_HDMI)
             awaitMenu(activity, "리모컨 버튼 $shortcutScan")
