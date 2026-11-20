@@ -75,12 +75,19 @@ internal class TvControls(
     }
     fun snapshot(): Map<String, Any> = state
     fun refresh() {
-        val defaultHome = isDefaultHome(owner)
+        val home = resolveDefaultHome(owner)
+        val defaultHome = home?.activityInfo?.packageName == owner.packageName
+        val shortcutRequired = isGProjectHome(owner, home)
+        val shortcutEnabled = prefs.getBoolean(HOME_SHORTCUT_ENABLED, true)
+        if (shortcutRequired && !shortcutEnabled) {
+            prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, true).apply()
+        }
         val hasOverlay = StartupApps.allowed(owner)
         val next = mapOf(
             "mappingStatus" to remoteAccessibility.status(),
             "bindings" to bindings.rows(),
-            "homeShortcutEnabled" to prefs.getBoolean(HOME_SHORTCUT_ENABLED, true),
+            "homeShortcutEnabled" to (shortcutRequired || shortcutEnabled),
+            "homeShortcutRequired" to shortcutRequired,
             "startupName" to prefs.getString("startupLabel", "").orEmpty(),
             "needsOverlay" to (Build.VERSION.SDK_INT >= 29),
             "canStart" to (defaultHome || hasOverlay),
@@ -121,11 +128,31 @@ internal class TvControls(
         }
     }
     fun toggleHomeShortcut() {
+        if (isGProjectHome(owner)) {
+            refresh()
+            TvMenus.notice(owner, "GProject가 기본 홈인 동안 단축 호출을 끌 수 없습니다.")
+            return
+        }
         prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, !prefs.getBoolean(HOME_SHORTCUT_ENABLED, true)).apply()
         refresh()
     }
 
     fun homeSettings() {
+        if (!prefs.getBoolean(HOME_SHORTCUT_ENABLED, true)) {
+            TvMenus.show(
+                owner, "단축 호출 켜기", listOf("켜고 계속", "취소"),
+                "기본 홈을 변경하려면 단축 호출을 켜세요."
+            ) { index ->
+                if (index == 0) {
+                    if (prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, true).commit()) {
+                        closeMenu()
+                        refresh()
+                        homeSettings()
+                    } else TvMenus.notice(owner, "단축 호출 설정을 저장할 수 없습니다.")
+                }
+            }
+            return
+        }
         if (!bindings.hasAppBinding(owner.packageName)) {
             TvMenus.show(
                 owner, "GenieBreaker 단축키 필요", listOf("버튼 추가", "닫기"),

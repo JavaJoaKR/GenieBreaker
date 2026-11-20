@@ -132,6 +132,24 @@ class RemoteInputTest {
             press(353)
             awaitChoice(choice, 1)
             assertFalse(activity.isFinishing)
+
+            val storedShortcut = prefs.getBoolean(HOME_SHORTCUT_ENABLED, true)
+            val controls = MainActivity::class.java.getDeclaredField("controls").apply { isAccessible = true }
+                .get(activity) as TvControls
+            try {
+                instrumentation.runOnMainSync {
+                    prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, false).apply()
+                    controls.homeSettings()
+                }
+                awaitMenu(activity, "단축 호출 켜기")
+                assertFalse(prefs.getBoolean(HOME_SHORTCUT_ENABLED, true))
+                awaitFocus(activity, "item-0")
+                press(314)
+                awaitMenu(activity, "GenieBreaker 단축키 필요")
+                assertTrue(prefs.getBoolean(HOME_SHORTCUT_ENABLED, false))
+            } finally {
+                prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, storedShortcut).apply()
+            }
         } catch (error: AssertionError) {
             ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
                 "screencap -p /sdcard/Download/genie-remote-failure.png"

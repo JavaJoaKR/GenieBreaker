@@ -2,6 +2,9 @@ package kr.javajoa.geniebreaker
 
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
+import android.content.pm.ResolveInfo
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -232,6 +235,23 @@ class TvControlsTest {
                 assertEquals(1, cleared)
             } finally { shortcut.cancel() }
         }
+    }
+
+    @Test fun gProjectCanBeIdentifiedByItsHomeActivityOrApplicationLabel() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val home = ResolveInfo().apply {
+            nonLocalizedLabel = "기본 홈"
+            activityInfo = ActivityInfo().apply {
+                applicationInfo = ApplicationInfo().apply { nonLocalizedLabel = "Launcher" }
+            }
+        }
+        assertFalse(isGProjectHome(context, home))
+        home.nonLocalizedLabel = "GProject"
+        assertTrue(isGProjectHome(context, home))
+        home.nonLocalizedLabel = "홈"
+        home.activityInfo.applicationInfo.nonLocalizedLabel = "GProject"
+        assertTrue(isGProjectHome(context, home))
+        assertFalse(isGProjectHome(context, null))
     }
 
     @Test fun selfLaunchIsAvailableForButtonsAndUnlocksHomeSettings() {
