@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(AndroidJUnit4::class)
 class AppUpdaterTest {
-    private fun release(code: Int, channel: String = "main", state: String = "uploaded") = """{"body":"[channel:$channel]","assets":[{"name":"GenieBreaker-$code-abcdef0.apk","state":"$state","browser_download_url":"https://github.com/JavaJoaKR/GenieBreaker/releases/download/build-$code/GenieBreaker-$code-abcdef0.apk"}]}"""
+    private fun release(code: Int, channel: String = "main", state: String = "uploaded", prerelease: Boolean = false) = """{"prerelease":$prerelease,"body":"[channel:$channel]","assets":[{"name":"GenieBreaker-$code-abcdef0.apk","state":"$state","browser_download_url":"https://github.com/JavaJoaKR/GenieBreaker/releases/download/build-$code/GenieBreaker-$code-abcdef0.apk"}]}"""
     @Test fun catalogChoosesVersionRatherThanArrayOrderOrOtherBranches() {
-        val latest = ReleaseCatalog.latest(JSONArray("[${release(8)},${release(99, "feature")},${release(7)},${release(12)},${release(20, state = "new")}]"))
+        val latest = ReleaseCatalog.latest(JSONArray("[${release(8)},${release(99, "feature")},${release(7)},${release(12)},${release(20, state = "new")},${release(133, prerelease = true)}]"))
         assertEquals(12L, latest.version)
         try { ReleaseCatalog.latest(JSONArray("[]")); fail("Empty releases must not mean latest version") } catch (_: IllegalStateException) { }
     }
@@ -25,7 +25,8 @@ class AppUpdaterTest {
         val context = instrumentation.targetContext
         val preferences = context.getSharedPreferences("updates", 0)
         val old = preferences.getLong("last_check", 0)
-        preferences.edit().remove("last_check").commit()
+        // A clock correction must not suppress checks until the old wall time catches up.
+        preferences.edit().putLong("last_check", System.currentTimeMillis() + 86_400_000L).commit()
         val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java).putExtra("ui_preview", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val attempts = AtomicInteger()
         val requestTimes = mutableListOf<Long>()

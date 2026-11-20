@@ -56,7 +56,7 @@ internal class AppUpdater(
         handler.removeCallbacks(retry)
         ui { state("업데이트 확인 중", false) }
         executor.execute {
-            try { StorageTools.pruneUpdates(activity) } catch (error: Exception) { Diagnostics.record(activity, "Update cleanup", error) }
+            try { StorageTools.pruneStaging(activity) } catch (error: Exception) { Diagnostics.record(activity, "APK staging cleanup", error) }
             FileWork.lock.readLock().lock()
             var cachedVersion = 0L
             try {
@@ -67,7 +67,8 @@ internal class AppUpdater(
                     } else apk.delete()
                 }
                 // A cached APK must be detected before applying the successful-check interval.
-                if (automatic && !failed && System.currentTimeMillis() - preferences.getLong("last_check", 0) < 6 * 60 * 60 * 1000) {
+                val checkAge = System.currentTimeMillis() - preferences.getLong("last_check", 0)
+                if (automatic && !failed && checkAge in 0 until 6L * 60 * 60 * 1000) {
                     ui { state(if (cachedVersion > 0) "업데이트 설치" else "업데이트 확인", true) }; return@execute
                 }
                 nextCheckAt = SystemClock.elapsedRealtime() + CHECK_COOLDOWN_MS

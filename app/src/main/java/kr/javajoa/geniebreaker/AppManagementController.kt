@@ -29,6 +29,7 @@ internal class AppManagementController(
     private var entries = emptyList<Map<String, Any>>()
     private val catalog = AppCatalog(activity.applicationContext, duals)
     private var refreshAgain = false
+    private var pendingInstallPermission: String? = null
     private val installState = SessionInstaller.state(activity)
     private val preferences = activity.getSharedPreferences("apk_workshop", Context.MODE_PRIVATE)
     private fun installStatus() = installState.getString("result", null)?.lineSequence()?.firstOrNull() ?: installState.getString("progress", null) ?: "듀얼앱을 만들 원본 앱을 선택하세요"
@@ -81,7 +82,11 @@ internal class AppManagementController(
         if (record != null && duals.file(record).exists()) actions += "듀얼앱 APK 저장" to { export(record.id) }
         if (pkg.applicationInfo?.flags?.and(ApplicationInfo.FLAG_SYSTEM) == 0) actions += "원본 앱 제거" to { uninstall(record?.source ?: pkg.packageName) }
         actions += "앱 정보" to { notice("${pkg.packageName}\n버전 ${pkg.versionName}") }
-        if (!isNetflix && installState.contains("result")) actions += "설치 결과" to { notice(installState.getString("result", "") ?: "") }
+        if (!isNetflix) {
+            SessionInstaller.resultFor(activity, record?.target ?: pkg.packageName)?.let { result ->
+                actions += "설치 결과" to { notice(result) }
+            }
+        }
         TvMenus.show(activity, label, actions.map { it.first }) { index -> actions.getOrNull(index)?.second?.invoke() }
     }
 
@@ -176,14 +181,19 @@ internal class AppManagementController(
     }
     private fun install(id: String) {
         if (Build.VERSION.SDK_INT >= 26 && !pm.canRequestPackageInstalls()) {
-            preferences.edit().putString("pending_install", id).apply()
             TvMenus.show(activity, "설치 권한 필요", listOf("취소", "허용 화면"), "이 앱의 ‘알 수 없는 앱 설치’를 허용해야 합니다.") { choice ->
-                if (choice == 1) try { activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))) } catch (error: Exception) { notice(error.message ?: "설치 권한 화면을 열 수 없습니다.") }
-                else preferences.edit().remove("pending_install").apply()
+                if (choice != 1) return@show
+                try {
+                    pendingInstallPermission = id
+                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.fromParts("package", activity.packageName, null))
+                    activity.startActivity(intent)
+                } catch (_: Exception) {
+                    pendingInstallPermission = null
+                    notice("TV 설정에서 GenieBreaker의 ‘알 수 없는 앱 설치’를 허용한 뒤 다시 시도하세요.")
+                }
             }
             return
         }
-        preferences.edit().remove("pending_install").apply()
         try {
             val file = File(activity.filesDir, "edited/$id.apk")
             require(file.isFile)
@@ -193,7 +203,9 @@ internal class AppManagementController(
         } catch (error: Exception) { notice("설치 화면을 열지 못했습니다: ${error.message}") }
     }
     fun resume() {
-        preferences.getString("pending_install", null)?.let { id -> if (Build.VERSION.SDK_INT < 26 || pm.canRequestPackageInstalls()) install(id) }
+        val id = pendingInstallPermission
+        pendingInstallPermission = null
+        if (id != null && pm.canRequestPackageInstalls()) install(id)
         refresh()
     }
     private fun export(id: String) {
