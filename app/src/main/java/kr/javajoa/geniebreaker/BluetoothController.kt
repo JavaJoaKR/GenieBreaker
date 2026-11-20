@@ -162,6 +162,8 @@ internal class BluetoothController(
             found[address] = target
             if (target.bondState != BluetoothDevice.BOND_NONE) refresh()
             else bluetoothActions.bond(target)
+        } catch (error: SecurityException) {
+            operationError("블루투스 권한", error)
         } catch (error: Exception) { operationError("다른 방식으로 페어링 완료", error) }
     }
 
@@ -294,9 +296,12 @@ internal class BluetoothController(
             message("페어링을 준비하고 있습니다. 기기를 페어링 모드로 유지하세요.")
             if (Build.VERSION.SDK_INT >= 33) manager.associate(request, activity.mainExecutor, callback)
             else manager.associate(request, callback, null)
+        } catch (error: SecurityException) {
+            pendingCompanionAddress = null
+            operationError("블루투스 권한", error)
         } catch (error: Exception) {
             pendingCompanionAddress = null
-            operationError(if (error is SecurityException) "블루투스 권한" else "다른 방식으로 페어링", error)
+            operationError("다른 방식으로 페어링", error)
         }
     }
 }
