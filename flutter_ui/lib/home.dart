@@ -924,9 +924,12 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'settings:home-shortcut',
                   '단축 호출',
                   () => call('toggleHomeShortcut'),
-                  subtitle: widget.data['controls']?['homeShortcutEnabled'] == false
-                      ? '꺼짐'
-                      : '켜짐 · 홈 버튼을 5초간 눌러 GenieBreaker 열기',
+                  subtitle: switch (widget.data['controls']?['homeShortcutRequired']) {
+                    true => '켜짐 · GProject가 기본 홈인 동안 끌 수 없습니다',
+                    _ => widget.data['controls']?['homeShortcutEnabled'] == false
+                        ? '꺼짐'
+                        : '켜짐 · 홈 버튼을 5초간 눌러 GenieBreaker 열기',
+                  },
                   icon: Icons.shortcut_rounded,
                 ),
               ]);

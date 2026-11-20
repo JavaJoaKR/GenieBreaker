@@ -15,7 +15,7 @@ class RemoteButtonService : AccessibilityService() {
     private val bindings by lazy { RemoteBindings(this) }
     private val prefs by lazy { tvPreferences(this) }
     private val homeShortcut = HomeShortcut(handler,
-        enabled = { prefs.getBoolean(HOME_SHORTCUT_ENABLED, true) },
+        enabled = { prefs.getBoolean(HOME_SHORTCUT_ENABLED, true) || isGProjectHome(this) },
         open = { openGenieBreaker() },
         reset = {
             presses.cancelActions()
