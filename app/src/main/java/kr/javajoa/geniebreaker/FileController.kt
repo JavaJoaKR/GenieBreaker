@@ -211,34 +211,66 @@ internal class FileController(private val activity: Activity, private val change
             return mapOf("selected" to selected)
         } finally { FileWork.lock.writeLock().unlock() }
     }
-    private fun open(path: String) = FileWork.reading {
-        val uri: Uri
-        val type: String
-        if (path.startsWith("content:")) {
-            require(known.containsKey(path)); uri = Uri.parse(path)
-            type = activity.contentResolver.getType(uri) ?: "application/octet-stream"
-        } else {
-            val file = local(path); require(file.isFile) { "파일이 없습니다" }
-            uri = BrowseFiles.grant(activity, file)
-            type = BrowseFiles.type(file)
-        }
-        if (type == "application/vnd.android.package-archive" || path.endsWith(".apk", true)) {
-            if (!activity.packageManager.canRequestPackageInstalls()) {
-                activity.runOnUiThread { activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))) }
-                error("설치 권한을 허용한 뒤 파일을 다시 선택하세요")
+    private fun importApk(uri: Uri): File {
+        val directory = File(activity.cacheDir, "imports").apply { mkdirs() }
+        val file = File.createTempFile("import-", ".apk", directory)
+        try {
+            val stream = resolver.openInputStream(uri) ?: error("파일을 읽지 못했습니다")
+            stream.use { input ->
+                file.outputStream().use { output ->
+                    val buffer = ByteArray(65536)
+                    var total = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= 200L * 1024 * 1024) { "200MB 이하 APK만 설치할 수 있습니다" }
+                        output.write(buffer, 0, count)
+                    }
+                }
             }
-            val file = if (path.startsWith("content:")) File(activity.cacheDir, "imports/${UUID.randomUUID()}.apk").apply {
-                parentFile?.mkdirs()
-                try { activity.contentResolver.openInputStream(uri)?.use { input -> outputStream().use { out ->
-                    val buffer = ByteArray(65536); var total = 0L
-                    while (true) { val count = input.read(buffer); if (count < 0) break; total += count; require(total <= 200L * 1024 * 1024) { "200MB 이하 APK만 설치할 수 있습니다" }; out.write(buffer, 0, count) }
-                } } ?: error("파일을 읽지 못했습니다") } catch (e: Exception) { delete(); throw e }
-            } else local(path)
-            val pkg = activity.packageManager.getPackageArchiveInfo(file.path, 0) ?: error("Android에서 APK 정보를 읽을 수 없습니다")
-            SessionInstaller.submit(activity, file, pkg.packageName)
-        } else activity.runOnUiThread {
-            try { activity.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, type).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = ClipData.newRawUri("파일", uri) }) }
-            catch (_: Exception) { TvMenus.notice(activity, "이 파일 형식을 지원하는 앱이 설치되어 있지 않습니다") }
+            return file
+        } catch (error: Exception) {
+            file.delete()
+            throw error
+        }
+    }
+
+    private fun open(path: String) = FileWork.reading {
+        val doc = document(path)
+        require(doc.isFile) { "열 수 있는 파일을 선택하세요." }
+        val localFile = if (doc.uri.scheme == "file") local(path) else null
+        val apkType = "application/vnd.android.package-archive"
+        val type = localFile?.let(BrowseFiles::type) ?: resolver.getType(doc.uri) ?: "application/octet-stream"
+        if (type == apkType || doc.name?.endsWith(".apk", ignoreCase = true) == true) {
+            if (!activity.packageManager.canRequestPackageInstalls()) {
+                activity.runOnUiThread {
+                    if (activity.isDestroyed || activity.isFinishing) return@runOnUiThread
+                    val settings = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.fromParts("package", activity.packageName, null))
+                    val opened = openScreen(activity, settings)
+                    TvMenus.notice(activity, if (opened) "설치 권한을 허용한 뒤 APK를 다시 선택하세요."
+                        else "TV 설정에서 GenieBreaker의 ‘알 수 없는 앱 설치’를 허용한 뒤 APK를 다시 선택하세요.")
+                }
+                return@reading
+            }
+            val file = localFile ?: importApk(doc.uri)
+            var submitted = false
+            try {
+                val pkg = activity.packageManager.getPackageArchiveInfo(file.path, 0)
+                    ?: error("Android에서 APK 정보를 읽을 수 없습니다")
+                SessionInstaller.submit(activity, file, pkg.packageName, deleteAfterStaging = localFile == null)
+                submitted = true
+            } finally {
+                if (localFile == null && !submitted) file.delete()
+            }
+        } else {
+            val uri = if (localFile == null) doc.uri else BrowseFiles.grant(activity, localFile)
+            activity.runOnUiThread {
+                if (activity.isDestroyed || activity.isFinishing) return@runOnUiThread
+                val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, type)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = ClipData.newRawUri("파일", uri) }
+                if (!openScreen(activity, intent)) TvMenus.notice(activity, "이 파일 형식을 열 수 있는 앱을 찾지 못했습니다.")
+            }
         }
     }
     fun result(request: Int, result: Int, data: Intent?): Boolean {

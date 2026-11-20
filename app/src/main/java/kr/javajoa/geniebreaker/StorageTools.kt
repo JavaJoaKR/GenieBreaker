@@ -32,10 +32,12 @@ internal object StorageTools {
             "apkSize" to cleanable("apks"), "cacheSize" to cleanable("cache"), "updateSize" to cleanable("updates"))
     }
 
-    fun pruneUpdates(context: Context) {
+    fun pruneStaging(context: Context) {
         if (!FileWork.lock.writeLock().tryLock()) return
         try {
             if (FileWork.pending.get() != 0) return
+            val imports = File(context.cacheDir, "imports")
+            imports.listFiles().orEmpty().filter { it.isFile && it.extension == "apk" }.forEach { it.delete() }
             val active = File(context.cacheDir, "updates/update.apk")
             updateRoots(context).forEach { root ->
                 if (root.isDirectory) root.listFiles().orEmpty().filter { it != active }.forEach { it.deleteRecursively() }

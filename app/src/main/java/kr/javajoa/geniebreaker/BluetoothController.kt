@@ -20,6 +20,7 @@ internal class BluetoothController(
     private val linked = mutableSetOf<String>()
     private val names = DeviceNames()
     private var pendingCompanionAddress: String? = null
+    private var companionChooserOpen = false
     private val bluetoothActions = BluetoothActions(activity) { text ->
         message(text)
         if (ErrorCodes.isError(text)) TvMenus.notice(activity, text)
@@ -47,6 +48,7 @@ internal class BluetoothController(
 
     fun restore(saved: Bundle?) {
         pendingCompanionAddress = saved?.getString("companion_address")
+        companionChooserOpen = pendingCompanionAddress != null
         saved?.getBundle("names")?.let { bundle ->
             bundle.keySet().forEach { names.merge(it, bundle.getString(it)) }
         }
@@ -136,7 +138,7 @@ internal class BluetoothController(
         try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
     }
     fun save(out: Bundle) {
-        out.putString("companion_address", pendingCompanionAddress)
+        out.putString("companion_address", pendingCompanionAddress.takeIf { companionChooserOpen })
         out.putBundle("names", Bundle().apply { names.snapshot().forEach { (key, value) -> putString(key, value) } })
     }
 
@@ -147,11 +149,22 @@ internal class BluetoothController(
 
     fun result(requestCode: Int, resultCode: Int) {
         if (requestCode != 501) return
-        val address = pendingCompanionAddress; pendingCompanionAddress = null
+        val address = pendingCompanionAddress
+        pendingCompanionAddress = null
+        companionChooserOpen = false
         if (resultCode != Activity.RESULT_OK || address == null) { message("페어링 요청이 취소되었습니다."); return }
-        try { adapter?.getRemoteDevice(address)?.let { found[address] = it; bluetoothActions.bond(it) } }
-        catch (error: Exception) { operationError("다른 방식으로 페어링 완료", error) }
+        bondCompanion(address)
     }
+
+    private fun bondCompanion(address: String) {
+        try {
+            val target = adapter?.getRemoteDevice(address) ?: error("블루투스를 사용할 수 없습니다")
+            found[address] = target
+            if (target.bondState != BluetoothDevice.BOND_NONE) refresh()
+            else bluetoothActions.bond(target)
+        } catch (error: Exception) { operationError("다른 방식으로 페어링 완료", error) }
+    }
+
     private fun operationError(operation: String, error: Exception) {
         val code = Diagnostics.record(activity, operation, error)
         message("$operation 실패 [$code]")
@@ -233,25 +246,57 @@ internal class BluetoothController(
         if (Build.VERSION.SDK_INT < 26 || !activity.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
             message("이 TV에서는 다른 페어링 방식을 사용할 수 없습니다."); return
         }
+        if (pendingCompanionAddress != null) {
+            message("이미 페어링 요청이 진행 중입니다.")
+            return
+        }
+        val address = device.address
         try {
-            adapter?.cancelDiscovery()
-            pendingCompanionAddress = device.address
             val manager = activity.getSystemService(CompanionDeviceManager::class.java)
-            val request = AssociationRequest.Builder().addDeviceFilter(BluetoothDeviceFilter.Builder().setAddress(device.address).build()).setSingleDevice(true).build()
+            if (manager == null) {
+                message("이 TV에서는 다른 페어링 방식을 사용할 수 없습니다.")
+                return
+            }
+            adapter?.cancelDiscovery()
+            pendingCompanionAddress = address
+            val request = AssociationRequest.Builder()
+                .addDeviceFilter(BluetoothDeviceFilter.Builder().setAddress(address).build()).setSingleDevice(true).build()
             val callback = object : CompanionDeviceManager.Callback() {
                 private fun chooser(sender: IntentSender) {
                     activity.runOnUiThread {
-                        if (!activity.isFinishing && !activity.isDestroyed) try { activity.startIntentSenderForResult(sender, 501, null, 0, 0, 0) }
-                        catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("다른 방식으로 페어링 화면", error) }
+                        if (pendingCompanionAddress != address || companionChooserOpen || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                        try {
+                            activity.startIntentSenderForResult(sender, 501, null, 0, 0, 0)
+                            companionChooserOpen = true
+                        } catch (error: Exception) {
+                            pendingCompanionAddress = null
+                            operationError("다른 방식으로 페어링 화면", error)
+                        }
                     }
                 }
                 override fun onDeviceFound(chooserLauncher: IntentSender) { chooser(chooserLauncher) }
                 override fun onAssociationPending(intentSender: IntentSender) { chooser(intentSender) }
-                override fun onFailure(error: CharSequence?) { activity.runOnUiThread { if (!activity.isDestroyed) message("페어링 실패 · ${error ?: "기기를 찾지 못했습니다"}") } }
+                override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                    activity.runOnUiThread {
+                        if (pendingCompanionAddress != address || companionChooserOpen || activity.isDestroyed) return@runOnUiThread
+                        pendingCompanionAddress = null
+                        bondCompanion(address)
+                    }
+                }
+                override fun onFailure(error: CharSequence?) {
+                    activity.runOnUiThread {
+                        if (pendingCompanionAddress != address || companionChooserOpen || activity.isDestroyed) return@runOnUiThread
+                        pendingCompanionAddress = null
+                        message("페어링 실패 · ${error ?: "기기를 찾지 못했습니다"}")
+                    }
+                }
             }
+            message("페어링을 준비하고 있습니다. 기기를 페어링 모드로 유지하세요.")
             if (Build.VERSION.SDK_INT >= 33) manager.associate(request, activity.mainExecutor, callback)
             else manager.associate(request, callback, null)
-            message("페어링을 준비하고 있습니다. 기기를 페어링 모드로 유지하세요.")
-        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("다른 방식으로 페어링", error) }
+        } catch (error: Exception) {
+            pendingCompanionAddress = null
+            operationError(if (error is SecurityException) "블루투스 권한" else "다른 방식으로 페어링", error)
+        }
     }
 }

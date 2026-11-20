@@ -9,7 +9,8 @@ internal object ReleaseCatalog {
         val candidates = mutableListOf<UpdateAsset>()
         for (i in 0 until releases.length()) {
             val release = releases.optJSONObject(i) ?: continue
-            if (release.optBoolean("draft") || !release.optString("body").contains("[channel:main]")) continue
+            if (release.optBoolean("draft") || release.optBoolean("prerelease") ||
+                !release.optString("body").contains("[channel:main]")) continue
             val assets = release.optJSONArray("assets") ?: continue
             for (j in 0 until assets.length()) {
                 val asset = assets.optJSONObject(j) ?: continue

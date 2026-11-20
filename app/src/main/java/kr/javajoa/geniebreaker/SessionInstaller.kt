@@ -27,7 +27,7 @@ internal object SessionInstaller {
             .apply()
     }
 
-    fun submit(context: Context, apk: File, expectedPackage: String) {
+    fun submit(context: Context, apk: File, expectedPackage: String, deleteAfterStaging: Boolean = false) {
         val app = context.applicationContext
         state(app).edit().putString("progress", "설치 파일 준비 중").remove("result").apply()
         val worker = Executors.newSingleThreadExecutor()
@@ -63,6 +63,7 @@ internal object SessionInstaller {
                 recordResult(app, expectedPackage, "설치 요청 실패 [$code]\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}")
             } finally {
                 if (id >= 0 && !committed) try { app.packageManager.packageInstaller.abandonSession(id) } catch (_: Exception) { }
+                if (deleteAfterStaging) runCatching { apk.delete() }
                 FileWork.pending.decrementAndGet()
                 FileWork.lock.readLock().unlock()
                 worker.shutdown()
