@@ -1,8 +1,8 @@
 package kr.javajoa.geniebreaker
 
+import android.os.Handler
 import android.view.InputDevice
 import android.view.KeyEvent
-import android.view.ViewConfiguration
 
 // Friendly labels and aliases for standard TV inputs.
 private val remoteButtons = linkedMapOf(
@@ -128,36 +128,49 @@ internal fun buttonCode(event: KeyEvent): Int? {
         else remoteScanButtons[scan] ?: (SCAN_BINDING_BASE + scan)
 }
 
+internal const val BUTTON_HOLD_MILLIS = 2_000L
+
 internal data class ButtonPressActions<T>(val click: T?, val hold: T?)
 
-/** Keep the original action and release both halves of an intercepted press together. */
-internal class ButtonPresses<T : Any> {
+/** Keep the original action and consume a claimed press from down through up. */
+internal class ButtonPresses<T : Any>(private val holdHandler: Handler? = null) {
     private data class Key(val device: Int, val code: Int, val scan: Int)
-    private data class Press<T>(val downTime: Long, var actions: ButtonPressActions<T>?)
+    private class Press<T>(val downTime: Long, var actions: ButtonPressActions<T>?) {
+        var holdDispatched = false
+    }
     private val held = mutableMapOf<Key, Press<T>>()
 
-    fun handle(event: KeyEvent, claim: (Int) -> ButtonPressActions<T>?, release: (T) -> Unit): Boolean {
+    fun handle(event: KeyEvent, claim: (Int) -> ButtonPressActions<T>?, dispatch: (T) -> Unit): Boolean {
         val code = buttonCode(event) ?: return false
         val key = Key(event.deviceId, code, event.scanCode)
         val current = held[key]
         val owned = current != null && current.downTime == event.downTime
         return when (event.action) {
             KeyEvent.ACTION_DOWN -> {
-                if (owned) return true
+                if (owned) {
+                    if (event.isCanceled) cancel(requireNotNull(current))
+                    return true
+                }
                 if (event.repeatCount > 0) return false
-                held.remove(key)
+                held.remove(key)?.let(::cancel)
                 if (event.isCanceled || !event.hasNoModifiers()) return false
                 val actions = claim(code) ?: return false
                 if (actions.click == null && actions.hold == null) return false
-                held[key] = Press(event.downTime, actions)
+                val press = Press(event.downTime, actions)
+                held[key] = press
+                if (actions.hold != null) {
+                    holdHandler?.postAtTime({ dispatchHold(press, dispatch) }, press, press.downTime + BUTTON_HOLD_MILLIS)
+                }
                 true
             }
             KeyEvent.ACTION_UP -> {
+                val press = current ?: return false
                 if (!owned) return false
-                val actions = held.remove(key)?.actions
-                if (!event.isCanceled && actions != null) {
-                    val longPress = event.eventTime - event.downTime >= ViewConfiguration.getLongPressTimeout()
-                    (if (longPress) actions.hold else actions.click)?.let(release)
+                held.remove(key)
+                holdHandler?.removeCallbacksAndMessages(press)
+                if (!event.isCanceled && !press.holdDispatched) {
+                    if (event.eventTime - press.downTime >= BUTTON_HOLD_MILLIS) dispatchHold(press, dispatch)
+                    else press.actions?.click?.let(dispatch)
                 }
                 true
             }
@@ -165,12 +178,25 @@ internal class ButtonPresses<T : Any> {
         }
     }
 
-    // Suppress actions after interruption while still consuming matching key-ups.
-    fun cancelActions() {
-        held.values.forEach { it.actions = null }
+    private fun dispatchHold(press: Press<T>, dispatch: (T) -> Unit) {
+        if (press.holdDispatched) return
+        val action = press.actions?.hold ?: return
+        press.holdDispatched = true
+        dispatch(action)
     }
 
-    fun clear() = held.clear()
+    private fun cancel(press: Press<T>) {
+        holdHandler?.removeCallbacksAndMessages(press)
+        press.actions = null
+    }
+
+    // Suppress actions after interruption while still consuming matching key-ups.
+    fun cancelActions() = held.values.forEach(::cancel)
+
+    fun clear() {
+        cancelActions()
+        held.clear()
+    }
 }
 
 /** Only the focused registration menu can claim a new press. Its up can arrive later. */

@@ -1,8 +1,10 @@
 package kr.javajoa.geniebreaker
 
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.InputDevice
 import android.view.KeyEvent
 import androidx.test.platform.app.InstrumentationRegistry
@@ -101,7 +103,7 @@ class RemoteInputTest {
             awaitMenu(activity, "버튼 추가")
             awaitFocus(activity, "item-0")
             unmappedRemoteKey(activity, 0x274, expectedHandled = false) // Linux KEY_UNMUTE remains with Android.
-            val instructions = "리모컨 버튼을 짧게 또는 길게 누른 뒤 놓으세요. 전원, 음량, 채널, 숫자 패드, 홈, 화면 조작 버튼은 기본 기능에 사용됩니다."
+            val instructions = "리모컨 버튼을 짧게 누르거나 2초 이상 누른 뒤 놓으세요. 전원, 음량, 채널, 숫자 패드, 홈, 화면 조작 버튼은 기본 기능에 사용됩니다."
             awaitMenuValue(activity, "message", "$instructions\n\n이 입력은 현재 매핑할 수 없습니다.\nUNKNOWN (0) / scan 628 / source 201 / meta 0")
             awaitFocus(activity, "item-0")
             unmappedRemoteKey(activity, shortcutScan, source = InputDevice.SOURCE_HDMI)
@@ -136,6 +138,7 @@ class RemoteInputTest {
             val storedShortcut = prefs.getBoolean(HOME_SHORTCUT_ENABLED, true)
             val controls = MainActivity::class.java.getDeclaredField("controls").apply { isAccessible = true }
                 .get(activity) as TvControls
+            val homeSettings = instrumentation.addMonitor(IntentFilter(Settings.ACTION_HOME_SETTINGS), null, true)
             try {
                 instrumentation.runOnMainSync {
                     prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, false).apply()
@@ -143,11 +146,17 @@ class RemoteInputTest {
                 }
                 awaitMenu(activity, "단축 호출 켜기")
                 assertFalse(prefs.getBoolean(HOME_SHORTCUT_ENABLED, true))
+                assertEquals(0, homeSettings.hits)
+                assertFalse(prefs.all.any { (key, value) ->
+                    key.startsWith("button.") && value == "app:${activity.packageName}"
+                })
                 awaitFocus(activity, "item-0")
                 press(314)
-                awaitMenu(activity, "GenieBreaker 단축키 필요")
+                awaitMenu(activity, null)
                 assertTrue(prefs.getBoolean(HOME_SHORTCUT_ENABLED, false))
+                assertEquals(1, homeSettings.hits)
             } finally {
+                instrumentation.removeMonitor(homeSettings)
                 prefs.edit().putBoolean(HOME_SHORTCUT_ENABLED, storedShortcut).apply()
             }
         } catch (error: AssertionError) {
