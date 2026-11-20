@@ -10,10 +10,11 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
-import android.view.ViewConfiguration
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 class TvControlsTest {
     @Test fun homeRegistrationAndLockSessionAreOptIn() {
@@ -148,7 +149,7 @@ class TvControlsTest {
             RemoteCapture.claim = null
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_DOWN, custom, repeat = 1)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, custom,
-                elapsed = ViewConfiguration.getLongPressTimeout().toLong())))
+                elapsed = BUTTON_HOLD_MILLIS)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_UNKNOWN, scan = 398)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, appShortcut)))
             assertTrue(RemoteCapture.handle(event(KeyEvent.ACTION_UP, mediaShortcut)))
@@ -185,7 +186,7 @@ class TvControlsTest {
         val actions = mutableListOf<Int>()
         val remote = InputDevice.SOURCE_DPAD or InputDevice.SOURCE_KEYBOARD
         val unlistedScan = 0x2b0
-        val hold = ViewConfiguration.getLongPressTimeout().toLong()
+        val hold = BUTTON_HOLD_MILLIS
         fun press(input: KeyEvent) = presses.handle(input, { ButtonPressActions(it, holdBindingId(it)) }, { actions.add(it) })
 
         for (scan in listOf(14, unlistedScan)) {
@@ -204,6 +205,39 @@ class TvControlsTest {
             assertFalse(press(event(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_UNKNOWN, scan = scan, source = remote)))
         }
         assertEquals(listOf(0x10000 + 14, holdBindingId(0x10000 + unlistedScan)), actions)
+    }
+
+    @Test fun mappedHoldFiresWhilePressedAndReleasingDoesNotRepeatIt() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val actions = LinkedBlockingQueue<String>()
+        val presses = ButtonPresses<String>(Handler(Looper.getMainLooper()))
+        fun press(action: Int, down: Long, repeat: Int = 0) = presses.handle(
+            event(action, key, repeat = repeat, down = down, elapsed = SystemClock.uptimeMillis() - down),
+            { ButtonPressActions("click", "hold") }, { actions.add(it) }
+        )
+
+        try {
+            instrumentation.runOnMainSync {
+                val down = SystemClock.uptimeMillis()
+                assertTrue(press(KeyEvent.ACTION_DOWN, down))
+                assertTrue(press(KeyEvent.ACTION_UP, down))
+            }
+            assertEquals("click", actions.poll())
+            assertNull(actions.poll(100, TimeUnit.MILLISECONDS))
+
+            var down = 0L
+            instrumentation.runOnMainSync {
+                down = SystemClock.uptimeMillis()
+                assertTrue(press(KeyEvent.ACTION_DOWN, down))
+            }
+            assertNull(actions.poll(500, TimeUnit.MILLISECONDS))
+            assertEquals("hold", actions.poll(4, TimeUnit.SECONDS))
+            instrumentation.runOnMainSync {
+                assertTrue(press(KeyEvent.ACTION_DOWN, down, repeat = 1))
+                assertTrue(press(KeyEvent.ACTION_UP, down))
+            }
+            assertTrue(actions.isEmpty())
+        } finally { instrumentation.runOnMainSync { presses.clear() } }
     }
 
     @Test fun homeShortcutChecksDurationAndCanBeDisabled() {
@@ -254,27 +288,11 @@ class TvControlsTest {
         assertFalse(isGProjectHome(context, null))
     }
 
-    @Test fun selfLaunchIsAvailableForButtonsAndUnlocksHomeSettings() {
+    @Test fun genieBreakerIsAvailableForButtonMapping() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val pkg = context.packageName
-        val key = holdBindingId(KeyEvent.KEYCODE_BUTTON_16)
-        val reserved = KeyEvent.KEYCODE_TV_POWER
-        val prefs = tvPreferences(context)
-        val bindings = RemoteBindings(context)
         assertTrue(launchableApps(context, includeSelf = true).any { it.pkg == pkg })
         assertFalse(launchableApps(context).any { it.pkg == pkg })
-        try {
-            prefs.edit().putString("button.$reserved", "app:$pkg").commit()
-            bindings.register(key)
-            assertFalse(bindings.hasAppBinding(pkg))
-            bindings.set(key, "app:$pkg", "GenieBreaker")
-            assertTrue(bindings.hasAppBinding(pkg))
-            bindings.set(key, null, null)
-            assertFalse(bindings.hasAppBinding(pkg))
-        } finally {
-            bindings.set(key, null, null)
-            prefs.edit().remove("button.$reserved").commit()
-        }
     }
     @Test fun startupSelectionSkipsCurrentBootAndHandsOffOnceOnNextBoot() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

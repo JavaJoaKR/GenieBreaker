@@ -10,8 +10,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
 
 class RemoteButtonService : AccessibilityService() {
-    private val presses = ButtonPresses<String>()
     private val handler = Handler(Looper.getMainLooper())
+    private val presses = ButtonPresses<String>(handler)
     private val bindings by lazy { RemoteBindings(this) }
     private val prefs by lazy { tvPreferences(this) }
     private val homeShortcut = HomeShortcut(handler,

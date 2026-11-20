@@ -7,7 +7,7 @@ import android.os.Build
 import android.view.KeyEvent
 
 private const val CAPTURE_INSTRUCTIONS =
-    "리모컨 버튼을 짧게 또는 길게 누른 뒤 놓으세요. 전원, 음량, 채널, 숫자 패드, 홈, 화면 조작 버튼은 기본 기능에 사용됩니다."
+    "리모컨 버튼을 짧게 누르거나 2초 이상 누른 뒤 놓으세요. 전원, 음량, 채널, 숫자 패드, 홈, 화면 조작 버튼은 기본 기능에 사용됩니다."
 
 internal class TvControls(
     private val owner: Activity,
@@ -151,13 +151,6 @@ internal class TvControls(
                     } else TvMenus.notice(owner, "단축 호출 설정을 저장할 수 없습니다.")
                 }
             }
-            return
-        }
-        if (!bindings.hasAppBinding(owner.packageName)) {
-            TvMenus.show(
-                owner, "GenieBreaker 단축키 필요", listOf("버튼 추가", "닫기"),
-                "홈을 변경하려면 먼저 리모컨 버튼 하나에 ‘앱 실행 → GenieBreaker’를 지정하세요."
-            ) { index -> if (index == 0) chooseButton() }
             return
         }
         if (!openHomeSettings(owner)) TvMenus.notice(owner, "TV 설정에서 기본 홈 앱을 선택하세요.")
