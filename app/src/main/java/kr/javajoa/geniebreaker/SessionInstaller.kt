@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageInstaller
 import android.os.Build
+import android.os.UserManager
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -59,7 +60,8 @@ internal object SessionInstaller {
                     session.commit(pending.intentSender); committed = true
                 }
             } catch (error: Exception) {
-                val code = Diagnostics.record(app, "Install", error)
+                val cause = if (error is SecurityException) installBlocker(app) else DiagnosticCause.ERROR_UNSPECIFIED
+                val code = Diagnostics.record(app, "Install", error, DiagnosticStep.INSTALL, cause = cause)
                 recordResult(app, expectedPackage, "설치 요청 실패 [$code]\n대상: $expectedPackage\n${error.javaClass.simpleName}: ${error.message}")
             } finally {
                 if (id >= 0 && !committed) try { app.packageManager.packageInstaller.abandonSession(id) } catch (_: Exception) { }
@@ -84,7 +86,8 @@ class InstallResultReceiver : BroadcastReceiver() {
                 requireNotNull(confirmation) { "설치 확인 화면을 받지 못했습니다" }
                 context.startActivity(confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (error: Exception) {
-                val code = Diagnostics.record(context, "Installer confirmation", error)
+                val cause = if (error is SecurityException) DiagnosticCause.SYSTEM_PERMISSION else DiagnosticCause.SCREEN_UNAVAILABLE
+                val code = Diagnostics.record(context, "Installer confirmation", error, DiagnosticStep.INSTALL, cause = cause)
                 SessionInstaller.recordResult(context, expected, "설치 확인 화면을 열지 못했습니다 [$code]\n대상: $expected\n${error.message}")
             }
             return
@@ -102,7 +105,29 @@ class InstallResultReceiver : BroadcastReceiver() {
             else -> "설치 실패"
         }
         val result = "$explanation\n대상: $expected\n상태: $status / $legacy\n${if (other != null) "충돌 앱: $other\n" else ""}$message"
-        val code = Diagnostics.record(context, "Install", if (status == PackageInstaller.STATUS_SUCCESS) null else IllegalStateException())
+        val cause = when (status) {
+            PackageInstaller.STATUS_SUCCESS, PackageInstaller.STATUS_FAILURE_ABORTED -> null
+            PackageInstaller.STATUS_FAILURE_CONFLICT -> DiagnosticCause.INSTALL_CONFLICT
+            PackageInstaller.STATUS_FAILURE_BLOCKED -> installBlocker(context)
+            PackageInstaller.STATUS_FAILURE_STORAGE -> DiagnosticCause.INSTALL_STORAGE
+            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> DiagnosticCause.INSTALL_INCOMPATIBLE
+            else -> DiagnosticCause.ERROR_UNSPECIFIED
+        }
+        val code = Diagnostics.record(context, "Install", if (status == PackageInstaller.STATUS_SUCCESS) null else IllegalStateException(),
+            DiagnosticStep.INSTALL, cause = cause)
         SessionInstaller.recordResult(context, expected, if (status == PackageInstaller.STATUS_SUCCESS) result else "$result\n[$code]")
+    }
+}
+
+
+private fun installBlocker(context: Context): DiagnosticCause {
+    val user = context.getSystemService(UserManager::class.java)
+    val restricted = user?.hasUserRestriction(UserManager.DISALLOW_INSTALL_APPS) == true ||
+        user?.hasUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES) == true ||
+        user?.hasUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY) == true
+    return when {
+        restricted -> DiagnosticCause.INSTALL_DEVICE_POLICY
+        !context.packageManager.canRequestPackageInstalls() -> DiagnosticCause.INSTALL_PERMISSION
+        else -> DiagnosticCause.INSTALL_BLOCKED
     }
 }

@@ -167,8 +167,20 @@ internal class AppManagementController(
         try {
             Diagnostics.record(activity, "Launch requested: $packageName")
             val intent = pm.getLeanbackLaunchIntentForPackage(packageName) ?: pm.getLaunchIntentForPackage(packageName)
-            if (intent != null) activity.startActivity(intent) else { Diagnostics.record(activity, "Launch failed: no launcher for $packageName"); notice("실행 화면이 없는 앱입니다.") }
-        } catch (error: Exception) { val code = Diagnostics.record(activity, "Launch", error); notice("앱을 실행할 수 없습니다. [$code]") }
+            if (intent == null) {
+                Diagnostics.record(activity, "Launch failed", step = DiagnosticStep.LAUNCH,
+                    cause = DiagnosticCause.LAUNCH_TARGET_MISSING)
+                notice("실행 화면이 없는 앱입니다.")
+            } else activity.startActivity(intent)
+        } catch (error: Exception) {
+            val cause = when (error) {
+                is SecurityException -> DiagnosticCause.SYSTEM_PERMISSION
+                is android.content.ActivityNotFoundException -> DiagnosticCause.LAUNCH_TARGET_MISSING
+                else -> DiagnosticCause.ERROR_UNSPECIFIED
+            }
+            val code = Diagnostics.record(activity, "Launch", error, DiagnosticStep.LAUNCH, cause = cause)
+            notice("앱을 실행할 수 없습니다. [$code]")
+        }
     }
     private fun uninstall(packageName: String) {
         try {
@@ -181,6 +193,8 @@ internal class AppManagementController(
     }
     private fun install(id: String) {
         if (Build.VERSION.SDK_INT >= 26 && !pm.canRequestPackageInstalls()) {
+            Diagnostics.record(activity, "Install blocked", step = DiagnosticStep.INSTALL,
+                cause = DiagnosticCause.INSTALL_PERMISSION)
             TvMenus.show(activity, "설치 권한 필요", listOf("취소", "허용 화면"), "이 앱의 ‘알 수 없는 앱 설치’를 허용해야 합니다.") { choice ->
                 if (choice != 1) return@show
                 try {

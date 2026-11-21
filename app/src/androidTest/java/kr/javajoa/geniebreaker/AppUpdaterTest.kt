@@ -61,19 +61,25 @@ class AppUpdaterTest {
         for (value in listOf("192.168", "secret", "AA:BB", "/storage/")) assertFalse(text.contains(value))
     }
 
-    @Test fun bluetoothRejectionsKeepStableCodeAndIdentifyTheRequest() {
+    @Test fun diagnosticsShowOperationAndBlockerWithoutRawErrors() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         Diagnostics.clear(context)
         val rejected = "Bluetooth: 요청 거절 AA:BB:CC:DD:EE:FF"
-        assertTrue(Diagnostics.record(context, rejected, step = DiagnosticStep.BLUETOOTH_PAIR) == "GB-BT-7394")
-        assertTrue(Diagnostics.record(context, rejected, step = DiagnosticStep.BLUETOOTH_CONNECT,
-            phase = DiagnosticStep.BLUETOOTH_PROFILE) == "GB-BT-7394")
+        val unknown = Diagnostics.record(context, rejected, step = DiagnosticStep.BLUETOOTH_PAIR,
+            cause = DiagnosticCause.REASON_UNAVAILABLE)
+        assertTrue(unknown == "GB-BT-7394")
+        Diagnostics.record(context, rejected, step = DiagnosticStep.BLUETOOTH_CONNECT,
+            phase = DiagnosticStep.BLUETOOTH_PROFILE, cause = DiagnosticCause.CONNECT_APP_OP)
+        Diagnostics.record(context, "Accessibility restricted settings blocked", step = DiagnosticStep.ACCESSIBILITY,
+            cause = DiagnosticCause.ACCESSIBILITY_RESTRICTED)
         Diagnostics.record(context, "Bluetooth: 요청을 전송했습니다.", step = DiagnosticStep.BLUETOOTH_FORGET)
 
-        val outcomes = Diagnostics.recentOutcomes(context)
-        assertTrue(outcomes.contains("[GB-BT-7394] BT Rejected · 페어링"))
-        assertTrue(outcomes.contains("[GB-BT-7394] BT Rejected · 연결 / 프로필 준비"))
-        assertFalse(outcomes.contains("AA:BB"))
-        assertFalse(outcomes.contains("등록 삭제"))
+        val causes = Diagnostics.recentCauses(context).joinToString("\n")
+        assertTrue(causes.contains("페어링 · ${DiagnosticCause.REASON_UNAVAILABLE.label} [GB-BT-7394]"))
+        assertTrue(causes.contains("연결 / 프로필 준비 · ${DiagnosticCause.CONNECT_APP_OP.label} [GB-BT-7394]"))
+        assertTrue(causes.contains("접근성 · ${DiagnosticCause.ACCESSIBILITY_RESTRICTED.label}"))
+        assertFalse(causes.contains("AA:BB"))
+        assertFalse(causes.contains("등록 삭제"))
+        assertFalse(causes.contains("BT Rejected"))
     }
 }

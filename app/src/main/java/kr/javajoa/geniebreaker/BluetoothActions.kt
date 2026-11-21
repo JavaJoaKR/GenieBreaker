@@ -8,6 +8,7 @@ import java.util.concurrent.Executors
 /** Bluetooth requests use the permissions available to this app on the current device. */
 internal class BluetoothActions(private val activity: Activity, private val report: (String) -> Unit) {
     private val worker = Executors.newSingleThreadExecutor()
+    private val adapter = activity.getSystemService(BluetoothManager::class.java)?.adapter
 
     private fun result(
         step: DiagnosticStep,
@@ -15,8 +16,14 @@ internal class BluetoothActions(private val activity: Activity, private val repo
         error: Throwable? = null,
         phase: DiagnosticStep? = null
     ) {
-        val code = Diagnostics.record(activity, "Bluetooth: $text", error, step, phase)
-        val visible = if (error != null || ErrorCodes.isError(text)) "${step.label} · $text [$code]" else text
+        val failure = error != null || ErrorCodes.isError(text)
+        val cause = if (failure) bluetoothBlocker(activity, adapter, step, error) ?: when {
+            phase == DiagnosticStep.BLUETOOTH_PROFILE && error == null -> DiagnosticCause.PROFILE_REJECTED
+            error != null -> DiagnosticCause.ERROR_UNSPECIFIED
+            else -> DiagnosticCause.REASON_UNAVAILABLE
+        } else null
+        val code = Diagnostics.record(activity, "Bluetooth: $text", error, step, phase, cause)
+        val visible = if (cause != null) "${step.label} · ${cause.label} [$code]" else text
         activity.runOnUiThread { if (!activity.isDestroyed && !activity.isFinishing) report(visible) }
     }
 
@@ -59,7 +66,6 @@ internal class BluetoothActions(private val activity: Activity, private val repo
         val step = if (connect) DiagnosticStep.BLUETOOTH_CONNECT else DiagnosticStep.BLUETOOTH_DISCONNECT
         val phase = DiagnosticStep.BLUETOOTH_PROFILE
         try {
-            val adapter = activity.getSystemService(BluetoothManager::class.java)?.adapter
             if (adapter == null) {
                 result(step, "블루투스 어댑터를 사용할 수 없습니다.", phase = phase)
                 return
@@ -105,12 +111,7 @@ internal class BluetoothActions(private val activity: Activity, private val repo
 
     private fun failure(step: DiagnosticStep, caught: Exception, phase: DiagnosticStep? = null) {
         val error = if (caught is InvocationTargetException) caught.targetException else caught
-        val reason = when (error) {
-            is SecurityException -> "Android가 권한 오류를 반환했습니다."
-            is NoSuchMethodException, is IllegalAccessException -> "이 작업에 필요한 시스템 기능에 접근할 수 없습니다."
-            else -> "시스템 요청 처리 중 오류가 발생했습니다."
-        }
-        result(step, "요청 실패. $reason", error, phase)
+        result(step, "요청 실패", error, phase)
     }
 
     fun close() { worker.shutdownNow() }

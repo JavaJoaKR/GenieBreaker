@@ -24,7 +24,7 @@ internal class BluetoothController(
     private var companionChooserOpen = false
     private val bluetoothActions = BluetoothActions(activity) { text ->
         message(text)
-        if (ErrorCodes.isError(text)) showRecovery(text)
+        if (ErrorCodes.isError(text) || "[GB-" in text) TvMenus.notice(activity, text)
     }
     private var btMessage = "연결할 블루투스 기기를 선택하세요"
     private var registered = false
@@ -113,7 +113,20 @@ internal class BluetoothController(
                     when (intent.action) {
                         BluetoothDevice.ACTION_ACL_CONNECTED -> linked.add(it.address)
                         BluetoothDevice.ACTION_ACL_DISCONNECTED -> linked.remove(it.address)
-                        BluetoothDevice.ACTION_BOND_STATE_CHANGED -> message(when (it.bondState) { BluetoothDevice.BOND_BONDED -> "페어링 완료. 기기에서 연결 상태를 확인하세요."; BluetoothDevice.BOND_BONDING -> "페어링 중입니다. 확인 창이 표시되면 승인하세요."; else -> "페어링이 취소되었거나 등록이 해제되었습니다." })
+                        BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                            val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+                            val previous = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.ERROR)
+                            if (state == BluetoothDevice.BOND_NONE && previous == BluetoothDevice.BOND_BONDING) {
+                                val step = DiagnosticStep.BLUETOOTH_PAIR
+                                val cause = bluetoothBlocker(activity, adapter, step) ?: DiagnosticCause.PAIRING_ENDED
+                                val code = Diagnostics.record(activity, "Bluetooth: 페어링 실패", step = step, cause = cause)
+                                message("${cause.label} [$code]")
+                            } else message(when (state) {
+                                BluetoothDevice.BOND_BONDED -> "페어링 완료. 기기에서 연결 상태를 확인하세요."
+                                BluetoothDevice.BOND_BONDING -> "페어링 중입니다. 확인 창이 표시되면 승인하세요."
+                                else -> "기기 등록 상태가 변경되었습니다."
+                            })
+                        }
                     }
                 }
                 refresh()
@@ -169,25 +182,29 @@ internal class BluetoothController(
     }
 
     private fun operationError(operation: String, error: Exception, step: DiagnosticStep? = null) {
-        val code = Diagnostics.record(activity, "Bluetooth: $operation", error, step)
+        val cause = step?.let { bluetoothBlocker(activity, adapter, it, error) ?: DiagnosticCause.ERROR_UNSPECIFIED }
+        val code = Diagnostics.record(activity, "Bluetooth: $operation", error, step, cause = cause)
         val text = "$operation 실패 [$code]"
         message(text)
         if (presentedError != code && !activity.isFinishing && !activity.isDestroyed) {
             presentedError = code
-            showRecovery(text)
+            TvMenus.notice(activity, text)
         }
     }
 
-    private fun showRecovery(text: String) {
-        TvMenus.show(activity, "블루투스 요청 확인", listOf("TV 블루투스 설정", "닫기"), text) {
-            if (it == 0) openSettings()
-        }
+    private fun reportBlocker(operation: String, step: DiagnosticStep, cause: DiagnosticCause) {
+        val code = Diagnostics.record(activity, "Bluetooth: $operation", step = step, cause = cause)
+        val text = "${step.label} · ${cause.label} [$code]"
+        message(text)
+        TvMenus.notice(activity, text)
     }
 
     fun openSettings() {
         if (openBluetoothScreen(activity)) return
-        TvMenus.show(activity, "TV 블루투스 설정", listOf("TV 설정 열기", "닫기"),
-            "TV 설정에서 ‘리모컨 및 액세서리’ 또는 ‘블루투스’를 여세요.") {
+        Diagnostics.record(activity, "Bluetooth settings failed", step = DiagnosticStep.SHORTCUT,
+            cause = DiagnosticCause.SCREEN_UNAVAILABLE)
+        TvMenus.show(activity, "블루투스 기기 목록", listOf("TV 설정 열기", "닫기"),
+            "이 TV에서는 기기 목록으로 바로 이동할 수 없습니다. TV 설정에서 ‘리모컨 및 액세서리’를 여세요.") {
             if (it == 0 && !openScreen(activity, Intent(Settings.ACTION_SETTINGS))) {
                 TvMenus.notice(activity, "리모컨으로 TV 설정을 열어 블루투스 메뉴를 확인하세요.")
             }
@@ -200,24 +217,6 @@ internal class BluetoothController(
     private fun access() = if (Build.VERSION.SDK_INT >= 31) {
         granted(Manifest.permission.BLUETOOTH_SCAN) && granted(Manifest.permission.BLUETOOTH_CONNECT)
     } else granted(Manifest.permission.ACCESS_FINE_LOCATION)
-
-    fun diagnosticSummary(): String = buildString {
-        val bt = adapter
-        val state = if (bt == null) "어댑터 없음" else try {
-            if (bt.isEnabled) "켜짐" else "꺼짐"
-        } catch (_: SecurityException) {
-            "권한 제한으로 확인 불가"
-        }
-        appendLine("블루투스 · $state")
-        if (Build.VERSION.SDK_INT >= 31) {
-            appendLine("  기기 검색 권한 · ${permissionStatus(Manifest.permission.BLUETOOTH_SCAN)}")
-            append("  기기 연결 권한 · ${permissionStatus(Manifest.permission.BLUETOOTH_CONNECT)}")
-        } else {
-            append("  검색에 필요한 위치 권한 · ${permissionStatus(Manifest.permission.ACCESS_FINE_LOCATION)}")
-        }
-    }
-
-    private fun permissionStatus(permission: String) = if (granted(permission)) "허용" else "허용 안 됨"
 
     fun requestAccess() {
         try { activity.requestPermissions(if (Build.VERSION.SDK_INT >= 31)
@@ -238,15 +237,26 @@ internal class BluetoothController(
         }
     }
     fun discover() {
+        val step = DiagnosticStep.BLUETOOTH_SCAN
+        val blocker = bluetoothBlocker(activity, adapter, step)
+        if (blocker in setOf(DiagnosticCause.SCAN_PERMISSION, DiagnosticCause.CONNECT_PERMISSION, DiagnosticCause.LOCATION_PERMISSION)) {
+            Diagnostics.record(activity, "Bluetooth: 검색 권한 차단", step = step, cause = blocker)
+            requestAccess()
+            return
+        }
+        if (blocker != null && blocker != DiagnosticCause.BLUETOOTH_DISABLED) {
+            reportBlocker("검색 차단", step, blocker)
+            return
+        }
         val bt = adapter ?: return
-        if (!access()) { requestAccess(); return }
         try {
             if (!bt.isEnabled) { enableBluetooth(); return }
             if (bt.isDiscovering) { bt.cancelDiscovery(); return }
             if (Build.VERSION.SDK_INT < 31) {
                 val location = activity.getSystemService(LocationManager::class.java)
                 if (location == null || !(location.isProviderEnabled(LocationManager.GPS_PROVIDER) || location.isProviderEnabled(LocationManager.NETWORK_PROVIDER))) {
-                    message("이 Android 버전에서 블루투스 기기를 검색하려면 위치 서비스를 켜세요"); return
+                    reportBlocker("검색 차단", step, DiagnosticCause.LOCATION_DISABLED)
+                    return
                 }
             }
             found.clear(); searched = true; scanExpired = false; publish()
@@ -254,10 +264,8 @@ internal class BluetoothController(
                 uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = true; uiHandler.postDelayed(scanWatchdog, 35_000)
                 refresh()
             } else {
-                val code = Diagnostics.record(activity, "Bluetooth: 검색 요청 거절", step = DiagnosticStep.BLUETOOTH_SCAN)
-                val text = "TV가 블루투스 기기 검색 요청을 거절했습니다. [$code]"
-                message(text)
-                showRecovery(text)
+                reportBlocker("검색 요청 거절", step,
+                    bluetoothBlocker(activity, adapter, step) ?: DiagnosticCause.REASON_UNAVAILABLE)
             }
         } catch (error: SecurityException) {
             operationError("기기 검색 권한", error, DiagnosticStep.BLUETOOTH_SCAN)
@@ -344,10 +352,9 @@ internal class BluetoothController(
                     activity.runOnUiThread {
                         if (pendingCompanionAddress != address || companionChooserOpen || activity.isDestroyed) return@runOnUiThread
                         pendingCompanionAddress = null
-                        val code = Diagnostics.record(activity, "Bluetooth: 페어링 실패", step = DiagnosticStep.BLUETOOTH_COMPANION)
-                        val text = "다른 방식으로 페어링하지 못했습니다. [$code]"
-                        message(text)
-                        showRecovery(text)
+                        val step = DiagnosticStep.BLUETOOTH_COMPANION
+                        reportBlocker("보조 페어링 실패", step,
+                            bluetoothBlocker(activity, adapter, step) ?: DiagnosticCause.ERROR_UNSPECIFIED)
                     }
                 }
             }

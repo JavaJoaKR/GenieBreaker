@@ -855,6 +855,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['shortcut:home'],
                 ['shortcut:accounts'],
                 ['shortcut:tv-update'],
+                ['shortcut:bluetooth'],
               ];
               content = scroll([
                 tile(
@@ -889,6 +890,12 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'TV 업데이트 설정',
                   () => call('tvUpdateSettings'),
                   icon: Icons.system_update_alt_rounded,
+                ),
+                tile(
+                  'shortcut:bluetooth',
+                  '블루투스 기기 목록',
+                  () => call('bluetoothSettings'),
+                  icon: Icons.bluetooth_rounded,
                 ),
               ]);
             default:
@@ -937,7 +944,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   'settings:compatibility',
                   '지니TV 충돌 진단',
                   () => call('compatibilityDiagnostics'),
-                  subtitle: '블루투스, 접근성, APK 설치 상태와 최근 실패를 확인합니다',
+                  subtitle: '최근 실패한 작업과 원인을 확인합니다',
                   icon: Icons.build_outlined,
                 ),
               ]);
