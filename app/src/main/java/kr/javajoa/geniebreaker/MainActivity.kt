@@ -121,6 +121,7 @@ class MainActivity : FlutterActivity() {
             "homeSettings" -> controls.homeSettings()
             "toggleHomeShortcut" -> controls.toggleHomeShortcut()
             "bluetoothSettings" -> bluetooth.openSettings()
+            "manualSettings" -> showManualSettings(this)
             "accessibility" -> controls.accessibility()
             "mappingSettings" -> controls.mappingSettings()
             "chooseButton" -> controls.chooseButton()

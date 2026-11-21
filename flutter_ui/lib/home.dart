@@ -856,6 +856,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['shortcut:accounts'],
                 ['shortcut:tv-update'],
                 ['shortcut:bluetooth'],
+                ['shortcut:android-settings'],
               ];
               content = scroll([
                 tile(
@@ -893,9 +894,16 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ),
                 tile(
                   'shortcut:bluetooth',
-                  '블루투스 기기 목록',
+                  '블루투스 설정',
                   () => call('bluetoothSettings'),
                   icon: Icons.bluetooth_rounded,
+                ),
+                tile(
+                  'shortcut:android-settings',
+                  '수동 바로가기',
+                  () => call('manualSettings'),
+                  subtitle: '이 TV에서 열 수 있는 Android 설정 식별자',
+                  icon: Icons.settings_outlined,
                 ),
               ]);
             default:
