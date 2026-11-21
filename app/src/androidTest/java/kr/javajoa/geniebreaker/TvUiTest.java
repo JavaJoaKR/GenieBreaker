@@ -64,10 +64,10 @@ public class TvUiTest {
             key(instrumentation, android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             android.os.SystemClock.sleep(1500);
             capture(instrumentation, "genie-app-ui.png");
-            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.show(activity, "보기 설정", java.util.Arrays.asList("실행 가능한 앱", "전체 설치 앱"), "", 0, index -> kotlin.Unit.INSTANCE));
+            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.show(activity, "보기 설정", java.util.Arrays.asList("실행 가능한 앱", "전체 설치 앱"), "", 0, true, index -> kotlin.Unit.INSTANCE));
             android.os.SystemClock.sleep(500);
             capture(instrumentation, "genie-flutter-menu.png");
-            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.show(activity, "하위 메뉴", java.util.Arrays.asList("닫기"), "상위 메뉴로 돌아갈 수 있습니다.", -1, index -> kotlin.Unit.INSTANCE));
+            instrumentation.runOnMainSync(() -> TvMenus.INSTANCE.show(activity, "하위 메뉴", java.util.Arrays.asList("닫기"), "상위 메뉴로 돌아갈 수 있습니다.", -1, true, index -> kotlin.Unit.INSTANCE));
             android.os.SystemClock.sleep(250);
             capture(instrumentation, "genie-popup-depth.png");
             key(instrumentation, android.view.KeyEvent.KEYCODE_BACK);
