@@ -60,4 +60,20 @@ class AppUpdaterTest {
         assertTrue(text.contains(code)); assertTrue(text.contains("IllegalStateException"))
         for (value in listOf("192.168", "secret", "AA:BB", "/storage/")) assertFalse(text.contains(value))
     }
+
+    @Test fun bluetoothRejectionsKeepStableCodeAndIdentifyTheRequest() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        Diagnostics.clear(context)
+        val rejected = "Bluetooth: 요청 거절 AA:BB:CC:DD:EE:FF"
+        assertTrue(Diagnostics.record(context, rejected, step = DiagnosticStep.BLUETOOTH_PAIR) == "GB-BT-7394")
+        assertTrue(Diagnostics.record(context, rejected, step = DiagnosticStep.BLUETOOTH_CONNECT,
+            phase = DiagnosticStep.BLUETOOTH_PROFILE) == "GB-BT-7394")
+        Diagnostics.record(context, "Bluetooth: 요청을 전송했습니다.", step = DiagnosticStep.BLUETOOTH_FORGET)
+
+        val outcomes = Diagnostics.recentOutcomes(context)
+        assertTrue(outcomes.contains("[GB-BT-7394] BT Rejected · 페어링"))
+        assertTrue(outcomes.contains("[GB-BT-7394] BT Rejected · 연결 / 프로필 준비"))
+        assertFalse(outcomes.contains("AA:BB"))
+        assertFalse(outcomes.contains("등록 삭제"))
+    }
 }

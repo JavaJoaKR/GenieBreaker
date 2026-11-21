@@ -33,6 +33,9 @@ internal fun openAppsScreen(context: Context): Boolean =
     openScreen(context, Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)) ||
         openScreen(context, Intent(Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS))
 
+internal fun openBluetoothScreen(context: Context): Boolean =
+    openScreen(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+
 internal fun openAccessibilityScreen(context: Context): Boolean =
     openScreen(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 

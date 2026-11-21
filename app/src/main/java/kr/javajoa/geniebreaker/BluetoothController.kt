@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 
 internal class BluetoothController(
     private val activity: Activity,
@@ -23,7 +24,7 @@ internal class BluetoothController(
     private var companionChooserOpen = false
     private val bluetoothActions = BluetoothActions(activity) { text ->
         message(text)
-        if (ErrorCodes.isError(text)) TvMenus.notice(activity, text)
+        if (ErrorCodes.isError(text)) showRecovery(text)
     }
     private var btMessage = "연결할 블루투스 기기를 선택하세요"
     private var registered = false
@@ -167,15 +168,57 @@ internal class BluetoothController(
         } catch (error: Exception) { operationError("다른 방식으로 페어링 완료", error) }
     }
 
-    private fun operationError(operation: String, error: Exception) {
-        val code = Diagnostics.record(activity, operation, error)
-        message("$operation 실패 [$code]")
-        if (presentedError != code && !activity.isFinishing && !activity.isDestroyed) { presentedError = code; TvMenus.notice(activity, "$operation 실패 [$code]") }
+    private fun operationError(operation: String, error: Exception, step: DiagnosticStep? = null) {
+        val code = Diagnostics.record(activity, "Bluetooth: $operation", error, step)
+        val text = "$operation 실패 [$code]"
+        message(text)
+        if (presentedError != code && !activity.isFinishing && !activity.isDestroyed) {
+            presentedError = code
+            showRecovery(text)
+        }
     }
+
+    private fun showRecovery(text: String) {
+        TvMenus.show(activity, "블루투스 요청 확인", listOf("TV 블루투스 설정", "닫기"), text) {
+            if (it == 0) openSettings()
+        }
+    }
+
+    fun openSettings() {
+        if (openBluetoothScreen(activity)) return
+        TvMenus.show(activity, "TV 블루투스 설정", listOf("TV 설정 열기", "닫기"),
+            "TV 설정에서 ‘리모컨 및 액세서리’ 또는 ‘블루투스’를 여세요.") {
+            if (it == 0 && !openScreen(activity, Intent(Settings.ACTION_SETTINGS))) {
+                TvMenus.notice(activity, "리모컨으로 TV 설정을 열어 블루투스 메뉴를 확인하세요.")
+            }
+        }
+    }
+
+    private fun granted(permission: String) =
+        activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
     private fun access() = if (Build.VERSION.SDK_INT >= 31) {
-        activity.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
-            activity.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-    } else activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        granted(Manifest.permission.BLUETOOTH_SCAN) && granted(Manifest.permission.BLUETOOTH_CONNECT)
+    } else granted(Manifest.permission.ACCESS_FINE_LOCATION)
+
+    fun diagnosticSummary(): String = buildString {
+        val bt = adapter
+        val state = if (bt == null) "어댑터 없음" else try {
+            if (bt.isEnabled) "켜짐" else "꺼짐"
+        } catch (_: SecurityException) {
+            "권한 제한으로 확인 불가"
+        }
+        appendLine("블루투스 · $state")
+        if (Build.VERSION.SDK_INT >= 31) {
+            appendLine("  기기 검색 권한 · ${permissionStatus(Manifest.permission.BLUETOOTH_SCAN)}")
+            append("  기기 연결 권한 · ${permissionStatus(Manifest.permission.BLUETOOTH_CONNECT)}")
+        } else {
+            append("  검색에 필요한 위치 권한 · ${permissionStatus(Manifest.permission.ACCESS_FINE_LOCATION)}")
+        }
+    }
+
+    private fun permissionStatus(permission: String) = if (granted(permission)) "허용" else "허용 안 됨"
+
     fun requestAccess() {
         try { activity.requestPermissions(if (Build.VERSION.SDK_INT >= 31)
             arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
@@ -188,8 +231,11 @@ internal class BluetoothController(
         try {
             if (bt.isEnabled) { message("이미 켜져 있습니다"); return }
             activity.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-        } catch (_: ActivityNotFoundException) { message("TV 설정에서 블루투스를 켜세요") }
-        catch (_: SecurityException) { message("TV가 블루투스 활성화 요청을 거부했습니다") }
+        } catch (error: ActivityNotFoundException) {
+            operationError("블루투스 켜기 화면 열기", error, DiagnosticStep.BLUETOOTH_ENABLE)
+        } catch (error: SecurityException) {
+            operationError("블루투스 켜기 요청", error, DiagnosticStep.BLUETOOTH_ENABLE)
+        }
     }
     fun discover() {
         val bt = adapter ?: return
@@ -207,8 +253,17 @@ internal class BluetoothController(
             if (bt.startDiscovery()) {
                 uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = true; uiHandler.postDelayed(scanWatchdog, 35_000)
                 refresh()
-            } else message("검색을 시작하지 못했습니다. 잠시 후 다시 시도하세요.")
-        } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 검색", error) }
+            } else {
+                val code = Diagnostics.record(activity, "Bluetooth: 검색 요청 거절", step = DiagnosticStep.BLUETOOTH_SCAN)
+                val text = "TV가 블루투스 기기 검색 요청을 거절했습니다. [$code]"
+                message(text)
+                showRecovery(text)
+            }
+        } catch (error: SecurityException) {
+            operationError("기기 검색 권한", error, DiagnosticStep.BLUETOOTH_SCAN)
+        } catch (error: Exception) {
+            operationError("기기 검색", error, DiagnosticStep.BLUETOOTH_SCAN)
+        }
     }
     private fun pair(device: BluetoothDevice) {
         if (!access()) { requestAccess(); return }
@@ -272,7 +327,7 @@ internal class BluetoothController(
                             companionChooserOpen = true
                         } catch (error: Exception) {
                             pendingCompanionAddress = null
-                            operationError("다른 방식으로 페어링 화면", error)
+                            operationError("페어링 화면 열기", error, DiagnosticStep.BLUETOOTH_COMPANION)
                         }
                     }
                 }
@@ -289,7 +344,10 @@ internal class BluetoothController(
                     activity.runOnUiThread {
                         if (pendingCompanionAddress != address || companionChooserOpen || activity.isDestroyed) return@runOnUiThread
                         pendingCompanionAddress = null
-                        message("페어링 실패 · ${error ?: "기기를 찾지 못했습니다"}")
+                        val code = Diagnostics.record(activity, "Bluetooth: 페어링 실패", step = DiagnosticStep.BLUETOOTH_COMPANION)
+                        val text = "다른 방식으로 페어링하지 못했습니다. [$code]"
+                        message(text)
+                        showRecovery(text)
                     }
                 }
             }
@@ -298,10 +356,10 @@ internal class BluetoothController(
             else manager.associate(request, callback, null)
         } catch (error: SecurityException) {
             pendingCompanionAddress = null
-            operationError("블루투스 권한", error)
+            operationError("페어링 권한", error, DiagnosticStep.BLUETOOTH_COMPANION)
         } catch (error: Exception) {
             pendingCompanionAddress = null
-            operationError("다른 방식으로 페어링", error)
+            operationError("페어링 요청", error, DiagnosticStep.BLUETOOTH_COMPANION)
         }
     }
 }

@@ -110,6 +110,7 @@ class MainActivity : FlutterActivity() {
             "appView" -> apps.viewOptions()
             "update" -> updater.click()
             "diagnostics" -> showDiagnostics()
+            "compatibilityDiagnostics" -> showCompatibilityDiagnostics()
             "appSettings" -> openAppSettings()
             "accountSettings" -> showAccountSettings()
             "tvUpdateSettings" -> {
@@ -234,9 +235,40 @@ class MainActivity : FlutterActivity() {
             TvMenus.notice(this, "TV 설정의 ‘계정’에서 기기 계정을 확인하세요.")
         }
     }
+    private fun showCompatibilityDiagnostics() {
+        val accessibility = when (controls.snapshot()["mappingStatus"]) {
+            "active" -> "연결됨"
+            "connecting" -> "시스템에 켜져 있음 · 서비스 연결 대기"
+            "restricted" -> "제한된 설정"
+            "off" -> "꺼짐"
+            else -> "확인 불가"
+        }
+        val install = if (packageManager.canRequestPackageInstalls()) "허용" else "허용 안 됨"
+        val installer = SessionInstaller.state(this)
+        val installResult = installer.getString("progress", null)
+            ?: installer.getString("result", null)?.lineSequence()?.firstOrNull()
+            ?: "기록 없음"
+        val text = buildString {
+            appendLine(bluetooth.diagnosticSummary())
+            appendLine("버튼 매핑 접근성 · $accessibility")
+            appendLine("이 앱의 APK 설치 요청 · $install")
+            appendLine("최근 설치 · $installResult")
+            appendLine()
+            appendLine("최근 실패 기록")
+            append(Diagnostics.recentOutcomes(this@MainActivity))
+        }
+        TvMenus.show(this, "지니TV 충돌 진단", listOf("TV 블루투스 설정", "기록 복사", "닫기"), text, recordFailure = false) {
+            when (it) {
+                0 -> bluetooth.openSettings()
+                1 -> getSystemService(android.content.ClipboardManager::class.java)
+                    .setPrimaryClip(ClipData.newPlainText("지니TV 충돌 진단", text))
+            }
+        }
+    }
+
     private fun showDiagnostics() {
         val text = Diagnostics.read(this)
-        TvMenus.show(this, "문제 기록 · 이 기기에 저장됨", listOf("기록 복사", "기록 지우기"), text) { which ->
+        TvMenus.show(this, "문제 기록 · 이 기기에 저장됨", listOf("기록 복사", "기록 지우기"), text, recordFailure = false) { which ->
             if (which == 0) getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker local errors", text))
             else TvMenus.show(this, "문제 기록 지우기", listOf("취소", "기록 지우기"), "기기에 저장된 오류 기록을 삭제합니다.") { if (it == 1) Diagnostics.clear(this) }
         }

@@ -5,63 +5,113 @@ import android.bluetooth.*
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.Executors
 
-/** Best-effort vendor compatibility. Reflection cannot grant a denied system permission. */
+/** Bluetooth requests use the permissions available to this app on the current device. */
 internal class BluetoothActions(private val activity: Activity, private val report: (String) -> Unit) {
     private val worker = Executors.newSingleThreadExecutor()
-    private fun result(text: String) {
-        val code = Diagnostics.record(activity, "Bluetooth: $text")
-        val visible = if (ErrorCodes.isError(text) && !text.contains("[GB-")) "$text [$code]" else text
+
+    private fun result(
+        step: DiagnosticStep,
+        text: String,
+        error: Throwable? = null,
+        phase: DiagnosticStep? = null
+    ) {
+        val code = Diagnostics.record(activity, "Bluetooth: $text", error, step, phase)
+        val visible = if (error != null || ErrorCodes.isError(text)) "${step.label} · $text [$code]" else text
         activity.runOnUiThread { if (!activity.isDestroyed && !activity.isFinishing) report(visible) }
     }
+
     fun bond(device: BluetoothDevice) {
-        result("페어링 요청 중…")
+        val step = DiagnosticStep.BLUETOOTH_PAIR
+        result(step, "페어링 요청 중…")
         worker.execute {
             try {
-                Diagnostics.record(activity, "createBond requested")
-                val accepted = device.createBond()
-                result(if (accepted) "페어링을 요청했습니다. PIN이나 확인 창이 표시되면 화면 안내를 따르세요." else "페어링 요청이 거절되었습니다. 다른 방식으로 페어링을 시도할 수 있습니다.")
-            } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure("페어링", error) }
+                val text = when (device.bondState) {
+                    BluetoothDevice.BOND_BONDED -> "이미 등록된 기기입니다."
+                    BluetoothDevice.BOND_BONDING -> "이 기기의 페어링이 진행 중입니다."
+                    else -> if (device.createBond()) {
+                        "페어링을 요청했습니다. 확인 창이 표시되면 화면 안내를 따르세요."
+                    } else {
+                        "TV가 요청을 거절했습니다."
+                    }
+                }
+                result(step, text)
+            } catch (error: SecurityException) {
+                failure(step, error)
+            } catch (error: Exception) {
+                failure(step, error)
+            }
         }
     }
+
     fun forget(device: BluetoothDevice) {
+        val step = DiagnosticStep.BLUETOOTH_FORGET
         worker.execute {
             try {
                 val accepted = device.javaClass.getMethod("removeBond").invoke(device) as? Boolean == true
-                result(if (accepted) "기기 등록 삭제를 요청했습니다. 목록 갱신까지 잠시 기다리세요." else "펌웨어에서 등록 삭제 요청을 거절했습니다.")
-            } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure("등록 삭제", error) }
+                result(step, if (accepted) "기기 등록 삭제를 요청했습니다. 목록 갱신까지 잠시 기다리세요." else "TV가 요청을 거절했습니다.")
+            } catch (error: Exception) {
+                failure(step, error)
+            }
         }
     }
+
     fun connection(device: BluetoothDevice, connect: Boolean) {
+        val step = if (connect) DiagnosticStep.BLUETOOTH_CONNECT else DiagnosticStep.BLUETOOTH_DISCONNECT
+        val phase = DiagnosticStep.BLUETOOTH_PROFILE
         try {
-            val adapter = activity.getSystemService(BluetoothManager::class.java)?.adapter ?: return
+            val adapter = activity.getSystemService(BluetoothManager::class.java)?.adapter
+            if (adapter == null) {
+                result(step, "블루투스 어댑터를 사용할 수 없습니다.", phase = phase)
+                return
+            }
             val profile = if (device.bluetoothClass?.majorDeviceClass == BluetoothClass.Device.Major.PERIPHERAL) 4 else BluetoothProfile.A2DP
-            result(if (connect) "연결 요청 중…" else "연결 해제 요청 중…")
+            result(step, "${step.label} 요청 중…")
             val requested = adapter.getProfileProxy(activity, object : BluetoothProfile.ServiceListener {
                 override fun onServiceConnected(id: Int, proxy: BluetoothProfile) {
-                    if (worker.isShutdown) { try { adapter.closeProfileProxy(id, proxy) } catch (_: SecurityException) { } catch (_: Exception) { }; return }
+                    if (worker.isShutdown) {
+                        closeProxy(adapter, id, proxy)
+                        return
+                    }
                     worker.execute {
                         try {
                             val method = if (connect) "connect" else "disconnect"
                             val accepted = proxy.javaClass.getMethod(method, BluetoothDevice::class.java).invoke(proxy, device) as? Boolean == true
-                            result(if (accepted) "연결 요청을 전송했습니다. 결과는 기기 정보에서 확인하세요." else "TV가 요청을 거절했습니다. 기기 전원을 다시 켠 뒤 연결 상태를 확인하세요.")
-                        } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure(if (connect) "연결" else "연결 해제", error) }
-                        finally { try { adapter.closeProfileProxy(id, proxy) } catch (_: SecurityException) { } catch (_: Exception) { } }
+                            result(step, if (accepted) "${step.label} 요청을 전송했습니다. 결과는 기기 정보에서 확인하세요." else "TV가 요청을 거절했습니다.")
+                        } catch (error: Exception) {
+                            failure(step, error)
+                        } finally {
+                            closeProxy(adapter, id, proxy)
+                        }
                     }
                 }
+
                 override fun onServiceDisconnected(id: Int) { }
             }, profile)
-            if (!requested) result("이 기기에서는 필요한 블루투스 프로필을 사용할 수 없습니다.")
-        } catch (error: SecurityException) { failure("블루투스 권한", error) } catch (error: Exception) { failure("연결", error) }
-    }
-    private fun failure(operation: String, caught: Exception) {
-        val error = if (caught is InvocationTargetException) caught.targetException else caught
-        val code = Diagnostics.record(activity, operation, error)
-        val reason = when (error) {
-            is SecurityException -> "이 작업에는 TV의 시스템 권한이 필요합니다."
-            is NoSuchMethodException, is IllegalAccessException -> "이 펌웨어는 앱의 직접 제어를 허용하지 않습니다."
-            else -> "${error.javaClass.simpleName}: ${error.message?.take(140) ?: "응답 없음"}"
+            if (!requested) result(step, "TV가 프로필 준비 요청을 거절했습니다.", phase = phase)
+        } catch (error: SecurityException) {
+            failure(step, error, phase)
+        } catch (error: Exception) {
+            failure(step, error, phase)
         }
-        result("$operation 실패 [$code]. $reason")
     }
+
+    private fun closeProxy(adapter: BluetoothAdapter, profile: Int, proxy: BluetoothProfile) {
+        try {
+            adapter.closeProfileProxy(profile, proxy)
+        } catch (_: SecurityException) {
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun failure(step: DiagnosticStep, caught: Exception, phase: DiagnosticStep? = null) {
+        val error = if (caught is InvocationTargetException) caught.targetException else caught
+        val reason = when (error) {
+            is SecurityException -> "Android가 권한 오류를 반환했습니다."
+            is NoSuchMethodException, is IllegalAccessException -> "이 작업에 필요한 시스템 기능에 접근할 수 없습니다."
+            else -> "시스템 요청 처리 중 오류가 발생했습니다."
+        }
+        result(step, "요청 실패. $reason", error, phase)
+    }
+
     fun close() { worker.shutdownNow() }
 }

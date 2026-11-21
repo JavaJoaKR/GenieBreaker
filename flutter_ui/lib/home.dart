@@ -894,6 +894,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
             default:
               rows = [
                 ['settings:update'],
+                ['settings:compatibility'],
                 ['settings:diagnostics'],
                 ['settings:lock'],
                 ['settings:home-shortcut'],
@@ -905,6 +906,13 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   () => call('update'),
                   subtitle: '현재 버전  ${widget.data['version'] ?? '—'}',
                   icon: Icons.system_update_rounded,
+                ),
+                tile(
+                  'settings:compatibility',
+                  '지니TV 충돌 진단',
+                  () => call('compatibilityDiagnostics'),
+                  subtitle: '블루투스, 접근성, APK 설치 상태와 최근 실패를 확인합니다',
+                  icon: Icons.build_outlined,
                 ),
                 tile(
                   'settings:diagnostics',
