@@ -50,6 +50,15 @@ internal fun bluetoothBlocker(
     return null
 }
 
+internal fun bluetoothSettingsRestriction(context: Context): DiagnosticCause? {
+    val users = context.getSystemService(UserManager::class.java) ?: return null
+    return when {
+        users.hasUserRestriction(UserManager.DISALLOW_BLUETOOTH) -> DiagnosticCause.DEVICE_POLICY
+        users.hasUserRestriction(UserManager.DISALLOW_CONFIG_BLUETOOTH) -> DiagnosticCause.BLUETOOTH_SETTINGS_RESTRICTED
+        else -> null
+    }
+}
+
 private fun Context.hasPermission(name: String): Boolean =
     checkSelfPermission(name) == PackageManager.PERMISSION_GRANTED
 

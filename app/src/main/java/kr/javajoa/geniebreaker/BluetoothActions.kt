@@ -14,10 +14,11 @@ internal class BluetoothActions(private val activity: Activity, private val repo
         step: DiagnosticStep,
         text: String,
         error: Throwable? = null,
-        phase: DiagnosticStep? = null
+        phase: DiagnosticStep? = null,
+        observedCause: DiagnosticCause? = null
     ) {
         val failure = error != null || ErrorCodes.isError(text)
-        val cause = if (failure) bluetoothBlocker(activity, adapter, step, error) ?: when {
+        val cause = observedCause ?: if (failure) bluetoothBlocker(activity, adapter, step, error) ?: when {
             phase == DiagnosticStep.BLUETOOTH_PROFILE && error == null -> DiagnosticCause.PROFILE_REJECTED
             error != null -> DiagnosticCause.ERROR_UNSPECIFIED
             else -> DiagnosticCause.REASON_UNAVAILABLE
@@ -35,13 +36,31 @@ internal class BluetoothActions(private val activity: Activity, private val repo
                 val text = when (device.bondState) {
                     BluetoothDevice.BOND_BONDED -> "이미 등록된 기기입니다."
                     BluetoothDevice.BOND_BONDING -> "이 기기의 페어링이 진행 중입니다."
-                    else -> if (device.createBond()) {
-                        "페어링을 요청했습니다. 확인 창이 표시되면 화면 안내를 따르세요."
-                    } else {
-                        "TV가 요청을 거절했습니다."
+                    else -> {
+                        val bt = adapter
+                        if (bt != null && !stopDiscoveryBeforePairing(
+                                isDiscovering = { bt.isDiscovering },
+                                cancelDiscovery = { bt.cancelDiscovery() }
+                            )) {
+                            result(step, "기기 검색 중지 실패", phase = DiagnosticStep.BLUETOOTH_SCAN_STOP,
+                                observedCause = DiagnosticCause.DISCOVERY_STILL_ACTIVE)
+                            return@execute
+                        }
+                        if (Thread.currentThread().isInterrupted) return@execute
+                        when (device.bondState) {
+                            BluetoothDevice.BOND_BONDED -> "이미 등록된 기기입니다."
+                            BluetoothDevice.BOND_BONDING -> "이 기기의 페어링이 진행 중입니다."
+                            else -> if (device.createBond()) {
+                                "페어링을 요청했습니다. 확인 창이 표시되면 화면 안내를 따르세요."
+                            } else {
+                                "TV가 요청을 거절했습니다."
+                            }
+                        }
                     }
                 }
                 result(step, text)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
             } catch (error: SecurityException) {
                 failure(step, error)
             } catch (error: Exception) {

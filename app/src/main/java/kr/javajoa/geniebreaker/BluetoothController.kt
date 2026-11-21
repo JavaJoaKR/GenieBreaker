@@ -149,7 +149,10 @@ internal class BluetoothController(
     fun stop() {
         if (registered) { activity.unregisterReceiver(receiver); registered = false }
         uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false
-        try { if (access()) adapter?.cancelDiscovery() } catch (_: SecurityException) { }
+        // The system chooser owns discovery while a companion request is in progress.
+        try {
+            if (pendingCompanionAddress == null && access()) adapter?.cancelDiscovery()
+        } catch (_: SecurityException) { }
     }
     fun save(out: Bundle) {
         out.putString("companion_address", pendingCompanionAddress.takeIf { companionChooserOpen })
@@ -200,11 +203,17 @@ internal class BluetoothController(
     }
 
     fun openSettings() {
-        if (openBluetoothScreen(activity)) return
-        Diagnostics.record(activity, "Bluetooth settings failed", step = DiagnosticStep.SHORTCUT,
-            cause = DiagnosticCause.SCREEN_UNAVAILABLE)
+        val restriction = bluetoothSettingsRestriction(activity)
+        if (restriction == null && openBluetoothScreen(activity)) return
+        val cause = restriction ?: DiagnosticCause.SCREEN_UNAVAILABLE
+        val operation = if (restriction == null) "Bluetooth settings failed" else "Bluetooth settings blocked"
+        val code = Diagnostics.record(activity, operation, step = DiagnosticStep.SHORTCUT, cause = cause)
+        if (restriction != null) {
+            TvMenus.notice(activity, "${cause.label} [$code]")
+            return
+        }
         TvMenus.show(activity, "블루투스 설정", listOf("수동 바로가기", "TV 설정 열기", "닫기"),
-            "지니TV 설정의 ‘시스템 설정 → 블루투스 기기 연결’ 또는 TV 설정의 ‘리모컨 및 액세서리’를 여세요.") { choice ->
+            "${cause.label} [$code]\nGenieBreaker의 ‘블루투스’ 탭에서 기기 검색과 페어링을 시도할 수 있습니다.") { choice ->
             when (choice) {
                 0 -> showManualSettings(activity)
                 1 -> if (!openSystemSettings(activity, Intent(Settings.ACTION_SETTINGS))) {
@@ -291,10 +300,7 @@ internal class BluetoothController(
                         2 -> TvMenus.show(activity, "기기 등록 삭제 확인", listOf("취소", "삭제"), "등록 삭제 후 리모컨이나 키보드가 연결 해제될 수 있습니다. 다른 입력 수단을 준비하세요.") { choice -> if (choice == 1) bluetoothActions.forget(device) }
                         else -> deviceDetails(device)
                     } else when (index) {
-                        0 -> {
-                            adapter?.cancelDiscovery()
-                            if (device.bondState == BluetoothDevice.BOND_BONDING) message("이 기기의 페어링이 진행 중입니다.") else bluetoothActions.bond(device)
-                        }
+                        0 -> bluetoothActions.bond(device)
                         1 -> companionPair(device)
                         else -> deviceDetails(device)
                     }
