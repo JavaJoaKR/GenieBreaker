@@ -91,7 +91,8 @@ internal class RemoteAccessibility(private val context: Context, private val cha
         if (hasRestrictedSettings()) {
             if (!reportedRestriction) {
                 reportedRestriction = true
-                Diagnostics.record(context, "Accessibility restricted settings blocked")
+                Diagnostics.record(context, "Accessibility restricted settings blocked", step = DiagnosticStep.ACCESSIBILITY,
+                    cause = DiagnosticCause.ACCESSIBILITY_RESTRICTED)
             }
             return "restricted"
         }

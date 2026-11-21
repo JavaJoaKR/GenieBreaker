@@ -120,6 +120,7 @@ class MainActivity : FlutterActivity() {
             }
             "homeSettings" -> controls.homeSettings()
             "toggleHomeShortcut" -> controls.toggleHomeShortcut()
+            "bluetoothSettings" -> bluetooth.openSettings()
             "accessibility" -> controls.accessibility()
             "mappingSettings" -> controls.mappingSettings()
             "chooseButton" -> controls.chooseButton()
@@ -236,43 +237,17 @@ class MainActivity : FlutterActivity() {
         }
     }
     private fun showCompatibilityDiagnostics() {
-        val accessibility = when (controls.snapshot()["mappingStatus"]) {
-            "active" -> "연결됨"
-            "connecting" -> "시스템에 켜져 있음 · 서비스 연결 대기"
-            "restricted" -> "제한된 설정"
-            "off" -> "꺼짐"
-            else -> "확인 불가"
+        val causes = Diagnostics.recentCauses(this)
+        if (causes.isEmpty()) {
+            TvMenus.show(this, "지니TV 충돌 진단", listOf("닫기"), "기록된 원인이 없습니다.", recordFailure = false)
+            return
         }
-        val install = if (packageManager.canRequestPackageInstalls()) "허용" else "허용 안 됨"
-        val installer = SessionInstaller.state(this)
-        val installResult = installer.getString("progress", null)
-            ?: installer.getString("result", null)?.lineSequence()?.firstOrNull()
-            ?: "기록 없음"
-        val summary = buildString {
-            appendLine(bluetooth.diagnosticSummary())
-            appendLine("버튼 매핑 접근성 · $accessibility")
-            appendLine("이 앱의 APK 설치 요청 · $install")
-            append("최근 설치 · $installResult")
+        val report = causes.joinToString("\n")
+        val latest = causes.take(2).joinToString("\n\n")
+        TvMenus.show(this, "지니TV 충돌 진단", listOf("기록 복사", "닫기"), latest, recordFailure = false) {
+            if (it == 0) getSystemService(android.content.ClipboardManager::class.java)
+                .setPrimaryClip(ClipData.newPlainText("지니TV 충돌 진단", report))
         }
-        val outcomes = Diagnostics.recentOutcomes(this)
-        val report = "$summary\n\n최근 실패 기록\n$outcomes"
-        val actions = listOf("최근 실패 보기", "TV 블루투스 설정", "기록 복사", "닫기")
-        TvMenus.show(this, "지니TV 충돌 진단", actions, summary, recordFailure = false) {
-            when (it) {
-                0 -> {
-                    val latest = outcomes.lineSequence().take(4).joinToString("\n")
-                    TvMenus.show(this, "문제 기록 · 최근 실패", listOf("기록 복사", "닫기"), latest,
-                        recordFailure = false) { choice -> if (choice == 0) copyCompatibilityReport(report) }
-                }
-                1 -> bluetooth.openSettings()
-                2 -> copyCompatibilityReport(report)
-            }
-        }
-    }
-
-    private fun copyCompatibilityReport(report: String) {
-        getSystemService(android.content.ClipboardManager::class.java)
-            .setPrimaryClip(ClipData.newPlainText("지니TV 충돌 진단", report))
     }
 
     private fun showDiagnostics() {
