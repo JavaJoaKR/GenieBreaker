@@ -248,22 +248,31 @@ class MainActivity : FlutterActivity() {
         val installResult = installer.getString("progress", null)
             ?: installer.getString("result", null)?.lineSequence()?.firstOrNull()
             ?: "기록 없음"
-        val text = buildString {
+        val summary = buildString {
             appendLine(bluetooth.diagnosticSummary())
             appendLine("버튼 매핑 접근성 · $accessibility")
             appendLine("이 앱의 APK 설치 요청 · $install")
-            appendLine("최근 설치 · $installResult")
-            appendLine()
-            appendLine("최근 실패 기록")
-            append(Diagnostics.recentOutcomes(this@MainActivity))
+            append("최근 설치 · $installResult")
         }
-        TvMenus.show(this, "지니TV 충돌 진단", listOf("TV 블루투스 설정", "기록 복사", "닫기"), text, recordFailure = false) {
+        val outcomes = Diagnostics.recentOutcomes(this)
+        val report = "$summary\n\n최근 실패 기록\n$outcomes"
+        val actions = listOf("최근 실패 보기", "TV 블루투스 설정", "기록 복사", "닫기")
+        TvMenus.show(this, "지니TV 충돌 진단", actions, summary, recordFailure = false) {
             when (it) {
-                0 -> bluetooth.openSettings()
-                1 -> getSystemService(android.content.ClipboardManager::class.java)
-                    .setPrimaryClip(ClipData.newPlainText("지니TV 충돌 진단", text))
+                0 -> {
+                    val latest = outcomes.lineSequence().take(4).joinToString("\n")
+                    TvMenus.show(this, "문제 기록 · 최근 실패", listOf("기록 복사", "닫기"), latest,
+                        recordFailure = false) { choice -> if (choice == 0) copyCompatibilityReport(report) }
+                }
+                1 -> bluetooth.openSettings()
+                2 -> copyCompatibilityReport(report)
             }
         }
+    }
+
+    private fun copyCompatibilityReport(report: String) {
+        getSystemService(android.content.ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("지니TV 충돌 진단", report))
     }
 
     private fun showDiagnostics() {
