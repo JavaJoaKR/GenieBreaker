@@ -14,7 +14,7 @@
 | `GB-BT-9C9A` | 블루투스 | IllegalStateException |
 | `GB-BT-FAB2` | 블루투스 | IllegalArgumentException |
 | `GB-BT-0657` | 블루투스 | IOException |
-| `GB-BT-7394` | 블루투스 | Rejected |
+| `GB-BT-7394` | 블루투스 | 요청 거절. 설정 → 지니TV 충돌 진단에서 실패 단계 확인 |
 | `GB-BT-F8FD` | 블루투스 | Blocked |
 | `GB-BT-3CE1` | 블루투스 | Failure |
 | `GB-BT-B536` | 블루투스 | Event |

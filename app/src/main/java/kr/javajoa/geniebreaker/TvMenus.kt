@@ -19,9 +19,12 @@ internal object TvMenus {
     private var controller: MenuController? = null
     fun attach(owner: Activity, menus: MenuController) { activity = WeakReference(owner); controller = menus }
     fun detach(owner: Activity) { if (activity.get() === owner) { activity.clear(); controller = null } }
-    fun show(owner: Activity, title: String, items: List<String>, message: String = "", selected: Int = -1, action: (Int) -> Unit = {}) {
+    fun show(
+        owner: Activity, title: String, items: List<String>, message: String = "", selected: Int = -1,
+        recordFailure: Boolean = true, action: (Int) -> Unit = {}
+    ) {
         if (activity.get() !== owner || owner.isDestroyed) return
-        val diagnostic = if (!title.startsWith("문제 기록") && ErrorCodes.isError("$title $message") && !message.contains("[GB-")) "$message\n[${Diagnostics.record(owner, "$title: $message")}]" else message
+        val diagnostic = if (recordFailure && ErrorCodes.isError("$title $message") && !message.contains("[GB-")) "$message\n[${Diagnostics.record(owner, "$title: $message")}]" else message
         controller?.push(MenuPage(title, items, diagnostic, selected, action))
     }
     fun cloneOptions(owner: Activity, title: String, values: Map<String, Boolean>, action: (Map<String, Boolean>) -> Unit) {
