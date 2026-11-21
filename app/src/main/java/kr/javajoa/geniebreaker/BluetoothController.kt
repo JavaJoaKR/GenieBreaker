@@ -203,10 +203,13 @@ internal class BluetoothController(
         if (openBluetoothScreen(activity)) return
         Diagnostics.record(activity, "Bluetooth settings failed", step = DiagnosticStep.SHORTCUT,
             cause = DiagnosticCause.SCREEN_UNAVAILABLE)
-        TvMenus.show(activity, "블루투스 기기 목록", listOf("TV 설정 열기", "닫기"),
-            "이 TV에서는 기기 목록으로 바로 이동할 수 없습니다. TV 설정에서 ‘리모컨 및 액세서리’를 여세요.") {
-            if (it == 0 && !openScreen(activity, Intent(Settings.ACTION_SETTINGS))) {
-                TvMenus.notice(activity, "리모컨으로 TV 설정을 열어 블루투스 메뉴를 확인하세요.")
+        TvMenus.show(activity, "블루투스 설정", listOf("수동 바로가기", "TV 설정 열기", "닫기"),
+            "지니TV 설정의 ‘시스템 설정 → 블루투스 기기 연결’ 또는 TV 설정의 ‘리모컨 및 액세서리’를 여세요.") { choice ->
+            when (choice) {
+                0 -> showManualSettings(activity)
+                1 -> if (!openSystemSettings(activity, Intent(Settings.ACTION_SETTINGS))) {
+                    TvMenus.notice(activity, "리모컨의 홈 메뉴에서 TV 설정을 여세요.")
+                }
             }
         }
     }

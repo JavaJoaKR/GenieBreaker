@@ -4,7 +4,6 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
@@ -35,34 +34,13 @@ internal fun openAppsScreen(context: Context): Boolean =
         openScreen(context, Intent(Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS))
 
 internal fun openBluetoothScreen(context: Context): Boolean {
-    val pm = context.packageManager
-    val packages = pm.queryIntentActivities(Intent(Settings.ACTION_SETTINGS),
-        PackageManager.MATCH_SYSTEM_ONLY or PackageManager.MATCH_DEFAULT_ONLY)
-        .map { it.activityInfo.packageName } +
-        listOf("com.android.tv.settings", "com.google.android.tv.settings", "com.google.android.apps.tv.settings")
-    val listScreens = setOf(
-        "AccessoriesActivity", "RemoteAndAccessoriesActivity", "RemotesAndAccessoriesActivity",
-        "BluetoothDevicesActivity", "BluetoothDeviceListActivity"
-    )
-    val listLabels = setOf("remotes & accessories", "remote & accessories", "remotes and accessories",
-        "bluetooth device list", "리모컨 및 액세서리", "블루투스 기기 목록")
-    for (pkg in packages.distinct()) {
-        @Suppress("DEPRECATION")
-        val info = try { pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES) }
-        catch (_: PackageManager.NameNotFoundException) { continue }
-        val flags = info.applicationInfo?.flags ?: continue
-        if (flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) continue
-        for (screen in info.activities.orEmpty()) {
-            if (!screen.exported || !screen.enabled) continue
-            val componentName = screen.name.substringAfterLast('.')
-            val activityLabel = if (screen.labelRes != 0 || screen.nonLocalizedLabel != null)
-                screen.loadLabel(pm).toString().trim().lowercase() else ""
-            if (componentName !in listScreens && activityLabel !in listLabels) continue
-            if (screen.permission != null && context.checkSelfPermission(screen.permission) != PackageManager.PERMISSION_GRANTED) continue
-            if (openScreen(context, Intent().setComponent(ComponentName(pkg, screen.name)))) return true
-        }
+    if (openSystemSettings(context, Intent(PREVIOUSLY_CONNECTED_DEVICES))) return true
+    val accessories = declaredSettingsShortcuts(context).filter {
+        val name = it.label.trim().lowercase()
+        name.contains("accessories") || name.contains("액세서리") || name.contains("블루투스")
     }
-    return false
+    return accessories.any { openScreen(context, it.intent) } ||
+        openSystemSettings(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
 }
 
 internal fun openAccessibilityScreen(context: Context): Boolean =
