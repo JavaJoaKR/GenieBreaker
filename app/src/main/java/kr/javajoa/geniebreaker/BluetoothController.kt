@@ -20,8 +20,9 @@ internal class BluetoothController(
     private val found = linkedMapOf<String, BluetoothDevice>()
     private val linked = mutableSetOf<String>()
     private val names = DeviceNames()
-    private var pendingCompanionAddress: String? = null
-    private var companionChooserOpen = false
+    private class CompanionRequest(val address: String, var chooserOpen: Boolean = false)
+
+    private var companionRequest: CompanionRequest? = null
     private val bluetoothActions = BluetoothActions(activity) { text ->
         message(text)
         if (ErrorCodes.isError(text) || "[GB-" in text) TvMenus.notice(activity, text)
@@ -34,8 +35,17 @@ internal class BluetoothController(
     private var pendingNames = false
     private var presentedError: String? = null
     private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val companionChooserTimeout = Runnable {
+        if (companionRequest?.chooserOpen == false && !activity.isFinishing && !activity.isDestroyed) {
+            finishCompanionRequest()
+            reportBlocker("보조 페어링 화면 응답 지연", DiagnosticStep.BLUETOOTH_COMPANION,
+                DiagnosticCause.COMPANION_CHOOSER_TIMEOUT)
+        }
+    }
     private val scanWatchdog = Runnable {
-        watchdogScheduled = false; scanExpired = true
+        watchdogScheduled = false
+        if (companionRequest != null) return@Runnable
+        scanExpired = true
         try { if (access()) adapter?.cancelDiscovery() } catch (error: SecurityException) { operationError("검색 중지", error) } catch (error: Exception) { operationError("검색 중지", error) }
         message("검색을 완료했습니다. 목록에서 기기를 선택하세요.")
     }
@@ -48,8 +58,7 @@ internal class BluetoothController(
     }
 
     fun restore(saved: Bundle?) {
-        pendingCompanionAddress = saved?.getString("companion_address")
-        companionChooserOpen = pendingCompanionAddress != null
+        companionRequest = saved?.getString("companion_address")?.let { CompanionRequest(it, chooserOpen = true) }
         saved?.getBundle("names")?.let { bundle ->
             bundle.keySet().forEach { names.merge(it, bundle.getString(it)) }
         }
@@ -151,26 +160,34 @@ internal class BluetoothController(
         uiHandler.removeCallbacks(nameTick); uiHandler.removeCallbacks(scanWatchdog); watchdogScheduled = false
         // The system chooser owns discovery while a companion request is in progress.
         try {
-            if (pendingCompanionAddress == null && access()) adapter?.cancelDiscovery()
+            if (companionRequest == null && access()) adapter?.cancelDiscovery()
         } catch (_: SecurityException) { }
     }
     fun save(out: Bundle) {
-        out.putString("companion_address", pendingCompanionAddress.takeIf { companionChooserOpen })
+        out.putString("companion_address", companionRequest?.takeIf { it.chooserOpen }?.address)
         out.putBundle("names", Bundle().apply { names.snapshot().forEach { (key, value) -> putString(key, value) } })
     }
 
     fun close() {
         bluetoothActions.close()
+        finishCompanionRequest()
         uiHandler.removeCallbacksAndMessages(null)
     }
 
     fun result(requestCode: Int, resultCode: Int) {
         if (requestCode != 501) return
-        val address = pendingCompanionAddress
-        pendingCompanionAddress = null
-        companionChooserOpen = false
-        if (resultCode != Activity.RESULT_OK || address == null) { message("페어링 요청이 취소되었습니다."); return }
-        bondCompanion(address)
+        val request = companionRequest?.takeIf { it.chooserOpen } ?: return
+        finishCompanionRequest()
+        val step = DiagnosticStep.BLUETOOTH_COMPANION
+        when {
+            resultCode == Activity.RESULT_OK -> bondCompanion(request.address)
+            resultCode == Activity.RESULT_CANCELED ||
+                (Build.VERSION.SDK_INT >= 34 && resultCode == CompanionDeviceManager.RESULT_USER_REJECTED) ->
+                message("시스템 기기 선택이 취소되었습니다.")
+            Build.VERSION.SDK_INT >= 34 && resultCode == CompanionDeviceManager.RESULT_DISCOVERY_TIMEOUT ->
+                reportBlocker("보조 페어링 기기 검색 실패", step, DiagnosticCause.COMPANION_DISCOVERY_TIMEOUT)
+            else -> reportBlocker("보조 페어링 실패", step, DiagnosticCause.COMPANION_REQUEST_FAILED)
+        }
     }
 
     private fun bondCompanion(address: String) {
@@ -187,7 +204,8 @@ internal class BluetoothController(
     private fun operationError(operation: String, error: Exception, step: DiagnosticStep? = null) {
         val cause = step?.let { bluetoothBlocker(activity, adapter, it, error) ?: DiagnosticCause.ERROR_UNSPECIFIED }
         val code = Diagnostics.record(activity, "Bluetooth: $operation", error, step, cause = cause)
-        val text = "$operation 실패 [$code]"
+        val detail = cause?.let { "\n${it.label}" }.orEmpty()
+        val text = "$operation 실패 [$code]$detail"
         message(text)
         if (presentedError != code && !activity.isFinishing && !activity.isDestroyed) {
             presentedError = code
@@ -199,7 +217,15 @@ internal class BluetoothController(
         val code = Diagnostics.record(activity, "Bluetooth: $operation", step = step, cause = cause)
         val text = "${step.label} · ${cause.label} [$code]"
         message(text)
-        TvMenus.notice(activity, text)
+        if (cause == DiagnosticCause.COMPANION_LOCATION_DISABLED) {
+            TvMenus.show(activity, "보조 페어링", listOf("TV 위치 설정 열기", "닫기"), text) { choice ->
+                if (choice == 0 && !openSystemSettings(activity, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))) {
+                    TvMenus.notice(activity, "이 TV에서는 위치 설정 화면을 열 수 없습니다.")
+                }
+            }
+        } else {
+            TvMenus.notice(activity, text)
+        }
     }
 
     fun openSettings() {
@@ -315,67 +341,90 @@ internal class BluetoothController(
 
         } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 정보", error) }
     }
+    private fun finishCompanionRequest() {
+        companionRequest = null
+        uiHandler.removeCallbacks(companionChooserTimeout)
+    }
+
     @Suppress("DEPRECATION")
     private fun companionPair(device: BluetoothDevice) {
-        if (Build.VERSION.SDK_INT < 26 || !activity.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
-            message("이 TV에서는 다른 페어링 방식을 사용할 수 없습니다."); return
-        }
-        if (pendingCompanionAddress != null) {
+        val step = DiagnosticStep.BLUETOOTH_COMPANION
+        if (companionRequest != null) {
             message("이미 페어링 요청이 진행 중입니다.")
             return
         }
-        val address = device.address
+        val manager = activity.getSystemService(CompanionDeviceManager::class.java)
+        if (manager == null || !activity.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
+            reportBlocker("보조 페어링 미지원", step, DiagnosticCause.COMPANION_UNAVAILABLE)
+            return
+        }
+        val location = activity.getSystemService(LocationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 28 && location?.isLocationEnabled == false) {
+            reportBlocker("보조 페어링 위치 서비스 꺼짐", step, DiagnosticCause.COMPANION_LOCATION_DISABLED)
+            return
+        }
         try {
-            val manager = activity.getSystemService(CompanionDeviceManager::class.java)
-            if (manager == null) {
-                message("이 TV에서는 다른 페어링 방식을 사용할 수 없습니다.")
-                return
-            }
+            val pending = CompanionRequest(device.address)
             adapter?.cancelDiscovery()
-            pendingCompanionAddress = address
+            companionRequest = pending
             val request = AssociationRequest.Builder()
-                .addDeviceFilter(BluetoothDeviceFilter.Builder().setAddress(address).build()).setSingleDevice(true).build()
+                .addDeviceFilter(BluetoothDeviceFilter.Builder().setAddress(pending.address).build()).setSingleDevice(true).build()
             val callback = object : CompanionDeviceManager.Callback() {
+                private fun isCurrent() =
+                    companionRequest === pending && !pending.chooserOpen && !activity.isFinishing && !activity.isDestroyed
+
                 private fun chooser(sender: IntentSender) {
                     activity.runOnUiThread {
-                        if (pendingCompanionAddress != address || companionChooserOpen || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                        if (!isCurrent()) return@runOnUiThread
+                        uiHandler.removeCallbacks(companionChooserTimeout)
                         try {
+                            pending.chooserOpen = true
                             activity.startIntentSenderForResult(sender, 501, null, 0, 0, 0)
-                            companionChooserOpen = true
+                        } catch (error: SecurityException) {
+                            finishCompanionRequest()
+                            operationError("시스템 기기 선택창 권한", error, step)
+                        } catch (_: IntentSender.SendIntentException) {
+                            finishCompanionRequest()
+                            reportBlocker("시스템 기기 선택창 실행 실패", step, DiagnosticCause.COMPANION_CHOOSER_UNAVAILABLE)
+                        } catch (_: ActivityNotFoundException) {
+                            finishCompanionRequest()
+                            reportBlocker("시스템 기기 선택창 실행 실패", step, DiagnosticCause.COMPANION_CHOOSER_UNAVAILABLE)
                         } catch (error: Exception) {
-                            pendingCompanionAddress = null
-                            operationError("페어링 화면 열기", error, DiagnosticStep.BLUETOOTH_COMPANION)
+                            finishCompanionRequest()
+                            operationError("시스템 기기 선택창 실행", error, step)
                         }
                     }
                 }
+
                 override fun onDeviceFound(chooserLauncher: IntentSender) { chooser(chooserLauncher) }
                 override fun onAssociationPending(intentSender: IntentSender) { chooser(intentSender) }
                 override fun onAssociationCreated(associationInfo: AssociationInfo) {
                     activity.runOnUiThread {
-                        if (pendingCompanionAddress != address || companionChooserOpen || activity.isDestroyed) return@runOnUiThread
-                        pendingCompanionAddress = null
-                        bondCompanion(address)
+                        if (!isCurrent()) return@runOnUiThread
+                        finishCompanionRequest()
+                        bondCompanion(pending.address)
                     }
                 }
+
                 override fun onFailure(error: CharSequence?) {
                     activity.runOnUiThread {
-                        if (pendingCompanionAddress != address || companionChooserOpen || activity.isDestroyed) return@runOnUiThread
-                        pendingCompanionAddress = null
-                        val step = DiagnosticStep.BLUETOOTH_COMPANION
+                        if (!isCurrent()) return@runOnUiThread
+                        finishCompanionRequest()
                         reportBlocker("보조 페어링 실패", step,
-                            bluetoothBlocker(activity, adapter, step) ?: DiagnosticCause.ERROR_UNSPECIFIED)
+                            bluetoothBlocker(activity, adapter, step) ?: DiagnosticCause.COMPANION_REQUEST_FAILED)
                     }
                 }
             }
-            message("페어링을 준비하고 있습니다. 기기를 페어링 모드로 유지하세요.")
+            message("시스템 기기 선택창을 기다리는 중입니다. 기기를 페어링 모드로 유지하세요.")
+            uiHandler.postDelayed(companionChooserTimeout, 30_000)
             if (Build.VERSION.SDK_INT >= 33) manager.associate(request, activity.mainExecutor, callback)
             else manager.associate(request, callback, null)
         } catch (error: SecurityException) {
-            pendingCompanionAddress = null
-            operationError("페어링 권한", error, DiagnosticStep.BLUETOOTH_COMPANION)
+            finishCompanionRequest()
+            operationError("보조 페어링 권한", error, step)
         } catch (error: Exception) {
-            pendingCompanionAddress = null
-            operationError("페어링 요청", error, DiagnosticStep.BLUETOOTH_COMPANION)
+            finishCompanionRequest()
+            operationError("보조 페어링 요청", error, step)
         }
     }
 }
