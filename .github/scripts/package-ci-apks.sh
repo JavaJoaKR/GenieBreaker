@@ -58,7 +58,34 @@ done
 (
   cd dist
   sha256sum *.apk > SHA256SUMS.txt
-  stat -c '%n %s bytes' *.apk | tee APK_SIZE.txt
+  python3 - *.apk <<'PYREPORT' | tee APK_SIZE.txt
+from collections import Counter
+from pathlib import Path
+from sys import argv
+from zipfile import ZipFile
+
+def section(name):
+    if name.startswith("lib/"):
+        return "Native libraries"
+    if name.startswith("frameworks/"):
+        return "Bundled framework tables"
+    if name.startswith("assets/flutter_assets/"):
+        return "Flutter assets"
+    if name.startswith("classes") and name.endswith(".dex"):
+        return "DEX"
+    return "Other files"
+
+for path in map(Path, argv[1:]):
+    size = path.stat().st_size
+    with ZipFile(path) as archive:
+        sizes = Counter()
+        for entry in archive.infolist():
+            sizes[section(entry.filename)] += entry.compress_size
+    sizes["APK headers and signatures"] = size - sum(sizes.values())
+    print(f"{path.name} {size} bytes")
+    for name, packaged_size in sizes.most_common():
+        print(f"  {name}: {packaged_size} bytes")
+PYREPORT
   for apk in *.apk; do
     echo "$apk"
     unzip -l "$apk" | awk '/lib\/.*\.so$/ { print $4, $1 }'

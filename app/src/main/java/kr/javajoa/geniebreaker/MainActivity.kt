@@ -11,6 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 /** One Flutter surface owns all application UI and remote focus. Android owns device APIs only. */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
+    private var lastShell: Map<String, Any>? = null
     private var menus: MenuController? = null
     private lateinit var bluetooth: BluetoothController
     private lateinit var apps: AppManagementController
@@ -60,7 +61,9 @@ class MainActivity : FlutterActivity() {
         try {
             if (call.method == "ready") {
                 uiReady = true
-                result.success(snapshot())
+                val initial = snapshot()
+                lastShell = initial
+                result.success(initial)
                 if (!appLock.locked) apps.refresh()
                 return
             }
@@ -106,11 +109,17 @@ class MainActivity : FlutterActivity() {
             "power" -> bluetooth.enableBluetooth()
             "device" -> bluetooth.choose(call.arguments as String)
             "app" -> apps.choose(call.arguments as String)
+            "launchHomeApp" -> {
+                if (resumed && hasWindowFocus() && menus?.current() == null) {
+                    (call.arguments as? String)?.let(apps::launchHomeApp)
+                }
+            }
+            "refreshLauncher" -> apps.refresh(force = true)
             "appFilter" -> apps.toggleDuals()
             "appView" -> apps.viewOptions()
             "update" -> updater.click()
-            "diagnostics" -> showDiagnostics()
-            "compatibilityDiagnostics" -> showCompatibilityDiagnostics()
+            "diagnostics" -> showDiagnostics(this)
+            "permissionReview" -> showPermissionReview(this)
             "appSettings" -> openAppSettings()
             "accountSettings" -> showAccountSettings()
             "tvUpdateSettings" -> {
@@ -121,7 +130,10 @@ class MainActivity : FlutterActivity() {
             "homeSettings" -> controls.homeSettings()
             "toggleHomeShortcut" -> controls.toggleHomeShortcut()
             "bluetoothSettings" -> bluetooth.openSettings()
-            "manualSettings" -> showManualSettings(this)
+            "advancedShortcuts" -> TvMenus.show(this, "고급 바로가기", listOf("수동 바로가기", "닫기")) {
+                if (it == 0) showManualSettings(this)
+            }
+            "startupSettings" -> controls.showStartupSettings()
             "accessibility" -> controls.accessibility()
             "mappingSettings" -> controls.mappingSettings()
             "chooseButton" -> controls.chooseButton()
@@ -160,7 +172,13 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!preview && hasWindowFocus() && intent.hasCategory(Intent.CATEGORY_HOME)) StartupApps.launchFromHome(this)
+        if (isHomeEntry()) {
+            if (!appLock.locked) {
+                menus?.clear()
+                if (uiReady) publishSession("showHome")
+            }
+            if (!preview && hasWindowFocus()) StartupApps.launchFromHome(this)
+        }
     }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (!appLock.locked && RemoteCapture.handle(event)) return true
@@ -180,15 +198,32 @@ class MainActivity : FlutterActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    private fun isHomeEntry(): Boolean =
+        intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)
+
     private fun snapshot(): Map<String, Any> = if (appLock.locked) {
         mapOf("shell" to true, "locked" to true, "version" to BuildConfig.VERSION_NAME)
     } else bluetooth.snapshot() +
         mapOf("shell" to true, "version" to BuildConfig.VERSION_NAME,
-            "apps" to apps.snapshot(), "update" to updateLabel, "controls" to controls.snapshot(), "lockEnabled" to appLock.enabled) +
+            "apps" to apps.snapshot(), "launcher" to apps.launcherSnapshot(), "homeEntry" to isHomeEntry(),
+            "update" to updateLabel, "controls" to controls.snapshot(), "lockEnabled" to appLock.enabled) +
         (menus?.current()?.let { mapOf("menu" to it) } ?: emptyMap())
 
-    private fun publish() { if (!isFinishing && !isDestroyed && ::apps.isInitialized) channel?.invokeMethod("shell", snapshot()) }
-    private fun publishSession() { channel?.invokeMethod("session", snapshot()) }
+    private fun publish() {
+        if (isFinishing || isDestroyed || !::apps.isInitialized) return
+        val bridge = channel ?: return
+        val next = snapshot()
+        if (!uiReady || next == lastShell) return
+        lastShell = next
+        bridge.invokeMethod("shell", next)
+    }
+
+    private fun publishSession(event: String = "session") {
+        val bridge = channel ?: return
+        val next = snapshot()
+        lastShell = next
+        bridge.invokeMethod(event, next)
+    }
 
     override fun onStart() { super.onStart(); bluetooth.start() }
     override fun onResume() {
@@ -235,27 +270,6 @@ class MainActivity : FlutterActivity() {
     private fun showAccountSettings() {
         if (!openAccountSettings(this)) {
             TvMenus.notice(this, "TV 설정의 ‘계정’에서 기기 계정을 확인하세요.")
-        }
-    }
-    private fun showCompatibilityDiagnostics() {
-        val causes = Diagnostics.recentCauses(this)
-        if (causes.isEmpty()) {
-            TvMenus.show(this, "지니TV 충돌 진단", listOf("닫기"), "기록된 원인이 없습니다.", recordFailure = false)
-            return
-        }
-        val report = causes.joinToString("\n")
-        val latest = causes.take(2).joinToString("\n\n")
-        TvMenus.show(this, "지니TV 충돌 진단", listOf("기록 복사", "닫기"), latest, recordFailure = false) {
-            if (it == 0) getSystemService(android.content.ClipboardManager::class.java)
-                .setPrimaryClip(ClipData.newPlainText("지니TV 충돌 진단", report))
-        }
-    }
-
-    private fun showDiagnostics() {
-        val text = Diagnostics.read(this)
-        TvMenus.show(this, "문제 기록 · 이 기기에 저장됨", listOf("기록 복사", "기록 지우기"), text, recordFailure = false) { which ->
-            if (which == 0) getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("GenieBreaker local errors", text))
-            else TvMenus.show(this, "문제 기록 지우기", listOf("취소", "기록 지우기"), "기기에 저장된 오류 기록을 삭제합니다.") { if (it == 1) Diagnostics.clear(this) }
         }
     }
 }

@@ -2,7 +2,9 @@ package kr.javajoa.geniebreaker
 
 import android.app.Activity
 import android.content.*
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract as Docs
 import android.provider.Settings
 import android.text.format.Formatter
@@ -24,6 +26,7 @@ internal class FileController(private val activity: Activity, private val change
     private val resolver get() = activity.contentResolver
     // Do not offer cloud-backed document trees: this explorer must never upload local data.
     companion object {
+        private val explorerRequests = setOf("files.list", "files.action", "open", "storage.list", "clean")
         fun isLocalDocument(uri: Uri) = uri.scheme == "content" && uri.authority in setOf(
             "com.android.externalstorage.documents", "com.android.providers.downloads.documents", "com.android.providers.media.documents")
     }
@@ -32,16 +35,10 @@ internal class FileController(private val activity: Activity, private val change
             activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).putExtra(Intent.EXTRA_LOCAL_ONLY, true).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), 620)
             result.success(null); return true
         }
-        if (call.method !in setOf("files.list", "files.action", "open", "storage.list", "clean")) return false
+        if (call.method !in explorerRequests) return false
         worker.execute {
             try {
-                val answer: Any? = when (call.method) {
-                    "files.list" -> FileWork.reading { listing(call.arguments as? String ?: "") }
-                    "storage.list" -> StorageTools.snapshot(activity)
-                    "clean" -> StorageTools.clean(activity, call.arguments as String)
-                    "open" -> { open(call.arguments as String); null }
-                    else -> mutate(call.arguments as Map<*, *>)
-                }
+                val answer = executeRequest(call)
                 activity.runOnUiThread { if (!activity.isDestroyed) result.success(answer) }
             } catch (error: Exception) {
                 val code = Diagnostics.record(activity, "File request", error)
@@ -50,6 +47,18 @@ internal class FileController(private val activity: Activity, private val change
         }
         return true
     }
+    private fun executeRequest(call: MethodCall): Any? = when (call.method) {
+        "files.list" -> FileWork.reading { listing(call.arguments as? String ?: "") }
+        "files.action" -> mutate(call.arguments as Map<*, *>)
+        "storage.list" -> StorageTools.snapshot(activity)
+        "clean" -> StorageTools.clean(activity, call.arguments as String)
+        "open" -> {
+            open(call.arguments as String)
+            null
+        }
+        else -> error("Unsupported file request")
+    }
+
     private fun rootFile(kind: String): File = when (kind) {
         "local" -> File(activity.filesDir, "browser").apply { mkdirs() }
         "apks" -> File(activity.filesDir, "edited").apply { mkdirs() }
@@ -76,13 +85,74 @@ internal class FileController(private val activity: Activity, private val change
             parentPath.substringBefore(':') + ":" + relative
         } else doc.uri.toString()
         known[path] = doc
-        if (write) writable.add(path)
+        if (write) writable.add(path) else writable.remove(path)
         return path
     }
-    private fun entry(doc: DocumentFile, path: String): Map<String, Any> = mapOf(
-        "name" to (doc.name ?: "폴더"), "path" to path, "directory" to doc.isDirectory,
-        "bytes" to doc.length(), "modified" to doc.lastModified(), "writable" to (path in writable && doc.canWrite()),
-        "root" to (path in roots), "detail" to if (doc.isDirectory) "폴더" else Formatter.formatFileSize(activity, doc.length()))
+    private data class EntryMetadata(
+        val name: String?,
+        val directory: Boolean,
+        val bytes: Long,
+        val modified: Long,
+        val writable: Boolean
+    )
+
+    private fun entry(doc: DocumentFile, path: String, metadata: EntryMetadata? = null): Map<String, Any> {
+        val info = metadata ?: EntryMetadata(
+            doc.name, doc.isDirectory, doc.length(), doc.lastModified(),
+            path in writable && doc.canWrite()
+        )
+        return mapOf(
+            "name" to (info.name ?: "폴더"),
+            "path" to path,
+            "directory" to info.directory,
+            "bytes" to info.bytes,
+            "modified" to info.modified,
+            "writable" to (path in writable && info.writable),
+            "root" to (path in roots),
+            "detail" to if (info.directory) "폴더" else Formatter.formatFileSize(activity, info.bytes)
+        )
+    }
+
+    private fun treeMetadata(folder: DocumentFile): Map<String, EntryMetadata> {
+        val uri = folder.uri
+        if (uri.scheme != "content" || !Docs.isTreeUri(uri)) return emptyMap()
+        val projection = arrayOf(
+            Document.COLUMN_DOCUMENT_ID, Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE,
+            Document.COLUMN_SIZE, Document.COLUMN_LAST_MODIFIED, Document.COLUMN_FLAGS
+        )
+        val children = Docs.buildChildDocumentsUriUsingTree(uri, Docs.getDocumentId(uri))
+        return try {
+            resolver.query(children, projection, null, null, null)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(Document.COLUMN_DOCUMENT_ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(Document.COLUMN_DISPLAY_NAME)
+                val typeColumn = cursor.getColumnIndexOrThrow(Document.COLUMN_MIME_TYPE)
+                val sizeColumn = cursor.getColumnIndexOrThrow(Document.COLUMN_SIZE)
+                val modifiedColumn = cursor.getColumnIndexOrThrow(Document.COLUMN_LAST_MODIFIED)
+                val flagsColumn = cursor.getColumnIndexOrThrow(Document.COLUMN_FLAGS)
+                buildMap {
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getString(idColumn) ?: continue
+                        val directory = cursor.getString(typeColumn) == Document.MIME_TYPE_DIR
+                        val flags = cursor.getInt(flagsColumn)
+                        val supportMask = Document.FLAG_SUPPORTS_WRITE or Document.FLAG_SUPPORTS_DELETE or
+                            (if (directory) Document.FLAG_DIR_SUPPORTS_CREATE else 0)
+                        val child = Docs.buildDocumentUriUsingTree(uri, id)
+                        val canWrite = flags and supportMask != 0 &&
+                            activity.checkCallingOrSelfUriPermission(child, Intent.FLAG_GRANT_WRITE_URI_PERMISSION) ==
+                            PackageManager.PERMISSION_GRANTED
+                        put(child.toString(), EntryMetadata(
+                            cursor.getString(nameColumn), directory, cursor.getLong(sizeColumn),
+                            cursor.getLong(modifiedColumn), canWrite
+                        ))
+                    }
+                }
+            }.orEmpty()
+        } catch (_: Exception) {
+            // Older providers may support DocumentFile listing without accepting a wide projection.
+            emptyMap()
+        }
+    }
+
     internal fun listing(path: String): Map<String, Any> {
         val entries: List<Map<String, Any>>
         val title: String
@@ -107,11 +177,13 @@ internal class FileController(private val activity: Activity, private val change
         } else {
             val doc = document(path); require(doc.isDirectory) { "폴더가 아닙니다" }
             title = doc.name ?: "폴더"
-            entries = doc.listFiles().map { child ->
+            val children = doc.listFiles()
+            val metadata = if (children.size > 1) treeMetadata(doc) else emptyMap()
+            entries = children.map { child ->
                 val childPath = remember(child, path, path in writable)
                 // Canonical validation also rejects symlinks outside an app root.
                 if (!childPath.startsWith("content:")) local(childPath)
-                entry(child, childPath)
+                entry(child, childPath, metadata[childPath])
             }.sortedWith(compareByDescending<Map<String, Any>> { it["directory"] == true }.thenBy { it["name"].toString().lowercase() })
         }
         return mapOf("title" to title, "path" to path, "entries" to entries,
@@ -168,6 +240,10 @@ internal class FileController(private val activity: Activity, private val change
             val path = args["path"] as? String ?: ""
             var selected = ""
             when (action) {
+                "clearClipboard" -> {
+                    clipboard = null
+                    cut = false
+                }
                 "copy", "cut" -> {
                     require(path !in roots) { "저장소의 최상위 폴더는 선택할 수 없습니다" }
                     if (action == "cut") requireWrite(path) else document(path)

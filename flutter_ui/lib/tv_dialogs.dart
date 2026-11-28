@@ -71,7 +71,12 @@ Future<void> showFileDetails(BuildContext context, Map entry) async {
   );
 }
 
-Future<String?> promptName(BuildContext context, String title, [String initial = '']) {
+Future<String?> promptName(BuildContext context, String title, [String initial = '']) =>
+    promptText(context, title, initial: initial);
+
+Future<String?> promptText(BuildContext context, String title, {
+  String initial = '', String fieldLabel = '이름', String actionLabel = '저장',
+}) {
   var name = initial;
   return showTvDialog<String>(context, (route) {
     void save(String value) {
@@ -87,12 +92,12 @@ Future<String?> promptName(BuildContext context, String title, [String initial =
           initialValue: initial,
           autofocus: true,
           maxLength: 120,
-          decoration: const InputDecoration(labelText: '이름'),
+          decoration: InputDecoration(labelText: fieldLabel),
           onChanged: (value) => name = value,
           onFieldSubmitted: save,
         ),
       ),
-      footer: FilledButton(onPressed: () => save(name), child: const Text('저장')),
+      footer: FilledButton(onPressed: () => save(name), child: Text(actionLabel)),
     );
   });
 }
