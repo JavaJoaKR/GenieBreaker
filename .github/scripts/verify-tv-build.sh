@@ -15,7 +15,7 @@ if ! adb shell am instrument -w -r "$runner" | tee tv-results/instrumentation.tx
   exit 1
 fi
 
-for screen in tv-ui app-ui flutter-menu files-ui file-path-ui storage-ui mapping-ui startup-ui \
+for screen in home-ui tv-ui app-ui flutter-menu files-ui file-path-ui storage-ui mapping-ui \
   settings-ui shortcuts-ui popup-depth clone-options per-app-options; do
   adb pull "/sdcard/Download/genie-$screen.png" "tv-results/$screen.png"
 done

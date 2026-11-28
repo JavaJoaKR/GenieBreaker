@@ -73,9 +73,9 @@ class RemoteInputTest {
             send("""{"id":1,"command":"register","name":"Genie D-pad Regression","vid":2567,"pid":7043,"bus":"usb","configuration":[{"type":100,"data":[1]},{"type":101,"data":[103,108,105,106,28,314,353,158]}]}""")
             SystemClock.sleep(2500)
             assertFalse("Connecting a remote must preserve the Flutter activity", activity.isDestroyed)
-            // Up clamps at the first tab. Five down presses must reach button mapping.
+            // Up clamps at Home. Six down presses must reach button mapping.
             press(103)
-            repeat(5) { press(108) }
+            repeat(6) { press(108) }
             press(106)
             press(314) // A controller can report Android BUTTON_SELECT for OK.
             awaitMenu(activity, "버튼 추가")

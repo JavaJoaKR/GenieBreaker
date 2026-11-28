@@ -28,7 +28,19 @@ internal class AppManagementController(
     private var packages = emptyList<PackageInfo>()
     private var entries = emptyList<Map<String, Any>>()
     private val catalog = AppCatalog(activity.applicationContext, duals)
-    private var refreshAgain = false
+    private data class CatalogRequest(
+        val duals: Boolean,
+        val all: Boolean,
+        val packageRevision: Long,
+        val displayRevision: Long
+    )
+
+    private var packageRevision = 0L
+    private var displayRevision = 0L
+    private var appliedRequest: CatalogRequest? = null
+    private var launcherEntries = emptyList<Map<String, Any>>()
+    private var launcherLoading = true
+    private var launcherError: String? = null
     private var pendingInstallPermission: String? = null
     private val installState = SessionInstaller.state(activity)
     private val preferences = activity.getSharedPreferences("apk_workshop", Context.MODE_PRIVATE)
@@ -36,28 +48,93 @@ internal class AppManagementController(
     private val installListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> ui {
         status = installStatus()
     } }
-    init { installState.registerOnSharedPreferenceChangeListener(installListener) }
+    private val packageChanges = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            packageRevision++
+            refresh()
+        }
+    }
+
+    init {
+        installState.registerOnSharedPreferenceChangeListener(installListener)
+        observePackages(IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        })
+        observePackages(IntentFilter().apply {
+            addAction(Intent.ACTION_LOCALE_CHANGED)
+            addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_AVAILABLE)
+            addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE)
+            addAction(Intent.ACTION_PACKAGES_SUSPENDED)
+            addAction(Intent.ACTION_PACKAGES_UNSUSPENDED)
+        })
+    }
+
+    private fun observePackages(filter: IntentFilter) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            activity.registerReceiver(packageChanges, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            activity.registerReceiver(packageChanges, filter)
+        }
+    }
+
     fun snapshot() = mapOf("items" to entries, "status" to status, "busy" to busy, "loading" to loading, "duals" to onlyDuals)
+
+    fun launcherSnapshot(): Map<String, Any> = buildMap {
+        put("items", launcherEntries)
+        put("loading", launcherLoading)
+        launcherError?.let { put("error", it) }
+    }
+
+    fun launchHomeApp(packageName: String) {
+        if (launcherEntries.none { it["id"] == packageName }) return
+        // Resolve again when selected because an app can be removed or disabled after listing.
+        launch(packageName)
+    }
+
     fun toggleDuals() { if (!loading && !busy) { onlyDuals = !onlyDuals; refresh() } }
     fun viewOptions() = TvMenus.show(activity, "보기 설정", listOf("실행 가능한 앱", "전체 설치 앱"), selected = if (allApps) 1 else 0) { index -> allApps = index == 1; refresh() }
     fun choose(packageName: String) { packages.firstOrNull { it.packageName == packageName }?.let(::choose) }
-    fun refresh() {
-        if (loading) { refreshAgain = true; return }
-        if (busy) return
-        loading = true; changed()
-        val dualFilter = onlyDuals
-        val allFilter = allApps
+
+    private fun currentRequest() = CatalogRequest(onlyDuals, allApps, packageRevision, displayRevision)
+
+    fun refresh(force: Boolean = false) {
+        if (force) packageRevision++
+        val request = currentRequest()
+        if (loading || busy || request == appliedRequest) return
+        loading = true
+        if (launcherEntries.isEmpty()) launcherLoading = true
+        launcherError = null
+        changed()
         worker.execute {
             try {
-                val listing = catalog.list(dualFilter, allFilter)
+                val listing = catalog.list(request.duals, request.all, request.packageRevision)
                 ui {
-                    entries = listing.entries
-                    packages = listing.packages
-                    status = installStatus()
-                    loading = false; changed()
-                    if (refreshAgain) { refreshAgain = false; refresh() }
+                    loading = false
+                    launcherLoading = false
+                    if (request == currentRequest()) {
+                        entries = listing.entries
+                        packages = listing.packages
+                        launcherEntries = listing.launcherRows
+                        status = installStatus()
+                        appliedRequest = request
+                    } else {
+                        refresh()
+                    }
                 }
-            } catch (error: Exception) { ui { loading = false; status = "앱 목록을 불러오지 못했습니다. [${Diagnostics.record(activity, "App shelf", error)}]" } }
+            } catch (error: Exception) {
+                val message = "앱 목록을 불러오지 못했습니다. [${Diagnostics.record(activity, "App shelf", error)}]"
+                ui {
+                    loading = false
+                    launcherLoading = false
+                    status = message
+                    launcherError = message
+                    if (request != currentRequest()) refresh()
+                }
+            }
         }
     }
     private fun choose(pkg: PackageInfo) {
@@ -156,17 +233,27 @@ internal class AppManagementController(
         worker.execute {
             try {
                 val record = duals.build(pkg, options) { progress -> ui { status = progress } }
-                ui { busy = false; install(record.id) }
+                ui {
+                    busy = false
+                    displayRevision++
+                    install(record.id)
+                    refresh()
+                }
             } catch (error: Throwable) {
                 val code = Diagnostics.record(activity, "Dual app build", error)
-                ui { busy = false; status = "듀얼앱을 만들지 못했습니다"; notice("${error.message ?: "듀얼앱을 만들지 못했습니다"} [$code]") }
+                ui {
+                    busy = false
+                    status = "듀얼앱을 만들지 못했습니다"
+                    notice("${error.message ?: "듀얼앱을 만들지 못했습니다"} [$code]")
+                    refresh()
+                }
             }
         }
     }
     private fun launch(packageName: String) {
         try {
             Diagnostics.record(activity, "Launch requested: $packageName")
-            val intent = pm.getLeanbackLaunchIntentForPackage(packageName) ?: pm.getLaunchIntentForPackage(packageName)
+            val intent = launchIntent(activity, packageName)
             if (intent == null) {
                 Diagnostics.record(activity, "Launch failed", step = DiagnosticStep.LAUNCH,
                     cause = DiagnosticCause.LAUNCH_TARGET_MISSING)
@@ -241,5 +328,10 @@ internal class AppManagementController(
     }
     private fun notice(message: String) { if (!activity.isDestroyed && !activity.isFinishing) TvMenus.notice(activity, message) }
     private fun ui(action: () -> Unit) { main.post { if (!activity.isDestroyed && !activity.isFinishing) { action(); changed() } } }
-    fun close() { installState.unregisterOnSharedPreferenceChangeListener(installListener); worker.shutdownNow(); catalog.clear(); main.removeCallbacksAndMessages(null) }
+    fun close() {
+        activity.unregisterReceiver(packageChanges)
+        installState.unregisterOnSharedPreferenceChangeListener(installListener)
+        worker.shutdownNow()
+        main.removeCallbacksAndMessages(null)
+    }
 }

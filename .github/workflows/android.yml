@@ -59,15 +59,15 @@ jobs:
             flutter_ui/build/host/outputs/repo
             build-symbols
           # Keep the existing full-build cache separate from ARM32 release-only AARs.
-          key: genie-aar-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-${{ env.VERIFY_TV == 'true' && 'false' || 'release-arm32' }}-${{ hashFiles('flutter_ui/lib/**', 'flutter_ui/pubspec.yaml', 'flutter_ui/pubspec.lock') }}
+          key: genie-aar-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-${{ env.VERIFY_TV == 'true' && 'false' || 'release-arm32' }}-${{ hashFiles('flutter_ui/lib/**', 'flutter_ui/pubspec.yaml', 'flutter_ui/pubspec.lock') }}
       - name: Build Flutter AARs
         if: steps.flutter-aar.outputs.cache-hit != 'true'
         working-directory: flutter_ui
         run: |
           if [[ "$VERIFY_TV" == true ]]; then
-            flutter build aar --no-profile --target-platform android-arm,android-x64 --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
+            flutter build aar --no-profile --target-platform android-arm,android-x64 --obfuscate --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
           else
-            flutter build aar --no-debug --no-profile --target-platform android-arm --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
+            flutter build aar --no-debug --no-profile --target-platform android-arm --obfuscate --split-debug-info="$GITHUB_WORKSPACE/build-symbols"
           fi
       - uses: gradle/actions/setup-gradle@v4
         with:

@@ -18,13 +18,13 @@ adb logcat -c
 adb shell am start -W -n "$pkg/.MainActivity"
 sleep 3
 adb exec-out screencap -p > "$screenshots/release-remote-before.png"
-for key in 20 20 22 23; do
+for key in 20 20 20 22 23; do
   adb shell input dpad keyevent "$key"
   sleep 0.35
 done
 for ((attempt=0; attempt<15; attempt++)); do
   if adb shell dumpsys activity activities | grep -E '(topResumedActivity|mResumedActivity|ResumedActivity).*com\.android\.settings/' >/dev/null; then
-    echo 'Release APK: remote moved from Bluetooth to Shortcuts and opened Android app settings.'
+    echo 'Release APK: remote moved from Home to Shortcuts and opened Android app settings.'
     adb uninstall "$pkg"
     exit 0
   fi

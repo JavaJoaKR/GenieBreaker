@@ -131,6 +131,21 @@ class _GeniePageState extends State<GeniePage> {
         expandedPages.clear();
         receive(Map<String, dynamic>.from(call.arguments as Map));
       }
+      if (call.method == 'showHome' && data?['locked'] != true) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        expandedPages.clear();
+        final snapshot = call.arguments;
+        if (snapshot is Map) {
+          receive(Map<String, dynamic>.from(snapshot));
+        } else if (shellData != null) {
+          setState(() => data = shellData);
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && data?['shell'] == true && data?['locked'] != true) {
+            homeKey.currentState?.showLauncher();
+          }
+        });
+      }
       if (call.method == 'filesChanged') homeKey.currentState?.filesChanged();
       if (call.method == 'back') back();
       if (call.method == 'remoteNavigation' && call.arguments is String) {

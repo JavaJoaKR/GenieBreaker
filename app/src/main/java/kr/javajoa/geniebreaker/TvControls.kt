@@ -194,6 +194,21 @@ internal class TvControls(
             apply(pkg, name)
         }
     }
+    fun showStartupSettings() {
+        val name = prefs.getString("startupLabel", "").orEmpty()
+        val options = mutableListOf<Pair<String, () -> Unit>>("시작 앱 선택" to ::chooseStartup)
+        if (name.isNotEmpty()) {
+            if (state["needsOverlay"] == true) options += "다른 앱 위에 표시" to ::startupPermission
+            val wake = if (state["wake"] == false) "꺼짐" else "켜짐"
+            options += "대기 해제 시에도 실행 · $wake" to ::toggleWake
+            options += "지금 실행" to ::testStartup
+            options += "시작 앱 해제" to ::clearStartup
+        }
+        TvMenus.show(owner, "시작 앱", options.map { it.first } + "닫기", name.ifEmpty { "선택된 앱 없음" }) {
+            options.getOrNull(it)?.second?.invoke()
+        }
+    }
+
     fun chooseStartup() = chooseApp("시작 앱 선택", apply = ::selectStartup)
     fun selectStartup(pkg: String, label: String) {
         if (launchIntent(owner, pkg) == null) {

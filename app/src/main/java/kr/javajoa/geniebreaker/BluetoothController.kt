@@ -72,29 +72,56 @@ internal class BluetoothController(
         catch (error: SecurityException) { operationError("기기 접근 권한", error); null }
     }
     fun snapshot(): Map<String, Any> {
+        val permission = preview || access()
         val devices = mutableListOf<Map<String, Any>>()
         pendingNames = false
         if (preview) {
             listOf("거실 헤드폰", "무선 키보드", "WH-1000XM5", "이름 확인 중", "Bluetooth Keyboard").forEachIndexed { index, name ->
-                devices += mapOf("id" to "preview-$index", "name" to name, "bonded" to (index < 2), "kind" to if (index == 1 || index == 4) "input" else "audio", "detail" to if (index < 2) "등록됨" else "페어링 가능")
+                devices += mapOf("id" to "preview-$index", "name" to name, "bonded" to (index < 2),
+                    "kind" to if (index == 1 || index == 4) "input" else "audio",
+                    "detail" to if (index < 2) "등록됨" else "페어링 가능")
             }
-        } else if (access()) try {
-            val bonded = adapter?.bondedDevices.orEmpty()
-            (bonded + found.values).distinctBy { it.address }.forEach { device ->
-                names.seed(device.address, device.name)
-                pendingNames = pendingNames || names.isPending(device.address)
-                devices += mapOf("id" to device.address, "name" to (names.get(device.address) ?: if (names.isPending(device.address)) "이름 확인 중" else "이름을 확인할 수 없는 기기"),
-                    "bonded" to (device.bondState == BluetoothDevice.BOND_BONDED),
-                    "kind" to when (device.bluetoothClass?.majorDeviceClass) { BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"; BluetoothClass.Device.Major.PERIPHERAL -> "input"; else -> "bluetooth" },
-                    "detail" to when { device.bondState == BluetoothDevice.BOND_BONDING -> "페어링 중"; device.address in linked -> "블루투스 링크 연결됨"; device.bondState == BluetoothDevice.BOND_BONDED -> "등록됨"; else -> "페어링 가능" })
+        } else if (permission) {
+            try {
+                val bonded = adapter?.bondedDevices.orEmpty()
+                (bonded + found.values).distinctBy { it.address }.forEach { device ->
+                    val address = device.address
+                    val bondState = device.bondState
+                    if (names.get(address) == null) names.seed(address, device.name)
+                    val waitingForName = names.isPending(address)
+                    pendingNames = pendingNames || waitingForName
+                    val kind = when (device.bluetoothClass?.majorDeviceClass) {
+                        BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"
+                        BluetoothClass.Device.Major.PERIPHERAL -> "input"
+                        else -> "bluetooth"
+                    }
+                    val detail = when {
+                        bondState == BluetoothDevice.BOND_BONDING -> "페어링 중"
+                        address in linked -> "블루투스 링크 연결됨"
+                        bondState == BluetoothDevice.BOND_BONDED -> "등록됨"
+                        else -> "페어링 가능"
+                    }
+                    devices += mapOf(
+                        "id" to address,
+                        "name" to (names.get(address) ?: if (waitingForName) "이름 확인 중" else "이름을 확인할 수 없는 기기"),
+                        "bonded" to (bondState == BluetoothDevice.BOND_BONDED),
+                        "kind" to kind,
+                        "detail" to detail
+                    )
+                }
+            } catch (error: SecurityException) {
+                Diagnostics.record(activity, "Bluetooth snapshot", error)
+            } catch (error: Exception) {
+                Diagnostics.record(activity, "Bluetooth snapshot", error)
             }
-        } catch (error: SecurityException) { Diagnostics.record(activity, "Bluetooth snapshot", error) }
-        catch (error: Exception) { Diagnostics.record(activity, "Bluetooth snapshot", error) }
-        val enabled = preview || try { access() && adapter?.isEnabled == true } catch (_: SecurityException) { false }
-        val searching = preview || try { access() && adapter?.isDiscovering == true && !scanExpired } catch (_: SecurityException) { false }
-        return mapOf("devices" to devices,
-            "permission" to (preview || access()), "enabled" to enabled, "supported" to (preview || adapter != null),
-            "searching" to searching, "searched" to searched, "status" to btMessage)
+        }
+        val enabled = preview || try { permission && adapter?.isEnabled == true } catch (_: SecurityException) { false }
+        val searching = preview || try { permission && adapter?.isDiscovering == true && !scanExpired } catch (_: SecurityException) { false }
+        return mapOf(
+            "devices" to devices, "permission" to permission, "enabled" to enabled,
+            "supported" to (preview || adapter != null), "searching" to searching,
+            "searched" to searched, "status" to btMessage
+        )
     }
     private fun message(text: String) {
         btMessage = if (ErrorCodes.isError(text) && !text.contains("[GB-")) "$text [${Diagnostics.record(activity, "Bluetooth: $text")}]" else text
@@ -316,8 +343,10 @@ internal class BluetoothController(
         try {
             val title = names.get(device.address) ?: device.name ?: "이름 확인 중"
             val bonded = device.bondState == BluetoothDevice.BOND_BONDED
+            val companion = supportsCompanionPairing()
             val actions = if (bonded) arrayOf("연결", "연결 해제", "기기 등록 삭제", "상세 정보")
-                else arrayOf("페어링", "다른 방식으로 페어링", "기기 정보")
+                else if (companion) arrayOf("페어링", "다른 방식으로 페어링", "기기 정보")
+                else arrayOf("페어링", "기기 정보")
             TvMenus.show(activity, title, actions.toList()) { index ->
                 try {
                     if (bonded) when (index) {
@@ -327,7 +356,7 @@ internal class BluetoothController(
                         else -> deviceDetails(device)
                     } else when (index) {
                         0 -> bluetoothActions.bond(device)
-                        1 -> companionPair(device)
+                        1 -> if (companion) companionPair(device) else deviceDetails(device)
                         else -> deviceDetails(device)
                     }
                 } catch (error: SecurityException) { operationError("블루투스 권한", error) } catch (error: Exception) { operationError("기기 선택", error) }
@@ -346,6 +375,10 @@ internal class BluetoothController(
         uiHandler.removeCallbacks(companionChooserTimeout)
     }
 
+    private fun supportsCompanionPairing() =
+        activity.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP) &&
+            activity.getSystemService(CompanionDeviceManager::class.java) != null
+
     @Suppress("DEPRECATION")
     private fun companionPair(device: BluetoothDevice) {
         val step = DiagnosticStep.BLUETOOTH_COMPANION
@@ -354,7 +387,7 @@ internal class BluetoothController(
             return
         }
         val manager = activity.getSystemService(CompanionDeviceManager::class.java)
-        if (manager == null || !activity.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
+        if (manager == null || !supportsCompanionPairing()) {
             reportBlocker("보조 페어링 미지원", step, DiagnosticCause.COMPANION_UNAVAILABLE)
             return
         }

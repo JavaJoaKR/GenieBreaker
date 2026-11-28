@@ -12,6 +12,9 @@ import 'tv_controls.dart';
 import 'tv_focus.dart';
 import 'tv_theme.dart';
 
+part 'home_device_views.dart';
+part 'home_storage_views.dart';
+
 typedef _Folder = ({String path, String name});
 
 class _HomeFocusNode extends FocusNode {
@@ -36,10 +39,16 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   List<_Folder> _trail = [];
   String? fileToolbarFocus;
   String? listingError;
+  String fileQuery = '';
   final folderFocus = <String, String>{};
   final contentScope = FocusScopeNode(debugLabel: 'content-scope');
   final sidebarScope = FocusScopeNode(debugLabel: 'sidebar-scope');
-  String tab = 'bluetooth';
+  String tab = 'home';
+  final launcherScroll = ScrollController();
+  Map<String, int> _launcherRowById = {};
+  double _launcherRowExtent = 0;
+  String? _pendingLauncherFocus;
+  bool _enterLauncherWhenReady = false;
   String get location => _trail.lastOrNull?.path ?? '';
   Map<String, dynamic> files = {};
   Map<String, dynamic> storage = {};
@@ -67,12 +76,17 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     FocusManager.instance.addEarlyKeyEventHandler(rescueFocus);
-    WidgetsBinding.instance.addPostFrameCallback((_) => focus('nav:$tab'));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      focus('nav:$tab');
+      if (widget.data['homeEntry'] == true) showLauncher();
+    });
   }
 
   @override
   void didUpdateWidget(covariant AppHome oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_enterLauncherWhenReady) _focusLauncherWhenReady();
     // The shell bridge restores the exact opener. A second recovery callback
     // here would override that pending focus with the first content control.
     if (oldWidget.obscured && !widget.obscured) return;
@@ -99,13 +113,51 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   }
 
   void focus(String id) {
+    _pendingLauncherFocus = null;
     final target = nodes[id];
-    if (target?.context == null || !target!.canRequestFocus) return;
+    if (target == null || target.context == null) {
+      _scrollToLauncherItem(id);
+      return;
+    }
+    if (!target.canRequestFocus) return;
     target.requestFocus();
     lastSurfaceFocus = id;
     if (!id.startsWith('nav:')) remembered[tab] = id;
     final context = target.context;
     if (context != null) Scrollable.ensureVisible(context, alignment: .5, duration: Duration.zero);
+  }
+
+  void _scrollToLauncherItem(String id) {
+    final row = _launcherRowById[id];
+    if (tab != 'home' || row == null || !launcherScroll.hasClients) return;
+    final position = launcherScroll.position;
+    if (!position.hasContentDimensions) return;
+    final offset = (row * _launcherRowExtent).clamp(0.0, position.maxScrollExtent).toDouble();
+    _pendingLauncherFocus = id;
+    launcherScroll.jumpTo(offset);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pendingLauncherFocus != id) return;
+      _pendingLauncherFocus = null;
+      if (acceptsFocus && tab == 'home' && nodes[id]?.context != null) focus(id);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void showLauncher() {
+    select('home');
+    _enterLauncherWhenReady = true;
+    _focusLauncherWhenReady();
+  }
+
+  void _focusLauncherWhenReady() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_enterLauncherWhenReady || !acceptsFocus || tab != 'home') return;
+      if (rows.isEmpty && (widget.data['launcher'] as Map?)?['loading'] == true) return;
+      _enterLauncherWhenReady = false;
+      enter();
+      FocusManager.instance.applyFocusChangesIfNeeded();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void saveModalOpener() {
@@ -161,6 +213,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
 
   void select(String next, {bool enterContent = false}) {
     if (tab != next) {
+      _enterLauncherWhenReady = false;
+      _pendingLauncherFocus = null;
       // Keep focus in the rail while the content subtree switches.
       if (focused != 'nav:$next') focus('nav:$next');
       enteringTab = null;
@@ -175,6 +229,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     }
     if (!enterContent || enteringTab == next) return;
     if (renderedTab == next) {
+      if (next == 'home' && rows.isEmpty) _enterLauncherWhenReady = true;
       enter();
       return;
     }
@@ -228,6 +283,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       listingError = null;
       if (destination != null) {
         _trail = destination;
+        fileQuery = '';
         fileToolbarFocus = null;
       }
     });
@@ -463,126 +519,6 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     key: PageStorageKey(tab),
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
   );
-  Widget bluetooth() {
-    if (widget.data['supported'] == false) {
-      rows = [];
-      return const Center(
-        child: Text('이 기기는 블루투스를 지원하지 않습니다', style: TextStyle(color: muted)),
-      );
-    }
-    final devices = (widget.data['devices'] as List? ?? []).cast<Map>();
-    final registered = devices.where((d) => d['bonded'] == true).toList();
-    final nearby = devices.where((d) => d['bonded'] != true).toList();
-    final actions = <String>[
-      'bt:scan',
-      if (widget.data['permission'] != true) 'bt:permission',
-      if (widget.data['enabled'] != true) 'bt:power',
-    ];
-    rows = [actions];
-    final length = registered.length > nearby.length ? registered.length : nearby.length;
-    for (var i = 0; i < length; i++) {
-      rows.add([
-        if (i < registered.length) 'bt:${registered[i]['id']}',
-        if (i < nearby.length) 'bt:${nearby[i]['id']}',
-      ]);
-    }
-    // Explicit column adjacency avoids jumping to the other list when one ends.
-    Widget device(Map d) => tile(
-      'bt:${d['id']}',
-      d['name'] as String,
-      () => call('device', d['id']),
-      subtitle: d['detail'] as String?,
-      icon: d['kind'] == 'input'
-          ? Icons.keyboard_outlined
-          : d['kind'] == 'audio'
-          ? Icons.headphones_outlined
-          : Icons.bluetooth_rounded,
-    );
-    Widget group(String title, List<Map> list) => Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: panel, borderRadius: BorderRadius.circular(panelRadius)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('$title  ·  ${list.length}', style: const TextStyle(fontSize: 18)),
-          const SizedBox(height: 8),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (list.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 6),
-                      child: Text('검색 결과가 없습니다', style: TextStyle(color: muted)),
-                    ),
-                  ...list.map(device),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        toolbar([
-          button('bt:scan', widget.data['searching'] == true ? '검색 중지' : '기기 검색', () => call('scan')),
-          if (actions.contains('bt:permission'))
-            button('bt:permission', '권한 허용', () => call('permission')),
-          if (actions.contains('bt:power')) button('bt:power', '블루투스 켜기', () => call('power')),
-        ], status: widget.data['status'] as String?),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: group('내 기기', registered)),
-              const SizedBox(width: 8),
-              Expanded(child: group('새 기기', nearby)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget apps() {
-    final appData = widget.data['apps'] as Map? ?? {};
-    final items = (appData['items'] as List? ?? []).cast<Map>();
-    final status = appData['status'] as String?;
-    final shelf = appRows(items, columns);
-    rows = [
-      ['apps:filter', 'apps:view'],
-      for (final row in shelf) [for (final a in row) "app:${a['id']}"],
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        toolbar([
-          button('apps:filter', appData['duals'] == true ? '모든 앱' : '내 듀얼앱', () => call('appFilter')),
-          button('apps:view', '보기 설정', () => call('appView')),
-        ], status: status == '듀얼앱을 만들 원본 앱을 선택하세요' ? null : status),
-        Expanded(
-          child: items.isEmpty
-              ? Center(
-                  child: Text(
-                    appData['loading'] == true ? '앱 목록 불러오는 중' : '표시할 앱이 없습니다. 보기 설정에서 목록 범위를 확인하세요.',
-                    style: const TextStyle(color: muted),
-                  ),
-                )
-              : AppShelf(
-                  rows: shelf,
-                  columns: columns,
-                  node: node,
-                  onFocus: rememberContent,
-                  onOpen: (id) => call('app', id),
-                ),
-        ),
-      ],
-    );
-  }
-
   Future<void> dialogAction(
     String title,
     String message,
@@ -599,16 +535,23 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
   Future<void> fileAction(String action, {String? path, String? name}) async {
     if (busy) return;
     setState(() => busy = true);
-    final response = await call('files.action', {
-      'action': action,
-      'path': path ?? location,
-      'parent': location,
-      if (name != null) 'name': name,
-    });
-    if (response is Map && (response['selected'] as String? ?? '').isNotEmpty)
-      folderFocus[location] = 'file:${response['selected']}';
-    await _loadFiles(restoreSelection: true);
-    if (mounted) setState(() => busy = false);
+    try {
+      final response = await call('files.action', {
+        'action': action,
+        'path': path ?? location,
+        'parent': location,
+        if (name != null) 'name': name,
+      });
+      if (!mounted || response is! Map) return;
+      final selected = response['selected'] as String? ?? '';
+      if (selected.isNotEmpty) {
+        folderFocus[location] = 'file:$selected';
+        setState(() => fileQuery = '');
+      }
+      await _loadFiles(restoreSelection: true);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   Future<void> fileMenu(Map entry) async {
@@ -673,134 +616,16 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
       });
   }
 
-  Widget explorer() {
-    final entries = sort.ordered(files['entries'] as List?);
-    final clipboard = files['clipboard'] as String? ?? '';
-    final writable = files['writable'] == true;
-    final canPaste = writable && clipboard.isNotEmpty;
-    rows = [
-      [
-        if (_trail.isNotEmpty) 'files:up',
-        if (_trail.length > 1) 'files:roots',
-        'files:refresh',
-        'files:sort',
-        'files:pick',
-        if (writable) 'files:new',
-        if (canPaste) 'files:paste',
-      ],
-      for (final e in entries) ['file:${e['path']}', 'more:${e['path']}'],
-    ];
-    final emptyMessage = files.isEmpty
-        ? '저장소 목록 불러오는 중'
-        : _trail.isEmpty
-        ? '연결된 저장소가 없습니다'
-        : '폴더가 비어 있습니다';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            reverse: true,
-            child: Text(
-              _trail.isEmpty ? '내 파일 · 연결한 저장소' : _trail.map((folder) => folder.name).join('  ›  '),
-              maxLines: 1,
-              style: const TextStyle(color: muted),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        toolbar([
-          if (_trail.isNotEmpty) button('files:up', '상위 폴더', back),
-          if (_trail.length > 1) button('files:roots', '저장소 목록', () => _browseTo([])),
-          button('files:refresh', '새로고침', refreshFiles),
-          button('files:sort', '정렬: ${sort.label}', () => setState(() => sort = sort.next)),
-          button('files:pick', '저장소 연결', () => call('pick')),
-          if (writable)
-            button('files:new', '새 폴더', () async {
-              final name = await promptName(context, '새 폴더');
-              if (mounted && name != null) await fileAction('mkdir', name: name);
-            }),
-          if (canPaste)
-            button('files:paste', '붙여넣기', () => fileAction('paste')),
-        ]),
-        if (clipboard.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              '${files['cut'] == true ? '이동' : '복사'}: $clipboard',
-              style: const TextStyle(color: accentTone),
-            ),
-          ),
-        if (listingError != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(listingError!, style: const TextStyle(color: ink, fontWeight: FontWeight.w600)),
-          ),
-        if (busy) const Padding(padding: EdgeInsets.only(bottom: 8), child: LinearProgressIndicator()),
-        if (location.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12),
-            child: Text(
-              '내부 저장소나 USB의 폴더는 ‘저장소 연결’에서 접근을 허용하세요.',
-              style: TextStyle(color: muted, fontSize: 12),
-            ),
-          ),
-        Expanded(
-          child: FileEntries(
-            entries: entries,
-            emptyMessage: listingError == null ? emptyMessage : null,
-            node: node,
-            onFocus: rememberContent,
-            onOpen: (entry) {
-              if (entry['directory'] == true) {
-                openFolder(entry);
-              } else {
-                fileMenu(entry);
-              }
-            },
-            onOptions: fileMenu,
-          ),
-        ),
-      ],
-    );
+  Map<String, dynamic> get _shellData => widget.data;
+
+  void _setFileQuery(String query) {
+    setState(() => fileQuery = query);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && tab == 'files' && !widget.obscured) focus('files:search');
+    });
   }
 
-  Widget storagePage() {
-    rows = [
-      ['storage:refresh'],
-      ['storage:apks'],
-      ['storage:updates'],
-      ['storage:cache'],
-    ];
-    return scroll([
-      toolbar([button('storage:refresh', '새로고침', loadStorage)]),
-      StorageSummary(storage),
-      const SizedBox(height: 10),
-      for (final item in [
-        ('apks', '듀얼앱 설치 파일', 'apkSize'),
-        ('updates', '다운로드한 업데이트', 'updateSize'),
-        ('cache', '캐시', 'cacheSize'),
-      ])
-        tile(
-          'storage:${item.$1}',
-          '${item.$2}  ·  ${storage[item.$3] ?? '—'}',
-          () => dialogAction(
-            '${item.$2} 정리',
-            'GenieBreaker에 저장된 ${item.$2} 파일을 삭제합니다. 설치된 앱은 유지됩니다.',
-            '정리',
-            () async {
-              await call('clean', item.$1);
-              await loadStorage();
-            },
-          ),
-          icon: Icons.cleaning_services_outlined,
-        ),
-      const SizedBox(height: 12),
-      const Text('정리 작업은 이 앱이 만든 설치 파일과 캐시에만 적용됩니다.', style: TextStyle(color: muted)),
-    ]);
-  }
+  void _cycleFileSort() => setState(() => sort = sort.next);
 
   @override
   Widget build(BuildContext context) => PopScope(
@@ -818,19 +643,19 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           columns = (contentWidth / 200).floor().clamp(1, 6);
           Widget content;
           switch (tab) {
+            case 'home':
+              content = _HomeDeviceViews(this).launcher(contentWidth, compact);
             case 'bluetooth':
-              content = bluetooth();
+              content = _HomeDeviceViews(this).bluetooth();
             case 'apps':
-              content = apps();
+              content = _HomeDeviceViews(this).apps();
             case 'files':
-              content = explorer();
+              content = _HomeStorageViews(this).explorer();
             case 'storage':
-              content = storagePage();
+              content = _HomeStorageViews(this).storagePage();
             case 'mapping':
-            case 'startup':
               final state = widget.data['controls'] as Map? ?? {};
-              final mapping = tab == 'mapping';
-              final actions = mapping ? mappingActions(state) : startupActions(state);
+              final actions = mappingActions(state);
               rows = [
                 for (final action in actions) [action.id],
               ];
@@ -843,10 +668,8 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                     subtitle: action.detail,
                     icon: action.icon,
                   ),
-                if (mapping) ...[
-                  const SizedBox(height: 8),
-                  const Text('TV가 앱에 전달하는 버튼을 지정할 수 있습니다.', style: TextStyle(color: muted)),
-                ],
+                const SizedBox(height: 8),
+                const Text('TV가 앱에 전달하는 버튼을 지정할 수 있습니다.', style: TextStyle(color: muted)),
               ]);
             case 'shortcuts':
               rows = [
@@ -856,7 +679,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['shortcut:accounts'],
                 ['shortcut:tv-update'],
                 ['shortcut:bluetooth'],
-                ['shortcut:android-settings'],
+                ['shortcut:advanced'],
               ];
               content = scroll([
                 tile(
@@ -899,10 +722,9 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   icon: Icons.bluetooth_rounded,
                 ),
                 tile(
-                  'shortcut:android-settings',
-                  '수동 바로가기',
-                  () => call('manualSettings'),
-                  subtitle: '이 TV에서 열 수 있는 Android 설정 식별자',
+                  'shortcut:advanced',
+                  '고급 바로가기',
+                  () => call('advancedShortcuts'),
                   icon: Icons.settings_outlined,
                 ),
               ]);
@@ -912,7 +734,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ['settings:diagnostics'],
                 ['settings:lock'],
                 ['settings:home-shortcut'],
-                ['settings:compatibility'],
+                ['settings:permission-review'],
               ];
               content = scroll([
                 tile(
@@ -924,9 +746,9 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                 ),
                 tile(
                   'settings:diagnostics',
-                  '문제 기록',
+                  '문제 진단',
                   () => call('diagnostics'),
-                  subtitle: '기기에 저장된 오류 코드를 확인합니다',
+                  subtitle: '최근 실패 원인과 오류 기록을 확인합니다',
                   icon: Icons.info_outline_rounded,
                 ),
                 tile(
@@ -949,11 +771,11 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
                   icon: Icons.shortcut_rounded,
                 ),
                 tile(
-                  'settings:compatibility',
-                  '지니TV 충돌 진단',
-                  () => call('compatibilityDiagnostics'),
-                  subtitle: '최근 실패한 작업과 원인을 확인합니다',
-                  icon: Icons.build_outlined,
+                  'settings:permission-review',
+                  '앱 권한 검사',
+                  () => call('permissionReview'),
+                  subtitle: '위치, 마이크 등 허용된 권한을 확인합니다',
+                  icon: Icons.security_outlined,
                 ),
               ]);
           }
@@ -972,13 +794,6 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
           final contextLabel = switch (section) {
             TvTab.bluetooth when widget.data['searching'] == true => '검색 중',
             TvTab.mapping => '${(widget.data['controls']?['bindings'] as List? ?? []).length}개 등록',
-            TvTab.startup =>
-              (widget.data['controls']?['startupName'] as String? ?? '').isEmpty
-                  ? '사용 안 함'
-                  : widget.data['controls']?['needsOverlay'] == true &&
-                        widget.data['controls']?['canStart'] != true
-                  ? '권한 필요'
-                  : '사용 중',
             TvTab.apps => '${(widget.data['apps']?['items'] as List? ?? []).length}개 앱',
             TvTab.files when files.isNotEmpty => '${(files['entries'] as List? ?? []).length}개 항목',
             _ => null,
@@ -992,7 +807,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
             contentScope: contentScope,
             contextLabel: contextLabel,
             error: error,
-            onSelect: select,
+            onSelect: (next) => select(next, enterContent: next == 'home'),
             onFocus: (id) {
               if (!acceptsFocus) return;
               lastSurfaceFocus = id;
@@ -1015,6 +830,7 @@ class AppHomeState extends State<AppHome> with WidgetsBindingObserver {
     for (final n in nodes.values) {
       n.dispose();
     }
+    launcherScroll.dispose();
     contentScope.dispose();
     sidebarScope.dispose();
     super.dispose();

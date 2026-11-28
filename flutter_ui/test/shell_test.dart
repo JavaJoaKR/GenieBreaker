@@ -6,7 +6,7 @@ import 'package:genie_ui/home.dart';
 import 'package:genie_ui/main.dart';
 import 'package:genie_ui/tv_dialogs.dart';
 
-Map<String, dynamic> shell({List<Map>? devices, List<Map>? apps}) => {
+Map<String, dynamic> shell({List<Map>? devices, List<Map>? apps, List<Map>? launcher}) => {
   'shell': true, 'version': 'test', 'permission': true, 'enabled': true,
   'devices': devices ?? [
     {'id': 'r1', 'name': '등록 헤드폰', 'bonded': true},
@@ -14,10 +14,18 @@ Map<String, dynamic> shell({List<Map>? devices, List<Map>? apps}) => {
     {'id': 'n2', 'name': '이름 확인 중', 'bonded': false},
   ],
   'apps': {'items': apps ?? [], 'status': '앱을 선택하세요'},
+  'launcher': {'items': launcher ?? []},
 };
 Future<void> arrow(WidgetTester tester, LogicalKeyboardKey key) async {
   await tester.sendKeyEvent(key); await tester.pumpAndSettle();
 }
+Future<void> openBluetooth(WidgetTester tester) async {
+  await tester.pumpWidget(const GenieUI());
+  await tester.pumpAndSettle();
+  await arrow(tester, LogicalKeyboardKey.arrowDown);
+  expect(focus, 'nav:bluetooth');
+}
+
 String? get focus => FocusManager.instance.primaryFocus?.debugLabel;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -29,10 +37,99 @@ void main() {
       return null;
     });
   });
-  testWidgets('Sidebar clamps and Bluetooth columns never wrap or jump diagonally', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+  testWidgets('Home opens its selected app in one action and returns on Android Home', (tester) async {
+    final launched = <String>[];
+    final snapshot = shell(
+      launcher: [{'id': 'p', 'name': '테스트 앱'}],
+    );
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return snapshot;
+      if (call.method == 'launchHomeApp') launched.add(call.arguments as String);
+      return null;
+    });
+
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    expect(focus, 'nav:home');
+    expect(find.text('테스트 앱'), findsOneWidget);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'launcher:p');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(launched, ['p']);
+
+    await arrow(tester, LogicalKeyboardKey.arrowLeft);
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
     expect(focus, 'nav:bluetooth');
-    await arrow(tester, LogicalKeyboardKey.arrowUp); expect(focus, 'nav:bluetooth');
+    await messenger.handlePlatformMessage(
+      'genie/ui',
+      const StandardMethodCodec().encodeMethodCall(MethodCall('showHome', snapshot)),
+      (_) {},
+    );
+    await tester.pumpAndSettle();
+    final home = tester.state<AppHomeState>(find.byType(AppHome));
+    expect(home.tab, 'home');
+    expect(home.focused, anyOf('nav:home', 'launcher:p'));
+    expect(launched, ['p']);
+  });
+
+  testWidgets('The Home refresh action is reachable when no apps are available', (tester) async {
+    var refreshes = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'refreshLauncher') refreshes++;
+      return null;
+    });
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    expect(focus, 'nav:home');
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'launcher:refresh');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(refreshes, 1);
+  });
+
+  testWidgets('Remote scrolls to an offscreen launcher row and opens its app', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(640, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final launched = <String>[];
+    final snapshot = shell(
+      launcher: [
+        for (var i = 0; i < 104; i++) {'id': 'p$i', 'name': '테스트 앱 $i'},
+      ],
+    );
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return snapshot;
+      if (call.method == 'launchHomeApp') launched.add(call.arguments as String);
+      return null;
+    });
+
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'launcher:p0');
+    final home = tester.state<AppHomeState>(find.byType(AppHome));
+    const targetRow = 12;
+    final target = home.rows[targetRow].first;
+    expect(find.byKey(ValueKey(target)), findsNothing);
+    for (var i = 0; i < targetRow; i++) {
+      await arrow(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(home.launcherScroll.offset, greaterThan(0));
+    expect(focus, target);
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(launched, [target.substring('launcher:'.length)]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Sidebar clamps and Bluetooth columns never wrap or jump diagonally', (tester) async {
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
+    expect(focus, 'nav:home');
+    await arrow(tester, LogicalKeyboardKey.arrowUp);
+    expect(focus, 'nav:home');
+    await arrow(tester, LogicalKeyboardKey.arrowDown);
+    expect(focus, 'nav:bluetooth');
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'bt:scan');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'bt:r1');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'bt:r1');
@@ -51,7 +148,7 @@ void main() {
       if (call.method == 'storage.list') return {'total': '8 GB', 'free': '4 GB', 'usedFraction': .5};
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'shortcut:apps');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'appSettings');
@@ -65,8 +162,8 @@ void main() {
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'tvUpdateSettings');
     await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:bluetooth');
     await arrow(tester, LogicalKeyboardKey.select); expect(method, 'bluetoothSettings');
-    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:android-settings');
-    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'manualSettings');
+    await arrow(tester, LogicalKeyboardKey.arrowDown); expect(focus, 'shortcut:advanced');
+    await arrow(tester, LogicalKeyboardKey.select); expect(method, 'advancedShortcuts');
     expect(find.text('계정 추가'), findsNothing);
     expect(find.text('넷플릭스 열기'), findsNothing);
     expect(find.text('리모컨 접근성 서비스'), findsNothing);
@@ -89,7 +186,7 @@ void main() {
       }};
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 5; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
     await arrow(tester, LogicalKeyboardKey.arrowRight); expect(focus, 'mapping:add');
     await arrow(tester, LogicalKeyboardKey.select);
@@ -98,14 +195,17 @@ void main() {
     expect(calls.last.method, 'editButton'); expect(calls.last.arguments, 183);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
     expect(calls.last.method, 'mappingSettings');
-    await arrow(tester, LogicalKeyboardKey.arrowLeft); await arrow(tester, LogicalKeyboardKey.arrowDown);
-    await arrow(tester, LogicalKeyboardKey.arrowRight);
-    expect(find.text('권한 필요'), findsOneWidget);
-    expect(find.text('켜짐 · 다른 앱 위에 표시 권한 필요'), findsOneWidget);
-    for (final method in ['chooseStartup', 'startupPermission', 'toggleWake', 'testStartup', 'clearStartup']) {
-      await arrow(tester, LogicalKeyboardKey.select); expect(calls.last.method, method);
-      await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowLeft);
+    for (var i = 0; i < 4; i++) {
+      await arrow(tester, LogicalKeyboardKey.arrowUp);
     }
+    expect(focus, 'nav:apps');
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'apps:startup');
+    await arrow(tester, LogicalKeyboardKey.select);
+    expect(calls.last.method, 'startupSettings');
     expect(tester.takeException(), isNull);
   });
   testWidgets('Folder Back restores originating row and cleanup is absent from explorer', (tester) async {
@@ -115,7 +215,7 @@ void main() {
         'entries': call.arguments == '' ? [{'name': '내 파일', 'path': 'local:', 'directory': true, 'root': true}] : []};
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     expect(focus, 'files:refresh');
@@ -137,7 +237,7 @@ void main() {
       };
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     for (final id in ['files:refresh', 'files:sort', 'files:pick']) {
@@ -146,6 +246,36 @@ void main() {
       await arrow(tester, LogicalKeyboardKey.arrowUp); expect(focus, id);
       await arrow(tester, LogicalKeyboardKey.arrowRight);
     }
+  });
+
+  testWidgets('File search filters the listing and selecting a file opens it directly', (tester) async {
+    String? opened;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(bridge, (call) async {
+      if (call.method == 'ready') return shell();
+      if (call.method == 'open') opened = call.arguments as String;
+      if (call.method == 'files.list') {
+        return {
+          'entries': [
+            {'path': 'local:movie.mkv', 'name': 'movie.mkv', 'directory': false},
+            {'path': 'local:notes.txt', 'name': 'notes.txt', 'directory': false},
+          ],
+        };
+      }
+      return null;
+    });
+    await openBluetooth(tester);
+    for (var i = 0; i < 3; i++) {
+      await arrow(tester, LogicalKeyboardKey.arrowDown);
+    }
+    await tester.tap(find.widgetWithText(OutlinedButton, '검색'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'MOVIE');
+    await tester.tap(find.widgetWithText(FilledButton, '검색'));
+    await tester.pumpAndSettle();
+    expect(find.text('notes.txt'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('file:local:movie.mkv')));
+    await tester.pumpAndSettle();
+    expect(opened, 'local:movie.mkv');
   });
 
   testWidgets('Deep folder path survives a failed Back and jumps to an available storage root', (tester) async {
@@ -169,7 +299,7 @@ void main() {
       };
       return {'entries': entries, 'writable': false, 'clipboard': '', 'title': 'provider-id'};
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     await arrow(tester, LogicalKeyboardKey.arrowDown);
@@ -211,10 +341,12 @@ void main() {
       };
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     await arrow(tester, LogicalKeyboardKey.arrowDown);
+    await arrow(tester, LogicalKeyboardKey.arrowRight);
+    expect(focus, 'more:local:note');
     await arrow(tester, LogicalKeyboardKey.select);
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.select);
@@ -222,12 +354,12 @@ void main() {
     expect(find.textContaining('1970'), findsNothing);
     expect(find.text('취소'), findsNothing);
     await arrow(tester, LogicalKeyboardKey.select);
-    expect(focus, 'file:local:note');
+    expect(focus, 'more:local:note');
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('Same-identity late names and background refresh preserve focus', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
     final updated = shell(devices: [{'id': 'r1', 'name': '새로 확인된 기기 이름', 'bonded': true}]);
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(MethodCall('shell', updated)), (_) {});
@@ -236,7 +368,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('Removed focused devices recover to an attached target', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(MethodCall('shell', shell(devices: []))), (_) {});
     await tester.pumpAndSettle();
@@ -252,7 +384,7 @@ void main() {
       if (call.method == 'clean') cleaned = true;
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 4; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
     await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.select);
@@ -261,7 +393,7 @@ void main() {
     expect(cleaned, false); expect(focus, 'storage:apks');
   });
   testWidgets('Menu traps focus and dismiss restores its content opener in the same surface', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowRight); await arrow(tester, LogicalKeyboardKey.arrowDown);
     expect(focus, 'bt:r1');
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(
@@ -282,7 +414,7 @@ void main() {
       ]);
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     expect(focus, 'nav:apps');
     expect(find.byKey(const ValueKey('app:p0')), findsOneWidget);
@@ -308,7 +440,7 @@ void main() {
       if (call.method == 'ready') return shell(apps: [{'id': 'first', 'name': 'TV 앱'}]);
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -326,7 +458,7 @@ void main() {
       if (call.method == 'files.list') return ++lists == 1 ? folder : response.future;
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 3; i++) { await arrow(tester, LogicalKeyboardKey.arrowDown); }
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     expect(focus, 'files:refresh');
@@ -337,7 +469,7 @@ void main() {
   });
 
   testWidgets('A popup opened from the sidebar restores the sidebar, never a content header', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.select);
     expect(focus, 'nav:apps');
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(
@@ -350,14 +482,14 @@ void main() {
   });
 
   testWidgets('The first arrow after root focus loss both recovers and moves', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     expect(focus, 'nav:apps'); expect(tester.takeException(), isNull);
   });
 
   testWidgets('Window focus return never moves selection out of the open dialog', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     final context = tester.element(find.text('GenieBreaker'));
     final dialog = promptName(context, '폴더 이름', '새 폴더');
     await tester.pumpAndSettle();
@@ -379,7 +511,7 @@ void main() {
   });
 
   testWidgets('Idle Android focus return schedules a frame and preserves newer remote selection', (tester) async {
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowDown);
     FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
     expect(tester.binding.hasScheduledFrame, false);
@@ -397,7 +529,7 @@ void main() {
       if (call.method == 'appSettings') opened++;
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await openBluetooth(tester);
     await arrow(tester, LogicalKeyboardKey.arrowDown); await arrow(tester, LogicalKeyboardKey.arrowDown);
     await arrow(tester, LogicalKeyboardKey.arrowRight);
     FocusManager.instance.primaryFocus?.unfocus(); await tester.pumpAndSettle();
@@ -412,7 +544,8 @@ void main() {
       if (call.method == 'choose') choices.add(call.arguments as int);
       return null;
     });
-    await tester.pumpWidget(const GenieUI()); await tester.pumpAndSettle();
+    await tester.pumpWidget(const GenieUI());
+    await tester.pumpAndSettle();
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage('genie/ui', const StandardMethodCodec().encodeMethodCall(
       const MethodCall('page', {'title': '동작 선택', 'pageId': 'remote-menu', 'items': ['첫 번째', '두 번째', '세 번째']})), (_) {});
     await tester.pumpAndSettle();
@@ -442,8 +575,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await tester.pumpWidget(const GenieUI());
-    await tester.pumpAndSettle();
+    await openBluetooth(tester);
     final home = tester.state<AppHomeState>(find.byType(AppHome));
     void clearDebugLabels() {
       for (final node in home.nodes.values) {
@@ -478,8 +610,7 @@ void main() {
       if (call.method == 'ready') return {...shell(), 'buildCommit': '0Abc42A'};
       return null;
     });
-    await tester.pumpWidget(const GenieUI());
-    await tester.pumpAndSettle();
+    await openBluetooth(tester);
     for (var i = 0; i < 8; i++) {
       await arrow(tester, LogicalKeyboardKey.arrowDown);
     }
